@@ -111,8 +111,35 @@ fi
 echo -e "${GREEN}✅ 找到应用: $APP_PATH${NC}"
 echo ""
 
-# 步骤 4: 打包应用
-echo -e "${BLUE}📦 步骤 4/6: 打包应用...${NC}"
+# 步骤 4: 重新签名应用
+echo -e "${BLUE}🔐 步骤 4/7: 重新签名应用...${NC}"
+
+# 移除扩展属性
+xattr -cr "$APP_PATH" 2>/dev/null || true
+
+# 检查 entitlements 文件
+ENTITLEMENTS_PATH="./Clipboard/Clipboard.entitlements"
+if [ -f "$ENTITLEMENTS_PATH" ]; then
+    echo "使用 entitlements: $ENTITLEMENTS_PATH"
+    codesign --force --deep --sign - \
+        --entitlements "$ENTITLEMENTS_PATH" \
+        --timestamp=none \
+        "$APP_PATH"
+else
+    echo "未找到 entitlements 文件，使用默认签名"
+    codesign --force --deep --sign - "$APP_PATH"
+fi
+
+# 验证签名
+if codesign --verify --verbose "$APP_PATH" 2>&1; then
+    echo -e "${GREEN}✅ 应用签名完成并验证通过${NC}"
+else
+    echo -e "${YELLOW}⚠️  签名验证警告，但继续执行${NC}"
+fi
+echo ""
+
+# 步骤 5: 打包应用
+echo -e "${BLUE}📦 步骤 5/7: 打包应用...${NC}"
 
 ZIP_NAME="$APP_NAME-$VERSION.zip"
 ZIP_PATH="./$ZIP_NAME"
@@ -129,8 +156,8 @@ echo -e "${GREEN}✅ 打包完成: $ZIP_NAME${NC}"
 echo "   大小: $ZIP_SIZE 字节 ($(numfmt --to=iec-i --suffix=B $ZIP_SIZE 2>/dev/null || echo 'N/A'))"
 echo ""
 
-# 步骤 5: 签名更新包
-echo -e "${BLUE}🔐 步骤 5/6: 签名更新包...${NC}"
+# 步骤 6: 签名更新包
+echo -e "${BLUE}🔐 步骤 6/7: 签名更新包...${NC}"
 
 # 查找 sign_update 工具的多个可能位置
 SIGN_UPDATE_TOOL=""
@@ -192,8 +219,8 @@ fi
 echo -e "${GREEN}✅ 签名完成${NC}"
 echo ""
 
-# 步骤 6: 生成 appcast 条目
-echo -e "${BLUE}📝 步骤 6/6: 生成 appcast 条目...${NC}"
+# 步骤 7: 生成 appcast 条目
+echo -e "${BLUE}📝 步骤 7/7: 生成 appcast 条目...${NC}"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}📋 将以下内容添加到 appcast.xml:${NC}"
