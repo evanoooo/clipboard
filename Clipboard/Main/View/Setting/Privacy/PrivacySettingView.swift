@@ -402,7 +402,7 @@ struct AccessibilityPermissionRow: View {
                     systemName: hasPermission
                         ? "checkmark.circle.fill" : "xmark.circle.fill"
                 )
-                .font(.system(size: Const.iconHdSize))
+                .font(.system(size: Const.iconSize18))
                 .foregroundColor(hasPermission ? .green : .orange)
 
                 if !hasPermission {

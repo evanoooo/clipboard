@@ -68,4 +68,5 @@ class Const {
 
     static let space32: CGFloat = 32.0
     static let space16: CGFloat = 16.0
+    static let iconSize18: CGFloat = 18.0
 }

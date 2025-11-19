@@ -142,7 +142,7 @@ cat << EOF
         <title>Version $VERSION</title>
         <description>
             <![CDATA[
-                <h2>更新内容</h2>
+                <h4>更新内容</h4>
                 <ul>
                     <li>新功能和改进</li>
                     <li>修复了一些问题</li>

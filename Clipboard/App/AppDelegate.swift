@@ -14,11 +14,12 @@ class AppDelegate: NSObject {
     static var shared: AppDelegate?
 
     // Sparkle
-    let updaterController: SPUStandardUpdaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
-        updaterDelegate: nil,
-        userDriverDelegate: nil
-    )
+    let updaterController: SPUStandardUpdaterController =
+        SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
 
     private let menuBarItem = NSStatusBar.system.statusItem(
         withLength: NSStatusItem.squareLength
@@ -37,6 +38,17 @@ class AppDelegate: NSObject {
             accessibilityDescription: nil
         )
         menu.addItem(item1)
+
+        let item3 = NSMenuItem(
+            title: "检查更新",
+            action: #selector(checkUpdate),
+            keyEquivalent: ""
+        )
+        item3.image = NSImage(
+            systemSymbolName: "arrow.clockwise",
+            accessibilityDescription: nil
+        )
+        menu.addItem(item3)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -156,6 +168,11 @@ extension AppDelegate {
     @objc
     private func settingsAction() {
         settingWinController.toggleWindow()
+    }
+
+    @objc
+    private func checkUpdate() {
+        updaterController.checkForUpdates(nil)
     }
 
     @objc

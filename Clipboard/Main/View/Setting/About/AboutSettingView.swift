@@ -97,6 +97,9 @@ struct AboutSettingView: View {
             Spacer()
 
             VStack(spacing: 12) {
+                if let updater = AppDelegate.shared?.updaterController.updater {
+                    UpdaterSettingsView(updater: updater)
+                }
                 HStack(spacing: 20) {
                     LinkButton(
                         title: "GitHub",
@@ -130,7 +133,7 @@ struct AboutSettingView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                .padding(.bottom, Const.space32)
+                .padding(.bottom, Const.space16)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

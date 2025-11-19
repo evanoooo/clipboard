@@ -24,7 +24,7 @@ struct IgnoredAppInfo: Codable, Hashable, Identifiable {
 
 enum PasteUserDefaults {
     /// 开机自启
-    @UserDefaultsWrapper(.onStart, defaultValue: true)
+    @UserDefaultsWrapper(.onStart, defaultValue: false)
     static var onStart
     /// 直接粘贴
     @UserDefaultsWrapper(.pasteDirect, defaultValue: true)
