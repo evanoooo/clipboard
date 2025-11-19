@@ -10,8 +10,8 @@
             <![CDATA[
                 <h2>✨ 新增功能</h2>
                 <ul>
-                    <li>: 支持应用内自动更新检查和安装</li>
-                    <li>: 新增 WebContentView 以增强对 macOS 26 的兼容性</li>
+                    <li>支持应用内自动更新检查和安装</li>
+                    <li>新增 WebContentView 以增强对 macOS 26 的兼容性</li>
                 </ul>
                 <h2>🎨 界面优化</h2>
                 <ul>
