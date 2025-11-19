@@ -15,7 +15,7 @@ struct CategoryChip: Identifiable, Equatable, Codable {
 
     // 全局调色板，后续可以直接在这里添加新颜色
     static let palette: [Color] = [
-        .gray,
+        .gray.opacity(0.8),
         .blue,
         .green,
         .purple,
@@ -30,7 +30,8 @@ struct CategoryChip: Identifiable, Equatable, Codable {
 
     var color: Color {
         get {
-            guard colorIndex >= 0 && colorIndex < CategoryChip.palette.count else {
+            guard colorIndex >= 0 && colorIndex < CategoryChip.palette.count
+            else {
                 return .gray
             }
             return CategoryChip.palette[colorIndex]
@@ -43,22 +44,21 @@ struct CategoryChip: Identifiable, Equatable, Codable {
             }
         }
     }
-    
-    /// 获取该分类对应的类型过滤器（仅系统分类有效）
+
     var typeFilter: [String]? {
         guard isSystem else { return nil }
-        
+
         switch name {
         case "文本":
             return [
                 PasteboardType.string.rawValue,
                 PasteboardType.rtf.rawValue,
-                PasteboardType.rtfd.rawValue
+                PasteboardType.rtfd.rawValue,
             ]
         case "图片":
             return [
                 PasteboardType.png.rawValue,
-                PasteboardType.tiff.rawValue
+                PasteboardType.tiff.rawValue,
             ]
         case "文件":
             return [PasteboardType.fileURL.rawValue]
@@ -79,9 +79,8 @@ struct CategoryChip: Identifiable, Equatable, Codable {
         }
     }
 
-    // 系统默认分类
     static let systemChips: [CategoryChip] = [
-        .init(id: 1, name: "剪切板", color: .gray, isSystem: true),
+        .init(id: 1, name: "剪切板", color: .gray.opacity(0.8), isSystem: true),
         .init(id: 2, name: "文本", color: .blue, isSystem: true),
         .init(id: 3, name: "图片", color: .green, isSystem: true),
         .init(id: 4, name: "文件", color: .purple, isSystem: true),

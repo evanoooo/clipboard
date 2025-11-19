@@ -58,11 +58,9 @@ fi
 echo -e "${GREEN}✅ 找到私钥文件${NC}"
 echo ""
 
-# 步骤 1: 查找构建产物
 echo -e "${BLUE}🔍 步骤 1/3: 查找构建产物...${NC}"
 
-# 查找 DerivedData 中的应用
-DERIVED_DATA=$(xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" -showBuildSettings 2>/dev/null | grep " BUILT_PRODUCTS_DIR" | sed 's/.*= //')
+DERIVED_DATA=$(xcodebuild -scheme "$SCHEME" -destination 'platform=macOS,arch=arm64' -configuration "$CONFIGURATION" -showBuildSettings 2>/dev/null | grep " BUILT_PRODUCTS_DIR" | sed 's/.*= //')
 
 if [ -z "$DERIVED_DATA" ]; then
     echo -e "${RED}❌ 错误: 未找到构建目录${NC}"
@@ -81,16 +79,13 @@ fi
 echo -e "${GREEN}✅ 找到应用: $APP_PATH${NC}"
 echo ""
 
-# 步骤 2: 打包 ZIP（用于 Sparkle 更新）
 echo -e "${BLUE}📦 步骤 2/3: 打包 ZIP 更新包...${NC}"
 
 ZIP_NAME="$APP_NAME-$VERSION.zip"
 ZIP_PATH="./$ZIP_NAME"
 
-# 删除旧的 zip 文件
 rm -f "$ZIP_PATH"
 
-# 使用 ditto 打包（保留资源和元数据）
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
 
 ZIP_SIZE=$(ls -l "$ZIP_PATH" | awk '{print $5}')
@@ -99,47 +94,22 @@ echo -e "${GREEN}✅ ZIP 打包完成: $ZIP_NAME${NC}"
 echo "   大小: $ZIP_SIZE 字节 ($(numfmt --to=iec-i --suffix=B $ZIP_SIZE 2>/dev/null || echo 'N/A'))"
 echo ""
 
-# 步骤 3: 签名更新包
 echo -e "${BLUE}🔐 步骤 3/3: 签名更新包...${NC}"
 
-# 查找 sign_update 工具的多个可能位置
 SIGN_UPDATE_TOOL=""
-
-# 方法 1: 检查是否在 PATH 中
-if command -v sign_update &> /dev/null; then
-    SIGN_UPDATE_TOOL="sign_update"
-    echo -e "${GREEN}✅ 找到系统安装的 sign_update${NC}"
-else
-    echo -e "${YELLOW}⚠️  系统 PATH 中未找到 sign_update${NC}"
-    echo "正在搜索 Xcode DerivedData..."
     
-    # 方法 2: 在 DerivedData 中查找 Sparkle artifacts
-    SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData -path "*/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update" 2>/dev/null | head -n 1)
+# 在 DerivedData 中查找 Sparkle artifacts
+SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData -path "*/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update" 2>/dev/null | head -n 1)
     
-    if [ -n "$SPARKLE_BIN" ] && [ -x "$SPARKLE_BIN" ]; then
+if [ -n "$SPARKLE_BIN" ] && [ -x "$SPARKLE_BIN" ]; then
         SIGN_UPDATE_TOOL="$SPARKLE_BIN"
-        echo -e "${GREEN}✅ 找到 Sparkle artifacts 中的 sign_update${NC}"
-        echo "   路径: $SPARKLE_BIN"
-    else
-        # 方法 3: 在 checkouts 中查找 Sparkle 源码
-        SPARKLE_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "Sparkle" -type d | grep "checkouts/Sparkle$" | head -n 1)
-        
-        if [ -n "$SPARKLE_PATH" ]; then
-            echo -e "${YELLOW}尝试使用 Swift 运行 sign_update...${NC}"
-            SIGNATURE=$(cd "$SPARKLE_PATH" && swift run sign_update "$ZIP_PATH" -f "$PRIVATE_KEY_PATH" 2>&1)
-        else
-            echo -e "${RED}❌ 错误: 无法找到签名工具${NC}"
-            echo ""
-            echo "请尝试以下方法之一："
-            echo "  1. 安装 Sparkle 工具: brew install sparkle"
-            echo "  2. 在 Xcode 中构建项目以下载 Sparkle"
-            echo "  3. 手动指定 sign_update 路径"
-            exit 1
-        fi
-    fi
+    echo -e "${GREEN}✅ 找到 Sparkle artifacts 中的 sign_update${NC}"
+    echo "   路径: $SPARKLE_BIN"
+else
+    echo -e "${RED}❌ 错误: 无法找到签名工具${NC}"
+    exit 1  
 fi
 
-# 使用找到的工具进行签名
 if [ -n "$SIGN_UPDATE_TOOL" ]; then
     SIGNATURE=$("$SIGN_UPDATE_TOOL" "$ZIP_PATH" -f "$PRIVATE_KEY_PATH" 2>&1)
 fi
@@ -150,11 +120,9 @@ if [ -z "$SIGNATURE" ]; then
     exit 1
 fi
 
-# 提取签名和文件大小
 ED_SIGNATURE=$(echo "$SIGNATURE" | grep -o 'sparkle:edSignature="[^"]*"' | sed 's/sparkle:edSignature="\([^"]*\)"/\1/')
 SIGNATURE_LENGTH=$(echo "$SIGNATURE" | grep -o 'length="[^"]*"' | sed 's/length="\([^"]*\)"/\1/')
 
-# 如果没有从输出中提取到文件大小，使用之前计算的
 if [ -z "$SIGNATURE_LENGTH" ]; then
     SIGNATURE_LENGTH="$ZIP_SIZE"
 fi
@@ -162,7 +130,75 @@ fi
 echo -e "${GREEN}✅ 签名完成${NC}"
 echo ""
 
-# 生成 appcast 条目
+# 获取 GitHub Release Notes
+echo -e "${BLUE}📥 获取 GitHub Release Notes...${NC}"
+
+GITHUB_REPO="Ineffable919/clipboard"
+RELEASE_NOTES=""
+
+# 尝试从 GitHub API 获取 Release Notes
+GITHUB_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/tags/v$VERSION"
+RELEASE_DATA=$(curl -s "$GITHUB_API_URL" 2>/dev/null || echo "")
+
+if [ -n "$RELEASE_DATA" ] && echo "$RELEASE_DATA" | grep -q "\"body\""; then
+    # 提取 Release Notes 内容
+    RELEASE_BODY=$(echo "$RELEASE_DATA" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('body', ''))" 2>/dev/null || echo "")
+    
+    if [ -n "$RELEASE_BODY" ]; then
+        # 将 Markdown 转换为 HTML
+        RELEASE_NOTES=$(echo "$RELEASE_BODY" | python3 -c "
+import sys
+import re
+
+md = sys.stdin.read()
+
+# 转换标题
+md = re.sub(r'^### (.+)$', r'<h3>\1</h3>', md, flags=re.MULTILINE)
+md = re.sub(r'^## (.+)$', r'<h2>\1</h2>', md, flags=re.MULTILINE)
+md = re.sub(r'^# (.+)$', r'<h1>\1</h1>', md, flags=re.MULTILINE)
+
+# 转换列表
+lines = md.split('\n')
+result = []
+in_list = False
+for line in lines:
+    if line.strip().startswith('- ') or line.strip().startswith('* '):
+        if not in_list:
+            result.append('<ul>')
+            in_list = True
+        item = line.strip()[2:]
+        result.append(f'    <li>{item}</li>')
+    else:
+        if in_list:
+            result.append('</ul>')
+            in_list = False
+        if line.strip():
+            result.append(line)
+if in_list:
+    result.append('</ul>')
+
+print('\n'.join(result))
+" 2>/dev/null || echo "$RELEASE_BODY")
+        
+        echo -e "${GREEN}✅ 成功获取 Release Notes${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Release Notes 为空，使用默认内容${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  未找到版本 v$VERSION 的 Release，使用默认内容${NC}"
+    echo "   请确保已在 GitHub 上创建对应的 Release"
+fi
+
+# 如果没有获取到 Release Notes，使用默认内容
+if [ -z "$RELEASE_NOTES" ]; then
+    RELEASE_NOTES="<h2>更新内容</h2>
+<ul>
+    <li>新功能和改进</li>
+    <li>修复了一些问题</li>
+</ul>"
+fi
+
+echo ""
 echo -e "${BLUE}📝 生成 appcast 条目...${NC}"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -175,11 +211,7 @@ cat << EOF
         <title>Version $VERSION</title>
         <description>
             <![CDATA[
-                <h2>更新内容</h2>
-                <ul>
-                    <li>新功能和改进</li>
-                    <li>修复了一些问题</li>
-                </ul>
+                $RELEASE_NOTES
             ]]>
         </description>
         <pubDate>$(date -R)</pubDate>
@@ -187,7 +219,7 @@ cat << EOF
         <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
         <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         <enclosure 
-            url="https://github.com/Ineffable919/clipboard/releases/download/v$VERSION/$ZIP_NAME" 
+            url="https://github.com/$GITHUB_REPO/releases/download/v$VERSION/$ZIP_NAME" 
             sparkle:edSignature="$ED_SIGNATURE"
             length="$SIGNATURE_LENGTH"
             type="application/octet-stream" />
@@ -218,6 +250,4 @@ fi
 echo -e "${BLUE}📝 下一步:${NC}"
 echo "   1. 更新 appcast.xml（复制上面的 <item> 内容）"
 echo "   2. 上传 $ZIP_NAME 到 GitHub Releases"
-echo "   3. 启动测试服务器: ./test_sparkle_local.sh"
-echo "   4. 运行应用并点击「检查更新」"
 echo ""

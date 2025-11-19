@@ -263,7 +263,11 @@ struct PreviewPopoverView: View {
                     }
                     .filter { !$0.isEmpty }
                 if paths.count == 1 {
-                    QuickLookPreview(url: URL(fileURLWithPath: paths.first!))
+                    QuickLookPreview(
+                        url: URL(fileURLWithPath: paths.first!),
+                        maxWidth: Const.maxPreviewSize - 32,
+                        maxHeight: Const.maxPreviewHeight
+                    )
                 } else {
                     Image(systemName: "doc.text")
                         .resizable()
@@ -273,7 +277,7 @@ struct PreviewPopoverView: View {
                 }
             }
         }
-        .frame(width: Const.maxPreviewSize - 48, height: Const.maxPreviewHeight)
+        .frame(width: Const.maxPreviewSize - 32, height: Const.maxPreviewHeight)
 
     }
 

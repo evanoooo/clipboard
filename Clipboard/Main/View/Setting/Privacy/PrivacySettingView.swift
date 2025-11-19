@@ -25,6 +25,8 @@ struct PrivacySettingView: View {
     @State private var ignoreEphemeralContent: Bool = PasteUserDefaults
         .ignoreEphemeralContent
     @State private var delConfirm: Bool = PasteUserDefaults.delConfirm
+    @State private var hasAccessibilityPermission: Bool = AXIsProcessTrusted()
+    @State private var permissionTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -60,6 +62,12 @@ struct PrivacySettingView: View {
                             title: "删除确认",
                             subtitle: "删除记录时是否弹窗确认。",
                             isOn: $delConfirm
+                        )
+                        Divider()
+                        AccessibilityPermissionRow(
+                            hasPermission: $hasAccessibilityPermission,
+                            onOpenSettings: openAccessibilitySettings,
+                            onRefresh: refreshPermissionStatus
                         )
                     }
                     .padding(.horizontal, 16)
@@ -172,6 +180,13 @@ struct PrivacySettingView: View {
         .onChange(of: delConfirm) {
             PasteUserDefaults.delConfirm = delConfirm
         }
+        .onAppear {
+            refreshPermissionStatus()
+            startPermissionTimer()
+        }
+        .onDisappear {
+            stopPermissionTimer()
+        }
     }
 
     // MARK: - 添加应用
@@ -219,6 +234,43 @@ struct PrivacySettingView: View {
             selectedApp = nil
             PasteUserDefaults.ignoredApps = ignoredApps
         }
+    }
+
+    // MARK: - 打开辅助功能设置
+
+    private func openAccessibilitySettings() {
+        if let url = URL(
+            string:
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) {
+            NSWorkspace.shared.open(url)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                refreshPermissionStatus()
+            }
+        }
+    }
+
+    // MARK: - 刷新权限状态
+
+    private func refreshPermissionStatus() {
+        hasAccessibilityPermission = AXIsProcessTrusted()
+    }
+
+    private func startPermissionTimer() {
+        stopPermissionTimer()
+        permissionTimer = Timer.scheduledTimer(
+            withTimeInterval: 5.0,
+            repeats: true
+        ) { _ in
+            Task { @MainActor in
+                refreshPermissionStatus()
+            }
+        }
+    }
+
+    private func stopPermissionTimer() {
+        permissionTimer?.invalidate()
+        permissionTimer = nil
     }
 }
 
@@ -318,6 +370,73 @@ struct IgnoredAppRow: View {
         } else {
             return "app.fill"
         }
+    }
+}
+
+// MARK: - 辅助功能权限状态行组件
+
+struct AccessibilityPermissionRow: View {
+    @Binding var hasPermission: Bool
+    @State private var isHovered = false
+    let onOpenSettings: () -> Void
+    let onRefresh: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("辅助功能权限")
+                    .font(.callout)
+                Text(
+                    hasPermission
+                        ? "已授权，可以直接粘贴内容到其它应用"
+                        : "未授权，仅能复制内容到剪贴板"
+                )
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                Image(
+                    systemName: hasPermission
+                        ? "checkmark.circle.fill" : "xmark.circle.fill"
+                )
+                .font(.system(size: Const.iconHdSize))
+                .foregroundColor(hasPermission ? .green : .orange)
+
+                if !hasPermission {
+                    Button(action: onOpenSettings) {
+                        Text("去设置")
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: Const.radius)
+                                    .fill(
+                                        isHovered
+                                            ? Color.accentColor.opacity(0.1)
+                                            : Color.clear
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Const.radius)
+                                    .stroke(
+                                        isHovered
+                                            ? Color.accentColor
+                                            : Color.gray.opacity(0.3),
+                                        lineWidth: 1
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHovered = hovering
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 12)
     }
 }
 

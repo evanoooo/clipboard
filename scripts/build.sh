@@ -12,6 +12,15 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# 获取脚本所在目录
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# 切换到项目根目录(脚本在 Sh/ 子目录中)
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_ROOT"
+
+echo -e "${BLUE}📂 项目根目录: $PROJECT_ROOT${NC}"
+echo ""
+
 # 配置
 APP_NAME="Clipboard"
 SCHEME="Clipboard"
@@ -22,7 +31,6 @@ echo -e "${BLUE}║      应用构建和打包工具                ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
 echo ""
 
-# 检查参数
 if [ $# -lt 1 ]; then
     echo -e "${YELLOW}使用方法:${NC}"
     echo "  $0 <版本号> [构建号]"
@@ -45,18 +53,15 @@ echo "构建号:   $BUILD"
 echo "配置:     $CONFIGURATION"
 echo ""
 
-# 查找 Xcode 项目
 if [ ! -f "$APP_NAME.xcodeproj/project.pbxproj" ]; then
     echo -e "${RED}❌ 错误: 未找到 Xcode 项目${NC}"
     exit 1
 fi
 
-# 检查 Xcode 是否可用
 XCODE_PATH=$(xcode-select -p 2>/dev/null || echo "")
 if [[ "$XCODE_PATH" == *"CommandLineTools"* ]] || [ -z "$XCODE_PATH" ]; then
     echo -e "${YELLOW}⚠️  检测到使用命令行工具,尝试切换到 Xcode.app...${NC}"
     
-    # 查找 Xcode.app
     if [ -d "/Applications/Xcode.app" ]; then
         echo "找到 Xcode.app,正在切换..."
         sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -69,18 +74,17 @@ if [[ "$XCODE_PATH" == *"CommandLineTools"* ]] || [ -z "$XCODE_PATH" ]; then
     fi
 fi
 
-# 步骤 1: 清理构建目录
 echo -e "${BLUE}🧹 步骤 1/5: 清理构建目录...${NC}"
 xcodebuild clean -scheme "$SCHEME" -configuration "$CONFIGURATION" > /dev/null 2>&1 || true
 echo -e "${GREEN}✅ 清理完成${NC}"
 echo ""
 
-# 步骤 2: 构建应用
 echo -e "${BLUE}🔨 步骤 2/5: 构建应用...${NC}"
 echo "这可能需要几分钟..."
 
 xcodebuild \
     -scheme "$SCHEME" \
+    -destination 'platform=macOS,arch=arm64' \
     -configuration "$CONFIGURATION" \
     MARKETING_VERSION="$VERSION" \
     CURRENT_PROJECT_VERSION="$BUILD" \
@@ -97,8 +101,7 @@ echo ""
 # 步骤 3: 查找构建产物
 echo -e "${BLUE}🔍 步骤 3/5: 查找构建产物...${NC}"
 
-# 查找 DerivedData 中的应用
-DERIVED_DATA=$(xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" -showBuildSettings | grep " BUILT_PRODUCTS_DIR" | sed 's/.*= //')
+DERIVED_DATA=$(xcodebuild -scheme "$SCHEME" -destination 'platform=macOS,arch=arm64' -configuration "$CONFIGURATION" -showBuildSettings | grep " BUILT_PRODUCTS_DIR" | sed 's/.*= //')
 
 if [ -z "$DERIVED_DATA" ]; then
     echo -e "${RED}❌ 错误: 未找到构建目录${NC}"
@@ -115,26 +118,33 @@ fi
 echo -e "${GREEN}✅ 找到应用: $APP_PATH${NC}"
 echo ""
 
-# 步骤 4: 重新签名应用
 echo -e "${BLUE}🔐 步骤 4/5: 重新签名应用...${NC}"
 
-# 移除扩展属性
 xattr -cr "$APP_PATH" 2>/dev/null || true
 
-# 检查 entitlements 文件
-ENTITLEMENTS_PATH="./Clipboard/Clipboard.entitlements"
-if [ -f "$ENTITLEMENTS_PATH" ]; then
+ENTITLEMENTS_PATH=""
+for path in "./Clipboard/Clipboard.entitlements" "./Clipboard.entitlements" "./entitlements.plist"; do
+    if [ -f "$path" ]; then
+        ENTITLEMENTS_PATH="$path"
+        break
+    fi
+done
+
+# 签名应用
+if [ -n "$ENTITLEMENTS_PATH" ]; then
     echo "使用 entitlements: $ENTITLEMENTS_PATH"
-    codesign --force --deep --sign - \
+    if codesign --force --deep --sign - \
         --entitlements "$ENTITLEMENTS_PATH" \
         --timestamp=none \
-        "$APP_PATH"
+        "$APP_PATH" 2>/dev/null; then
+        echo -e "${GREEN}✅ 使用 entitlements 签名成功${NC}"
+    else
+        codesign --force --deep --sign - "$APP_PATH"
+    fi
 else
-    echo "未找到 entitlements 文件，使用默认签名"
     codesign --force --deep --sign - "$APP_PATH"
 fi
 
-# 验证签名
 if codesign --verify --verbose "$APP_PATH" 2>&1; then
     echo -e "${GREEN}✅ 应用签名完成并验证通过${NC}"
 else
@@ -153,16 +163,12 @@ DMG_TEMP_DIR="./dmg_temp"
 rm -f "$DMG_PATH"
 rm -rf "$DMG_TEMP_DIR"
 
-# 创建临时目录
 mkdir -p "$DMG_TEMP_DIR"
 
-# 复制应用到临时目录
 cp -R "$APP_PATH" "$DMG_TEMP_DIR/"
 
-# 创建 Applications 符号链接
 ln -s /Applications "$DMG_TEMP_DIR/Applications"
 
-# 创建 DMG
 hdiutil create \
     -volname "$APP_NAME $VERSION" \
     -srcfolder "$DMG_TEMP_DIR" \
@@ -170,7 +176,6 @@ hdiutil create \
     -format UDZO \
     "$DMG_PATH"
 
-# 清理临时目录
 rm -rf "$DMG_TEMP_DIR"
 
 DMG_SIZE=$(ls -l "$DMG_PATH" | awk '{print $5}')
@@ -179,16 +184,10 @@ echo -e "${GREEN}✅ DMG 创建完成: $DMG_NAME${NC}"
 echo "   大小: $DMG_SIZE 字节 ($(numfmt --to=iec-i --suffix=B $DMG_SIZE 2>/dev/null || echo 'N/A'))"
 echo ""
 
-# 总结
 echo -e "${GREEN}✅ 构建完成！${NC}"
 echo ""
 echo -e "${BLUE}📦 生成的文件:${NC}"
 echo "   文件名: $DMG_NAME"
 echo "   路径:   $DMG_PATH"
 echo "   大小:   $DMG_SIZE 字节 ($(numfmt --to=iec-i --suffix=B $DMG_SIZE 2>/dev/null || echo 'N/A'))"
-echo ""
-echo -e "${BLUE}📝 下一步:${NC}"
-echo "   1. 双击 $DMG_NAME 进行测试"
-echo "   2. 上传到 GitHub Releases 供用户下载"
-echo "   3. 运行 sign_update.sh 生成 Sparkle 更新包"
 echo ""

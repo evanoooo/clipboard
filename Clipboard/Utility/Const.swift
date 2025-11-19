@@ -65,4 +65,7 @@ class Const {
     static let lightBackground: Color = Color(NSColor(hex: "#f8f8f8"))
     static let lightToolColor: Color = Color(NSColor(hex: "#eeeeef"))
     static let darkToolColor: Color = Color(NSColor(hex: "#2e2e39"))
+
+    static let space32: CGFloat = 32.0
+    static let space16: CGFloat = 16.0
 }

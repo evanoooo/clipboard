@@ -18,7 +18,7 @@
 		</dict>
 	</array>
 	<key>SUFeedURL</key>
-	<string>https://ineffable919.github.io/clipboard/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/Ineffable919/clipboard/master/appcast.xml</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUScheduledCheckInterval</key>

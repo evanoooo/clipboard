@@ -39,7 +39,10 @@ struct TopBarView: View {
                 syncingFocus = true
                 vm.focusView =
                     (focus == .search
-                        ? .search : focus == .newChip ? .newChip : focus == .editChip ? .editChip : .history)
+                        ? .search
+                        : focus == .newChip
+                            ? .newChip
+                            : focus == .editChip ? .editChip : .history)
                 syncingFocus = false
             }
             .onChange(of: vm.focusView) {
@@ -47,12 +50,15 @@ struct TopBarView: View {
                 syncingFocus = true
                 let desired: FocusField? =
                     (vm.focusView == .search
-                        ? .search : vm.focusView == .newChip ? .newChip : vm.focusView == .editChip ? .editChip : nil)
+                        ? .search
+                        : vm.focusView == .newChip
+                            ? .newChip
+                            : vm.focusView == .editChip ? .editChip : nil)
                 DispatchQueue.main.async {
                     focus = desired
                     syncingFocus = false
                 }
-                
+
                 if vm.focusView != .editChip && vm.isEditingChip {
                     vm.commitEditingChip()
                 }
@@ -89,7 +95,7 @@ struct TopBarView: View {
                 .contentShape(Rectangle())
             }
         }
-        .padding(4)
+        .padding(2)
         .frame(width: Const.topBarWidth)
         .background(.clear)
         .contentShape(Rectangle())

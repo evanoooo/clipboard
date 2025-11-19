@@ -11,12 +11,27 @@ import SwiftUI
 struct QuickLookPreview: NSViewRepresentable {
 
     let url: URL
+    var maxWidth: CGFloat?
+    var maxHeight: CGFloat?
 
     func makeNSView(context _: Context) -> QLPreviewView {
-        return QLPreviewView(frame: .zero, style: .normal)
+        let previewView = QLPreviewView(frame: .zero, style: .normal)
+        if let previewView = previewView {
+            previewView.autoresizingMask = [.width, .height]
+        }
+        return previewView ?? QLPreviewView()
     }
 
     func updateNSView(_ nsView: QLPreviewView, context _: Context) {
         nsView.previewItem = url as QLPreviewItem
+
+        if let maxWidth = maxWidth {
+            nsView.widthAnchor.constraint(lessThanOrEqualToConstant: maxWidth)
+                .isActive = true
+        }
+        if let maxHeight = maxHeight {
+            nsView.heightAnchor.constraint(lessThanOrEqualToConstant: maxHeight)
+                .isActive = true
+        }
     }
 }

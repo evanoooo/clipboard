@@ -63,12 +63,12 @@ final class LaunchAtLoginHelper {
         let success: Bool
         if enabled {
             success = SMLoginItemSetEnabled(
-                "cn.crown.Clipboard" as CFString,
+                "com.crown.clipboard" as CFString,
                 true
             )
         } else {
             success = SMLoginItemSetEnabled(
-                "cn.crown.Clipboard" as CFString,
+                "com.crown.clipboard" as CFString,
                 false
             )
         }
