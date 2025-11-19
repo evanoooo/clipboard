@@ -8,17 +8,12 @@
             <title>Version 0.2.1</title>
             <description>
             <![CDATA[
-                <h2>✨ 新增功能</h2>
+                <h4>✨ Feature</h4>
                 <ul>
-                    <li>支持应用内自动更新检查和安装</li>
-                    <li>新增 WebContentView 以增强对 macOS 26 的兼容性</li>
-                </ul>
-                <h2>🎨 界面优化</h2>
-                <ul>
-                    <li>优化预览视图交互体验</li>
                     <li>改进关于设置界面的布局和显示</li>
                     <li>统一新增分类 UI 的样式，提升一致性</li>
                     <li>优化预览视图的整体用户体验</li>
+                    <li>支持应用内自动更新检查和安装，兼容 macOS 26</li>
                 </ul>
             ]]>
         </description>
