@@ -130,75 +130,6 @@ fi
 echo -e "${GREEN}✅ 签名完成${NC}"
 echo ""
 
-# 获取 GitHub Release Notes
-echo -e "${BLUE}📥 获取 GitHub Release Notes...${NC}"
-
-GITHUB_REPO="Ineffable919/clipboard"
-RELEASE_NOTES=""
-
-# 尝试从 GitHub API 获取 Release Notes
-GITHUB_API_URL="https://api.github.com/repos/$GITHUB_REPO/releases/tags/v$VERSION"
-RELEASE_DATA=$(curl -s "$GITHUB_API_URL" 2>/dev/null || echo "")
-
-if [ -n "$RELEASE_DATA" ] && echo "$RELEASE_DATA" | grep -q "\"body\""; then
-    # 提取 Release Notes 内容
-    RELEASE_BODY=$(echo "$RELEASE_DATA" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('body', ''))" 2>/dev/null || echo "")
-    
-    if [ -n "$RELEASE_BODY" ]; then
-        # 将 Markdown 转换为 HTML
-        RELEASE_NOTES=$(echo "$RELEASE_BODY" | python3 -c "
-import sys
-import re
-
-md = sys.stdin.read()
-
-# 转换标题
-md = re.sub(r'^### (.+)$', r'<h3>\1</h3>', md, flags=re.MULTILINE)
-md = re.sub(r'^## (.+)$', r'<h2>\1</h2>', md, flags=re.MULTILINE)
-md = re.sub(r'^# (.+)$', r'<h1>\1</h1>', md, flags=re.MULTILINE)
-
-# 转换列表
-lines = md.split('\n')
-result = []
-in_list = False
-for line in lines:
-    if line.strip().startswith('- ') or line.strip().startswith('* '):
-        if not in_list:
-            result.append('<ul>')
-            in_list = True
-        item = line.strip()[2:]
-        result.append(f'    <li>{item}</li>')
-    else:
-        if in_list:
-            result.append('</ul>')
-            in_list = False
-        if line.strip():
-            result.append(line)
-if in_list:
-    result.append('</ul>')
-
-print('\n'.join(result))
-" 2>/dev/null || echo "$RELEASE_BODY")
-        
-        echo -e "${GREEN}✅ 成功获取 Release Notes${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Release Notes 为空，使用默认内容${NC}"
-    fi
-else
-    echo -e "${YELLOW}⚠️  未找到版本 v$VERSION 的 Release，使用默认内容${NC}"
-    echo "   请确保已在 GitHub 上创建对应的 Release"
-fi
-
-# 如果没有获取到 Release Notes，使用默认内容
-if [ -z "$RELEASE_NOTES" ]; then
-    RELEASE_NOTES="<h2>更新内容</h2>
-<ul>
-    <li>新功能和改进</li>
-    <li>修复了一些问题</li>
-</ul>"
-fi
-
-echo ""
 echo -e "${BLUE}📝 生成 appcast 条目...${NC}"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -211,7 +142,11 @@ cat << EOF
         <title>Version $VERSION</title>
         <description>
             <![CDATA[
-                $RELEASE_NOTES
+                <h2>更新内容</h2>
+                <ul>
+                    <li>新功能和改进</li>
+                    <li>修复了一些问题</li>
+                </ul>
             ]]>
         </description>
         <pubDate>$(date -R)</pubDate>
@@ -219,7 +154,7 @@ cat << EOF
         <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
         <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         <enclosure 
-            url="https://github.com/$GITHUB_REPO/releases/download/v$VERSION/$ZIP_NAME" 
+            url="https://github.com/Ineffable919/clipboard/releases/download/v$VERSION/$ZIP_NAME" 
             sparkle:edSignature="$ED_SIGNATURE"
             length="$SIGNATURE_LENGTH"
             type="application/octet-stream" />
