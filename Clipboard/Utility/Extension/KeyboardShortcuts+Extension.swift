@@ -45,7 +45,8 @@ extension KeyboardShortcuts {
         let alert = NSAlert()
         alert.messageText = "需要辅助功能权限"
         alert.informativeText = """
-            Clip 需要访问辅助功能权限才能直接粘贴到其它应用
+            Clipboard 需要获取辅助功能权限
+            才能直接粘贴到其它应用
             """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "设置")
