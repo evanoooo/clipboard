@@ -21,9 +21,7 @@ class AppDelegate: NSObject {
             userDriverDelegate: nil,
         )
 
-    private let menuBarItem = NSStatusBar.system.statusItem(
-        withLength: NSStatusItem.squareLength,
-    )
+    private var menuBarItem: NSStatusItem?
 
     private lazy var rMenu: NSMenu = {
         let menu = NSMenu(title: "设置")
@@ -130,6 +128,12 @@ extension AppDelegate {
     }
 
     private func initStatus() {
+        menuBarItem = NSStatusBar.system.statusItem(
+            withLength: NSStatusItem.squareLength,
+        )
+
+        guard let menuBarItem else { return }
+
         menuBarItem.isVisible = true
         let config = NSImage.SymbolConfiguration(
             pointSize: 12,
@@ -161,9 +165,9 @@ extension AppDelegate {
         if event.type == .leftMouseUp {
             clipWinController.toggleWindow()
         } else if event.type == .rightMouseUp {
-            menuBarItem.menu = rMenu
+            menuBarItem!.menu = rMenu
             sender.performClick(nil)
-            menuBarItem.menu = nil
+            menuBarItem!.menu = nil
         }
     }
 
@@ -179,7 +183,7 @@ extension AppDelegate {
 
     @objc
     func triggerStatusBarPulse() {
-        guard let button = menuBarItem.button else { return }
+        guard let button = menuBarItem?.button else { return }
 
         button.layer?.removeAnimation(forKey: "bounceAnimation")
 
@@ -210,9 +214,9 @@ extension AppDelegate {
                || event.charactersIgnoringModifiers == "，"
             {
                 self?.settingWinController.toggleWindow()
-                return nil // 拦截事件
+                return nil
             }
-            return event // 传播事件
+            return event
         }
     }
 }
