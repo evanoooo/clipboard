@@ -1,7 +1,5 @@
 <div align="center">
 
-# Clipboard
-
 [English](README_EN.md) | 简体中文
 
 <img src="Clipboard/Resource/Assets.xcassets/AppIcon.appiconset/icon-256.png" width="96">
@@ -11,6 +9,10 @@
 <img src="temp.png">
 
 一款 macOS 剪贴板管理工具，帮助您更高效地管理和使用剪贴板历史记录。
+
+## 下载
+
+Download the latest version from the [releases](https://github.com/Ineffable919/clipboard/releases/latest) page
 
 ## 功能特性
 
@@ -55,12 +57,7 @@
 - `⌘ + C`：复制选中的项目到剪贴板
 - `⌘ + Delete`：删除选中的项目
 
+
 ## 许可证
 
-本项目采用 Creative Commons Attribution-NonCommercial 4.0 International Public License 许可证。详情请见 [LICENSE](LICENSE) 文件。
-
-### Tips
-1. 支持 Apple Silicon 和 Intel 芯片的 Mac
-2. 有问题请随时 [提交 issue](https://github.com/Clipboard-Team/Clipboard/issues)
-3. 欢迎 [提交 pull request](https://github.com/Clipboard-Team/Clipboard/pulls) [Star](https://github.com/Clipboard-Team/Clipboard/stargazers)
-4. 欢迎大家提供宝贵的意见和建议，帮助我们不断优化和改进 Clipboard。 同时欢迎大佬指导和优化本项目
+Creative Commons Attribution-NonCommercial 4.0 International Public License [LICENSE](LICENSE)

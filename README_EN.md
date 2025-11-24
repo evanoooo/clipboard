@@ -1,7 +1,5 @@
 <div align="center">
 
-# Clipboard
-
 English | [简体中文](README.md)
 
 <img src="Clipboard/Resource/Assets.xcassets/AppIcon.appiconset/icon-256.png" width="96">
@@ -11,6 +9,11 @@ English | [简体中文](README.md)
 <img src="Clipboard/Resource/temp.png">
 
 A macOS clipboard manager that helps you manage and use your clipboard history more efficiently.
+
+## Install
+
+Download the latest version from the [releases](https://github.com/Ineffable919/clipboard/releases/latest) page
+
 
 ## Features
 
@@ -58,10 +61,3 @@ A macOS clipboard manager that helps you manage and use your clipboard history m
 ## License
 
 This project is licensed under the Creative Commons Attribution-NonCommercial 4.0 International Public License. See the [LICENSE](LICENSE) file for details.
-
-### Tips
-1. Compatible with Apple Silicon (M1/M2/M3/M4) and Intel chip Macs
-2. For any issues, please [submit an issue](https://github.com/Clipboard-Team/Clipboard/issues)
-3. Welcome to [submit pull requests](https://github.com/Clipboard-Team/Clipboard/pulls) and [Star](https://github.com/Clipboard-Team/Clipboard/stargazers)
-4. We welcome valuable feedback and suggestions to help us continuously optimize and improve Clipboard. Contributions and guidance from developers are always appreciated
-
