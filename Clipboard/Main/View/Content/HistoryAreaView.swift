@@ -305,7 +305,7 @@ struct HistoryAreaView: View {
             return event
         }
 
-        let newState = KeyHelper.isQuickPasteModifierPressed()
+        let newState = KeyCode.isQuickPasteModifierPressed()
         if newState != isQuickPasteModifierPressed {
             isQuickPasteModifierPressed = newState
         }
@@ -317,7 +317,7 @@ struct HistoryAreaView: View {
             return event
         }
 
-        if event.keyCode == UInt16(kVK_Escape) {
+        if event.keyCode == KeyCode.escape {
             handleEscapeKeyEvent()
             return nil
         }
@@ -331,7 +331,7 @@ struct HistoryAreaView: View {
             return nil
         }
 
-        if KeyHelper.shouldTriggerSearch(for: event),
+        if KeyCode.shouldTriggerSearch(for: event),
            vm.focusView != .search
         {
             vm.focusView = .search
@@ -367,7 +367,7 @@ struct HistoryAreaView: View {
     /// - Returns: 如果匹配快速粘贴快捷键，返回对应的索引（0-8），否则返回 nil
     private func handleQuickPasteShortcut(_ event: NSEvent) -> Int? {
         guard
-            KeyHelper.hasModifier(
+            KeyCode.hasModifier(
                 event,
                 modifierIndex: PasteUserDefaults.quickPasteModifier,
             )
@@ -376,7 +376,7 @@ struct HistoryAreaView: View {
         }
 
         // 检查是否同时按下了其他修饰键（除了快速粘贴修饰键之外）
-        let quickPasteModifier = KeyHelper.modifierFlags(
+        let quickPasteModifier = KeyCode.modifierFlags(
             from: PasteUserDefaults.quickPasteModifier,
         )
         let otherModifiers = event.modifierFlags.subtracting(quickPasteModifier)
@@ -414,7 +414,7 @@ struct HistoryAreaView: View {
     }
 
     private func hasPlainTextModifier(_ event: NSEvent) -> Bool {
-        KeyHelper.hasModifier(
+        KeyCode.hasModifier(
             event,
             modifierIndex: PasteUserDefaults.plainTextModifier,
         )

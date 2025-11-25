@@ -14,17 +14,12 @@ struct PrivacySettingView: View {
     @Environment(\.colorScheme) var colorScheme
 
     @State private var selectedApp: String? = nil
-    @State private var ignoredApps: [IgnoredAppInfo] = PasteUserDefaults
-        .ignoredApps
-    @State private var showDuringScreenShare: Bool = PasteUserDefaults
-        .showDuringScreenShare
-    @State private var enableLinkPreview: Bool = PasteUserDefaults
-        .enableLinkPreview
-    @State private var ignoreSensitiveContent: Bool = PasteUserDefaults
-        .ignoreSensitiveContent
-    @State private var ignoreEphemeralContent: Bool = PasteUserDefaults
-        .ignoreEphemeralContent
-    @State private var delConfirm: Bool = PasteUserDefaults.delConfirm
+    @State private var ignoredApps: [IgnoredAppInfo] = PasteUserDefaults.ignoredApps
+    @AppStorage(PrefKey.showDuringScreenShare.rawValue) private var showDuringScreenShare = true
+    @AppStorage(PrefKey.enableLinkPreview.rawValue) private var enableLinkPreview = true
+    // @AppStorage(PrefKey.ignoreSensitiveContent.rawValue) private var ignoreSensitiveContent = false
+    // @AppStorage(PrefKey.ignoreEphemeralContent.rawValue) private var ignoreEphemeralContent = false
+    @AppStorage(PrefKey.delConfirm.rawValue) private var delConfirm = false
     @State private var hasAccessibilityPermission: Bool = AXIsProcessTrusted()
     @State private var permissionTimer: Timer?
 
@@ -36,7 +31,7 @@ struct PrivacySettingView: View {
                         PrivacyToggleRow(
                             title: "允许在屏幕共享中显示",
                             subtitle:
-                            "关闭后，在屏幕共享、录屏或演示时，Clip 窗口不会被捕获，保护您的隐私。",
+                            "关闭后，在屏幕共享、录屏或演示时，窗口不会被捕获，保护您的隐私。",
                             isOn: $showDuringScreenShare,
                         )
                         Divider()
@@ -46,18 +41,18 @@ struct PrivacySettingView: View {
                             isOn: $enableLinkPreview,
                         )
                         Divider()
-                        PrivacyToggleRow(
-                            title: "忽略机密内容",
-                            subtitle: "检测到密码和敏感数据时不保存。",
-                            isOn: $ignoreSensitiveContent,
-                        )
-                        Divider()
-                        PrivacyToggleRow(
-                            title: "忽略瞬时内容",
-                            subtitle: "不要保存其它应用程序生成的临时数据。",
-                            isOn: $ignoreEphemeralContent,
-                        )
-                        Divider()
+                        // PrivacyToggleRow(
+                        //     title: "忽略机密内容",
+                        //     subtitle: "检测到密码和敏感数据时不保存。",
+                        //     isOn: $ignoreSensitiveContent,
+                        // )
+                        // Divider()
+                        // PrivacyToggleRow(
+                        //     title: "忽略瞬时内容",
+                        //     subtitle: "不要保存其它应用程序生成的临时数据。",
+                        //     isOn: $ignoreEphemeralContent,
+                        // )
+                        // Divider()
                         PrivacyToggleRow(
                             title: "删除确认",
                             subtitle: "删除记录时是否弹窗确认。",
@@ -165,20 +160,7 @@ struct PrivacySettingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: showDuringScreenShare) {
-            PasteUserDefaults.showDuringScreenShare = showDuringScreenShare
             ClipMainWindowController.shared.configureWindowSharing()
-        }
-        .onChange(of: enableLinkPreview) {
-            PasteUserDefaults.enableLinkPreview = enableLinkPreview
-        }
-        .onChange(of: ignoreSensitiveContent) {
-            PasteUserDefaults.ignoreSensitiveContent = ignoreSensitiveContent
-        }
-        .onChange(of: ignoreEphemeralContent) {
-            PasteUserDefaults.ignoreEphemeralContent = ignoreEphemeralContent
-        }
-        .onChange(of: delConfirm) {
-            PasteUserDefaults.delConfirm = delConfirm
         }
         .onAppear {
             refreshPermissionStatus()
@@ -377,7 +359,6 @@ struct IgnoredAppRow: View {
 
 struct AccessibilityPermissionRow: View {
     @Binding var hasPermission: Bool
-    @State private var isHovered = false
     let onOpenSettings: () -> Void
     let onRefresh: () -> Void
 
@@ -398,41 +379,16 @@ struct AccessibilityPermissionRow: View {
             Spacer()
 
             HStack(spacing: 8) {
-                Image(
-                    systemName: hasPermission
-                        ? "checkmark.circle.fill" : "xmark.circle.fill",
-                )
-                .font(.system(size: Const.iconSize18))
-                .foregroundColor(hasPermission ? .green : .orange)
+                if hasPermission {
+                    Image(
+                        systemName: "checkmark.circle.fill",
+                    )
+                    .font(.system(size: Const.iconSize18))
+                    .foregroundColor(.green)
+                }
 
                 if !hasPermission {
-                    Button(action: onOpenSettings) {
-                        Text("去设置")
-                            .font(.system(size: 12))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: Const.radius)
-                                    .fill(
-                                        isHovered
-                                            ? Color.accentColor.opacity(0.1)
-                                            : Color.clear,
-                                    ),
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Const.radius)
-                                    .stroke(
-                                        isHovered
-                                            ? Color.accentColor
-                                            : Color.gray.opacity(0.3),
-                                        lineWidth: 1,
-                                    ),
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { hovering in
-                        isHovered = hovering
-                    }
+                    BorderedButton(title: "去设置",action: onOpenSettings)
                 }
             }
         }

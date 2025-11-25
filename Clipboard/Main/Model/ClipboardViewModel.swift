@@ -6,7 +6,6 @@
 //
 
 import AppKit
-import KeyboardShortcuts
 import Observation
 import SwiftUI
 

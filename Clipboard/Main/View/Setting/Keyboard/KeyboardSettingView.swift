@@ -5,13 +5,12 @@
 //  Created by crown on 2025/10/28.
 //
 
-import KeyboardShortcuts
 import SwiftUI
 
 // MARK: - 键盘设置视图
 
 struct KeyboardSettingView: View {
-    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.colorScheme) var scheme
     private var appName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? "Clipboard"
@@ -21,17 +20,14 @@ struct KeyboardSettingView: View {
         VStack(spacing: 0) {
             VStack(spacing: 20) {
                 VStack(spacing: 0) {
-                    KeyboardView(desc: "启动 \(appName)", key: .toggleClipKey)
-                    Divider()
-                        .padding(.vertical, Const.space8)
-                    PasteView()
+                    StartupShortcutsView()
                 }
-                .padding(.vertical, Const.space8)
+                .padding(.vertical, Const.space4)
                 .padding(.horizontal, Const.space16)
                 .background(
                     RoundedRectangle(cornerRadius: Const.radius)
                         .fill(
-                            colorScheme == .light
+                            scheme == .light
                                 ? Const.lightBackground
                                 : Const.darkBackground,
                         ),
@@ -52,7 +48,7 @@ struct KeyboardSettingView: View {
                 .background(
                     RoundedRectangle(cornerRadius: Const.radius)
                         .fill(
-                            colorScheme == .light
+                            scheme == .light
                                 ? Const.lightBackground
                                 : Const.darkBackground,
                         ),
@@ -72,25 +68,7 @@ struct KeyboardSettingView: View {
     }
 }
 
-struct KeyboardView: View {
-    var desc: String
-    var key: KeyboardShortcuts.Name
-
-    var body: some View {
-        HStack {
-            Text(desc)
-                .font(.body)
-            Spacer()
-            KeyboardShortcuts.Recorder(
-                "",
-                name: key,
-            )
-            .environment(\.locale, .init(identifier: "zh"))
-        }
-    }
-}
-
-struct PasteView: View {
+struct StartupShortcutsView: View {
     private var appName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? "Clipboard"
@@ -102,16 +80,18 @@ struct PasteView: View {
                 .font(.body)
             Spacer()
             ShortcutRecorder(
-                "paste_default",
+                "app_launch",
                 defaultValue: KeyboardShortcut(
                     modifiersRawValue: NSEvent.ModifierFlags([
                         .command, .shift,
                     ])
                     .rawValue,
-                    keyCode: 0x08,
-                    displayKey: "C",
+                    keyCode: KeyCode.v,
+                    displayKey: "V",
                 ),
-            )
+            ) {
+                ClipMainWindowController.shared.toggleWindow()
+            }
         }
     }
 }

@@ -272,14 +272,13 @@ struct AppearanceSettingsRow: View {
 
     private func applyAppearance(_ mode: AppearanceMode) {
         DispatchQueue.main.async {
-            let targetAppearance: NSAppearance?
-            switch mode {
+            let targetAppearance: NSAppearance? = switch mode {
             case .system:
-                targetAppearance = nil
+                nil
             case .light:
-                targetAppearance = NSAppearance(named: .aqua)
+                NSAppearance(named: .aqua)
             case .dark:
-                targetAppearance = NSAppearance(named: .darkAqua)
+                NSAppearance(named: .darkAqua)
             }
 
             if NSApp.appearance != targetAppearance {

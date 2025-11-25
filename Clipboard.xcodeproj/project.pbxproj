@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		B166C0812ECB2A330068A689 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B166C0802ECB2A330068A689 /* Sparkle */; };
-		B1FADD8E2E7E9332005CEFCF /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = B1FADD8D2E7E9332005CEFCF /* KeyboardShortcuts */; };
 		B1FADD912E7E937A005CEFCF /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = B1FADD902E7E937A005CEFCF /* SQLite */; };
 /* End PBXBuildFile section */
 
@@ -44,7 +43,6 @@
 			files = (
 				B166C0812ECB2A330068A689 /* Sparkle in Frameworks */,
 				B1FADD912E7E937A005CEFCF /* SQLite in Frameworks */,
-				B1FADD8E2E7E9332005CEFCF /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -87,7 +85,6 @@
 			);
 			name = Clipboard;
 			packageProductDependencies = (
-				B1FADD8D2E7E9332005CEFCF /* KeyboardShortcuts */,
 				B1FADD902E7E937A005CEFCF /* SQLite */,
 				B166C0802ECB2A330068A689 /* Sparkle */,
 			);
@@ -120,7 +117,6 @@
 			mainGroup = B1FADD372E7E92B3005CEFCF;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				B1FADD8C2E7E9332005CEFCF /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				B1FADD8F2E7E937A005CEFCF /* XCRemoteSwiftPackageReference "SQLite" */,
 				B166C07F2ECB2A330068A689 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
@@ -288,7 +284,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 28;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -304,7 +300,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.crown.clipboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -327,7 +323,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 28;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -343,7 +339,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.crown.clipboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -389,14 +385,6 @@
 				minimumVersion = 2.8.1;
 			};
 		};
-		B1FADD8C2E7E9332005CEFCF /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.4.0;
-			};
-		};
 		B1FADD8F2E7E937A005CEFCF /* XCRemoteSwiftPackageReference "SQLite" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/stephencelis/SQLite.swift";
@@ -412,11 +400,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B166C07F2ECB2A330068A689 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
-		};
-		B1FADD8D2E7E9332005CEFCF /* KeyboardShortcuts */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B1FADD8C2E7E9332005CEFCF /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
-			productName = KeyboardShortcuts;
 		};
 		B1FADD902E7E937A005CEFCF /* SQLite */ = {
 			isa = XCSwiftPackageProductDependency;

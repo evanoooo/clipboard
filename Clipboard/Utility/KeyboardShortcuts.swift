@@ -1,5 +1,5 @@
 //
-//  KeyboardShortcuts+Extension.swift
+//  KeyboardShortcuts.swift
 //  Clip
 //
 //  Created by crown on 2025/09/12.
@@ -8,16 +8,8 @@
 import AppKit
 import Carbon
 import Foundation
-import KeyboardShortcuts
 
-extension KeyboardShortcuts.Name {
-    static let toggleClipKey = Self(
-        "shortcurs",
-        default: Shortcut(.v, modifiers: [.command, .shift]),
-    )
-}
-
-extension KeyboardShortcuts {
+enum KeyboardShortcuts {
     static func postCmdVEvent() {
         let hasPermission = AXIsProcessTrusted()
 
@@ -48,7 +40,7 @@ extension KeyboardShortcuts {
         Clipboard 需要获取辅助功能权限
         才能直接粘贴到其它应用
         """
-        alert.alertStyle = .warning
+        alert.alertStyle = .informational
         alert.addButton(withTitle: "设置")
         alert.addButton(withTitle: "稍后设置，复制到剪切板")
 

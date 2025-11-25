@@ -5,6 +5,7 @@
 //  Created by crown on 2025/9/16.
 //
 
+import AppKit
 import Foundation
 
 // MARK: - 应用信息模型
@@ -30,6 +31,21 @@ enum PasteUserDefaults {
     /// 直接粘贴
     @UserDefaultsWrapper(.pasteDirect, defaultValue: true)
     static var pasteDirect
+    /// 应用启动
+    @CodableUserDefaultsWrapper(
+        .globalHotKeys,
+        defaultValue: [
+            HotKeyInfo(key: "app_launch", shortcut: KeyboardShortcut(
+                modifiersRawValue: NSEvent.ModifierFlags([
+                    .command, .shift,
+                ])
+                .rawValue,
+                keyCode: KeyCode.v,
+                displayKey: "V",
+            )),
+        ],
+    )
+    static var globalHotKeys
     /// 粘贴为纯文本
     @UserDefaultsWrapper(.pasteOnlyText, defaultValue: false)
     static var pasteOnlyText
@@ -49,59 +65,26 @@ enum PasteUserDefaults {
     @UserDefaultsWrapper(.ignoreList, defaultValue: [String]())
     static var ignoreList
     /// 忽略的应用程序信息
-    static var ignoredApps: [IgnoredAppInfo] {
-        get {
-            guard
-                let data = UserDefaults.standard.data(
-                    forKey: PrefKey.ignoredApps.rawValue,
-                )
-            else {
-                return [
-                    IgnoredAppInfo(
-                        name: "密码",
-                        bundleIdentifier: "com.apple.Passwords",
-                        path: "/System/Applications/Passwords.app",
-                    ),
-                    IgnoredAppInfo(
-                        name: "钥匙串访问",
-                        bundleIdentifier: "com.apple.keychainaccess",
-                        path: "/System/Applications/Utilities/Keychain Access.app",
-                    ),
-                ]
-            }
-            return (try? JSONDecoder().decode([IgnoredAppInfo].self, from: data))
-                ?? []
-        }
-        set {
-            let data = try? JSONEncoder().encode(newValue)
-            UserDefaults.standard.set(
-                data,
-                forKey: PrefKey.ignoredApps.rawValue,
-            )
-        }
-    }
+    @CodableUserDefaultsWrapper(
+        .ignoredApps,
+        defaultValue: [
+            IgnoredAppInfo(
+                name: "密码",
+                bundleIdentifier: "com.apple.Passwords",
+                path: "/System/Applications/Passwords.app",
+            ),
+            IgnoredAppInfo(
+                name: "钥匙串访问",
+                bundleIdentifier: "com.apple.keychainaccess",
+                path: "/System/Applications/Utilities/Keychain Access.app",
+            ),
+        ],
+    )
+    static var ignoredApps
 
     /// 用户自定义分类
-    static var userCategoryChip: [CategoryChip] {
-        get {
-            guard
-                let data = UserDefaults.standard.data(
-                    forKey: PrefKey.userCategoryChip.rawValue,
-                )
-            else {
-                return []
-            }
-            return (try? JSONDecoder().decode([CategoryChip].self, from: data))
-                ?? []
-        }
-        set {
-            let data = try? JSONEncoder().encode(newValue)
-            UserDefaults.standard.set(
-                data,
-                forKey: PrefKey.userCategoryChip.rawValue,
-            )
-        }
-    }
+    @CodableUserDefaultsWrapper(.userCategoryChip, defaultValue: [CategoryChip]())
+    static var userCategoryChip
 
     /// 删除确认
     @UserDefaultsWrapper(.delConfirm, defaultValue: false)
@@ -147,5 +130,45 @@ struct UserDefaultsWrapper<T> {
         set {
             UserDefaults.standard.set(newValue, forKey: key.rawValue)
         }
+    }
+}
+
+// MARK: - Codable 属性包装器
+
+@propertyWrapper
+struct CodableUserDefaultsWrapper<T: Codable> {
+    let key: PrefKey
+    let defaultValue: T
+
+    init(_ key: PrefKey, defaultValue: T) {
+        self.key = key
+        self.defaultValue = defaultValue
+    }
+
+    var wrappedValue: T {
+        get {
+            UserDefaults.standard.object(T.self, forKey: key.rawValue)
+                ?? defaultValue
+        }
+        set {
+            UserDefaults.standard.set(encodable: newValue, forKey: key.rawValue)
+        }
+    }
+}
+
+// MARK: - UserDefaults 扩展（支持 Codable）
+
+extension UserDefaults {
+    func set(encodable: (some Codable)?, forKey key: String) {
+        if let data = try? JSONEncoder().encode(encodable) {
+            set(data, forKey: key)
+        } else {
+            removeObject(forKey: key)
+        }
+    }
+
+    func object<T: Codable>(_: T.Type, forKey key: String) -> T? {
+        guard let data = data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
     }
 }

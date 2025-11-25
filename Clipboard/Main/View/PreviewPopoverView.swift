@@ -64,7 +64,7 @@ struct PreviewPopoverView: View {
                 }
 
                 if model.url != nil,
-                   let browserName = getDefaultBrowserName()
+                    let browserName = getDefaultBrowserName()
                 {
                     BorderedButton(title: "使用 \(browserName) 打开") {
                         withAnimation {
@@ -94,7 +94,7 @@ struct PreviewPopoverView: View {
 
     func getDefaultBrowserName() -> String? {
         if let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
-           let bundle = Bundle(url: appURL)
+            let bundle = Bundle(url: appURL)
         {
             return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
                 as? String ?? bundle.object(
@@ -210,7 +210,7 @@ struct PreviewPopoverView: View {
                                     with: model.data,
                                     type: model.pasteboardType,
                                 )!
-                                    .string,
+                                .string,
                             )
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
@@ -315,17 +315,18 @@ struct BorderedButton: View {
     let title: String
     let action: () -> Void
     @State private var isHovered = false
+    @Environment(\.colorScheme) var scheme
 
     var body: some View {
         Button {
             action()
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.primary)
+                .font(.system(size: 12, weight: .light))
+                .foregroundStyle(scheme == .dark ? .white : .black)
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: Const.radius)

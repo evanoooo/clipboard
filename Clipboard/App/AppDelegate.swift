@@ -6,7 +6,6 @@
 //
 
 import AppKit
-import KeyboardShortcuts
 import QuartzCore
 import Sparkle
 
@@ -109,9 +108,7 @@ extension AppDelegate {
 
         PasteDataStore.main.setup()
 
-        KeyboardShortcuts.onKeyDown(for: .toggleClipKey) { [self] in
-            clipWinController.toggleWindow()
-        }
+        HotKeyManager.shared.initialize()
 
         FileAccessHelper.shared.restoreAllAccesses()
 

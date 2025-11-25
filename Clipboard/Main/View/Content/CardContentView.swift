@@ -10,7 +10,7 @@ import WebKit
 
 struct CardContentView: View {
     var model: PasteboardModel
-    @AppStorage("enableLinkPreview") private var enableLinkPreview: Bool =
+    @AppStorage(PrefKey.enableLinkPreview.rawValue) private var enableLinkPreview: Bool =
         PasteUserDefaults.enableLinkPreview
 
     @ViewBuilder

@@ -18,8 +18,8 @@ struct ClipCardView: View {
 
     private let vm = ClipboardViewModel.shard
     private let controller = ClipMainWindowController.shared
-    @AppStorage("enableLinkPreview") private var enableLinkPreview: Bool =
-        PasteUserDefaults.enableLinkPreview
+    @AppStorage(PrefKey.enableLinkPreview.rawValue)
+    private var enableLinkPreview: Bool = PasteUserDefaults.enableLinkPreview
 
     var body: some View {
         cardContent
@@ -39,20 +39,13 @@ struct ClipCardView: View {
                 }
             }
             .frame(width: Const.cardSize, height: Const.cardSize)
+            .shadow(
+                color: isSelected ? .clear : .black.opacity(0.1),
+                radius: isSelected ? 0 : 4,
+                x: 0,
+                y: isSelected ? 0 : 2
+            )
             .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
-                    .fill(Color.clear)
-                    .shadow(
-                        color: .accentColor.opacity(0.08),
-                        radius: 2.0,
-                        x: 0,
-                        y: 1,
-                    ),
-            )
-            .clipShape(
-                RoundedRectangle(cornerRadius: Const.radius, style: .continuous),
-            )
             .contextMenu(menuItems: {
                 contextMenuContent
             })
@@ -90,14 +83,12 @@ struct ClipCardView: View {
 
     @ViewBuilder
     private func quickPasteIndexBadge(index: Int) -> some View {
-        let (baseColor, textColor) = model.colors()
+        let (_, textColor) = model.colors()
         Text("\(index)")
             .font(.system(size: 12, weight: .regular, design: .rounded))
             .foregroundColor(textColor)
-            .frame(width: 16, height: 16)
-            .background(Circle().fill(baseColor))
-            .padding(.bottom, 4)
-            .padding(.trailing, 4)
+            .padding(.bottom, Const.space4)
+            .padding(.trailing, Const.space8)
             .transition(.scale.combined(with: .opacity))
     }
 
@@ -160,7 +151,7 @@ struct ClipCardView: View {
     }
 
     private var plainTextModifiers: EventModifiers {
-        KeyHelper.eventModifiers(from: PasteUserDefaults.plainTextModifier)
+        KeyCode.eventModifiers(from: PasteUserDefaults.plainTextModifier)
     }
 
     // MARK: - Context Menu Actions

@@ -44,9 +44,10 @@ enum PrefKey: String {
     case plainTextModifier
     /// 外观设置
     case appearance
+    /// 快捷键
+    case globalHotKeys
 }
 
-/// 外观模式
 enum AppearanceMode: Int, CaseIterable {
     case system = 0 // 跟随系统
     case light = 1 // 浅色
@@ -69,7 +70,6 @@ enum HistoryTimeUnit: Equatable {
     case year // 1 年
     case forever // 永久
 
-    /// 转换为原始值（用于存储）
     var rawValue: Int {
         switch self {
         case let .days(n):
@@ -85,7 +85,6 @@ enum HistoryTimeUnit: Equatable {
         }
     }
 
-    /// 从原始值创建
     init(rawValue: Int) {
         switch rawValue {
         case 1 ... 6:
@@ -101,7 +100,6 @@ enum HistoryTimeUnit: Equatable {
         }
     }
 
-    /// 显示文本
     var displayText: String {
         switch self {
         case let .days(n):

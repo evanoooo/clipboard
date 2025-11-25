@@ -7,61 +7,12 @@
 
 import SwiftUI
 
-// MARK: - 快捷键模型
-
-struct KeyboardShortcut: Codable, Equatable, Hashable {
-    var modifiersRawValue: UInt = 0
-    var keyCode: UInt16 = 0
-    var displayKey: String = ""
-
-    var modifiers: NSEvent.ModifierFlags {
-        get { NSEvent.ModifierFlags(rawValue: modifiersRawValue) }
-        set { modifiersRawValue = newValue.rawValue }
-    }
-
-    var isEmpty: Bool { displayKey.isEmpty && modifiersRawValue == 0 }
-
-    var displayString: String {
-        guard !isEmpty else { return "" }
-        return modifiers.symbols + displayKey
-    }
-
-    static var empty = KeyboardShortcut()
-}
-
-extension NSEvent.ModifierFlags {
-    var symbols: String {
-        var s = ""
-        if contains(.command) { s += "⌘" }
-        if contains(.option) { s += "⌥" }
-        if contains(.control) { s += "⌃" }
-        if contains(.shift) { s += "⇧" }
-        return s
-    }
-}
-
-// MARK: - UserDefaults 扩展（支持 Codable）
-
-extension UserDefaults {
-    func set(encodable: (some Codable)?, forKey key: String) {
-        if let data = try? JSONEncoder().encode(encodable) {
-            set(data, forKey: key)
-        } else {
-            removeObject(forKey: key)
-        }
-    }
-
-    func object<T: Codable>(_: T.Type, forKey key: String) -> T? {
-        guard let data = data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(T.self, from: data)
-    }
-}
-
 // MARK: - 通用快捷键录入组件
 
 struct ShortcutRecorder: View {
-    private let storageKey: String
+    private let hotKeyId: String
     private let defaultValue: KeyboardShortcut
+    private let onShortcutChanged: (() -> Void)?
 
     @State private var shortcut: KeyboardShortcut
     @State private var displayText: String
@@ -73,22 +24,24 @@ struct ShortcutRecorder: View {
     init(
         _ key: String,
         defaultValue: KeyboardShortcut = .empty,
-        binding: Binding<KeyboardShortcut>? = nil
+        binding: Binding<KeyboardShortcut>? = nil,
+        onShortcutChanged: (() -> Void)? = nil
     ) {
-        storageKey = key
+        hotKeyId = key
         self.defaultValue = defaultValue
+        self.onShortcutChanged = onShortcutChanged
 
         let saved =
-            UserDefaults.standard.object(KeyboardShortcut.self, forKey: key)
-            ?? defaultValue
+            HotKeyManager.shared.getHotKey(key: key)?.shortcut ?? defaultValue
+
         _shortcut = State(initialValue: saved)
         _displayText = State(initialValue: saved.displayString)
         _value =
             binding
-            ?? Binding(
-                get: { saved },
-                set: { _ in },
-            )
+                ?? Binding(
+                    get: { saved },
+                    set: { _ in },
+                )
     }
 
     var body: some View {
@@ -203,7 +156,7 @@ struct ShortcutRecorder: View {
     private func handleKeyEvent(_ event: NSEvent) {
         let keyCode = event.keyCode
 
-        if keyCode == 0x35 {
+        if keyCode == KeyCode.escape {
             stopRecording()
             return
         }
@@ -213,8 +166,8 @@ struct ShortcutRecorder: View {
         ])
 
         let isFunctionKey =
-            (0x7A...0x7D).contains(keyCode)
-            || [0x63, 0x76, 0x60, 0x61, 0x62, 0x64, 0x65, 0x6D, 0x67, 0x6F]
+            (0x7A ... 0x7D).contains(keyCode)
+                || [0x63, 0x76, 0x60, 0x61, 0x62, 0x64, 0x65, 0x6D, 0x67, 0x6F]
                 .contains(keyCode)
 
         if modifiers.isEmpty, !isFunctionKey {
@@ -248,13 +201,23 @@ struct ShortcutRecorder: View {
 
     private func save() {
         if shortcut.isEmpty {
-            UserDefaults.standard.set(
-                encodable: nil as KeyboardShortcut?,
-                forKey: storageKey,
-            )
+            HotKeyManager.shared.deleteHotKey(key: hotKeyId)
         } else {
-            UserDefaults.standard.set(encodable: shortcut, forKey: storageKey)
+            if HotKeyManager.shared.getHotKey(key: hotKeyId) != nil {
+                HotKeyManager.shared.updateHotKey(
+                    key: hotKeyId,
+                    shortcut: shortcut,
+                    isEnabled: true,
+                )
+            } else {
+                HotKeyManager.shared.addHotKey(
+                    key: hotKeyId,
+                    shortcut: shortcut,
+                )
+            }
         }
+
+        onShortcutChanged?()
     }
 }
 
@@ -278,7 +241,7 @@ struct ShortcutRecorder: View {
                 defaultValue: KeyboardShortcut(
                     modifiersRawValue: NSEvent.ModifierFlags([.command, .shift])
                         .rawValue,
-                    keyCode: 0x08,
+                    keyCode: KeyCode.v,
                     displayKey: "V",
                 ),
             )

@@ -41,8 +41,8 @@ struct TopBarView: View {
                     (focus == .search
                         ? .search
                         : focus == .newChip
-                            ? .newChip
-                            : focus == .editChip ? .editChip : .history)
+                        ? .newChip
+                        : focus == .editChip ? .editChip : .history)
                 syncingFocus = false
             }
             .onChange(of: vm.focusView) {
@@ -52,8 +52,8 @@ struct TopBarView: View {
                     (vm.focusView == .search
                         ? .search
                         : vm.focusView == .newChip
-                            ? .newChip
-                            : vm.focusView == .editChip ? .editChip : nil)
+                        ? .newChip
+                        : vm.focusView == .editChip ? .editChip : nil)
                 DispatchQueue.main.async {
                     focus = desired
                     syncingFocus = false
