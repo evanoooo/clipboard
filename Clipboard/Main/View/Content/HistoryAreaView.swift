@@ -15,7 +15,7 @@ struct HistoryAreaView: View {
 
     private enum Constants {
         static let doubleTapInterval: TimeInterval = 0.2
-        static let deleteAnimationDelay: TimeInterval = 0.3
+        static let deleteAnimationDelay: TimeInterval = 0.2
     }
 
     // MARK: - Selection State
@@ -40,56 +40,63 @@ struct HistoryAreaView: View {
     @State private var lastLoadTriggerIndex: Int = -1
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                if pd.dataList.isEmpty {
-                    emptyStateView
-                } else {
+        if pd.dataList.isEmpty {
+            emptyStateView
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
                     contentView(proxy: proxy)
                 }
-            }
-            .onChange(of: selectionState.selectedId, initial: false) {
-                scrollToSelectedId(proxy: proxy)
-            }
-            .onChange(of: pd.dataList) { _, _ in
-                guard !isDel else { return }
-                lastLoadTriggerIndex = -1
-                let changeType = pd.lastDataChangeType
-                if changeType == .searchFilter || changeType == .reset {
-                    reset()
+                .onChange(of: selectionState.selectedId, initial: false) {
+                    scrollToSelectedId(proxy: proxy)
+                }
+                .onChange(of: pd.dataList) {
+                    guard !isDel else { return }
+                    lastLoadTriggerIndex = -1
+                    let changeType = pd.lastDataChangeType
+                    if changeType == .searchFilter || changeType == .reset {
+                        reset()
+                    }
                 }
             }
-        }
-        .onAppear {
-            appear()
-        }
-        .onDisappear {
-            cleanup()
+            .onAppear {
+                appear()
+            }
+            .onDisappear {
+                cleanup()
+            }
         }
     }
 
     private var emptyStateView: some View {
-        VStack(alignment: .center, spacing: 12) {
-            if #available(macOS 26.0, *) {
-                Image(systemName: "sparkle.text.clipboard")
-                    .font(.system(size: 64))
-                    .foregroundColor(.accentColor.opacity(0.8))
-            } else {
-                Image("sparkle.text.clipboard")
-                    .font(.system(size: 64))
-                    .foregroundColor(.accentColor.opacity(0.8))
+        GeometryReader { geo in
+            HStack(alignment: .center) {
+                VStack(alignment: .center, spacing: 12) {
+                    if #available(macOS 26.0, *) {
+                        Image(systemName: "sparkle.text.clipboard")
+                            .font(.system(size: 64))
+                            .foregroundColor(.accentColor.opacity(0.8))
+                    } else {
+                        Image("sparkle.text.clipboard")
+                            .font(.system(size: 64))
+                            .foregroundColor(.accentColor.opacity(0.8))
+                    }
+
+                    Text("没有剪贴板历史")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+
+                    Text("复制内容后将显示在这里")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
             }
-
-            Text("没有剪贴板历史")
-                .font(.body)
-                .foregroundColor(.secondary)
-
-            Text("复制内容后将显示在这里")
-                .font(.callout)
-                .foregroundColor(.secondary)
+            .frame(
+                width: geo.size.width,
+                height: geo.size.height
+            )
         }
-        .padding(.vertical, 4)
-        .frame(width: Const.cardSize, height: Const.emptySize)
     }
 
     private func contentView(proxy _: ScrollViewProxy) -> some View {
@@ -104,10 +111,9 @@ struct HistoryAreaView: View {
                         ? index + 1 : nil,
                     onRequestDelete: { requestDel(id: item.id) },
                 )
-                .id(item.id)
                 .onTapGesture { handleOptimisticTap(on: item) }
                 .onDrag { itemProvider(for: item) }
-                .onAppear {
+                .task(id: item.id) {
                     if shouldLoadNextPage(at: index) {
                         loadNextPageIfNeeded(at: index)
                     }
@@ -202,16 +208,14 @@ struct HistoryAreaView: View {
         isDel = true
 
         defer {
-            DispatchQueue.main.asyncAfter(
-                deadline: .now() + Constants.deleteAnimationDelay,
-            ) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Constants.deleteAnimationDelay) {
                 self.isDel = false
             }
         }
         let item = pd.dataList[index]
         vm.deleteAction(item: item)
 
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.easeOut(duration: Constants.deleteAnimationDelay)) {
             pd.dataList.remove(at: index)
             updateSelectionAfterDeletion(at: index)
         }
@@ -234,12 +238,14 @@ struct HistoryAreaView: View {
             return
         }
 
-        if id == first {
-            proxy.scrollTo(id, anchor: .trailing)
-        } else if id == last {
-            proxy.scrollTo(id, anchor: .leading)
-        } else {
-            proxy.scrollTo(id)
+        DispatchQueue.main.async {
+            if id == first {
+                proxy.scrollTo(id, anchor: .trailing)
+            } else if id == last {
+                proxy.scrollTo(id, anchor: .leading)
+            } else {
+                proxy.scrollTo(id)
+            }
         }
     }
 
@@ -659,7 +665,8 @@ struct HistoryAreaView: View {
         alert.addButton(withTitle: "删除")
         alert.addButton(withTitle: "取消")
 
-        let handleResponse: (NSApplication.ModalResponse) -> Void = { [self] response in
+        let handleResponse: (NSApplication.ModalResponse) -> Void = {
+            [self] response in
             defer {
                 self.selectionState.pendingDeleteId = nil
                 self.vm.isShowDel = false
@@ -676,7 +683,10 @@ struct HistoryAreaView: View {
 
         if #available(macOS 26.0, *) {
             if let window = NSApp.keyWindow {
-                alert.beginSheetModal(for: window, completionHandler: handleResponse)
+                alert.beginSheetModal(
+                    for: window,
+                    completionHandler: handleResponse
+                )
             }
         } else {
             let response = alert.runModal()
