@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,29 +14,75 @@
             padding: 0 20px;
             color: #333;
         }
+
         h4 {
             color: #2c3e50;
             margin-top: 24px;
             margin-bottom: 12px;
             font-size: 18px;
         }
+
         ul {
             padding-left: 20px;
         }
+
         li {
             margin-bottom: 8px;
         }
+
+        .release-header {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+
+        .release-version {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .release-date {
+            font-size: 16px;
+            margin: 0;
+        }
     </style>
 </head>
+
 <body>
-    <h4>🔧 Updates</h4>
+    <div class="release-header">
+        <span class="release-version">v0.2.3</span>
+        <span class="release-date">2025年11月25日</span>
+    </div>
+    <h4>🔧 Improvements</h4>
     <ul>
-        <li>移除了暂未生效的控制项目</li>
+        <li>移除了暂未生效的控制项</li>
         <li>调整UI元素的间距和样式，提升整体视觉一致性</li>
     </ul>
     <h4>🐛 Bug Fixes</h4>
     <ul>
         <li>修复某些情况下应用崩溃的问题</li>
     </ul>
+
+
+    <div class="release-header">
+        <span class="release-version">v0.2.2</span>
+        <span class="release-date">2025年11月21日</span>
+    </div>
+    <h4>✨ Feature</h4>
+    <ul>
+        <li>状态栏新增“检查更新”菜单项，允许用户手动检查更新。</li>
+        <li>增加显示更新设置，确保用户能够方便地管理更新选项。</li>
+        <li>支持 Intel 架构。</li>
+    </ul>
+    <h4>🔧 Updates</h4>
+    <ul>
+        <li>禁用了自动更新</li>
+        <li>调整UI元素的间距和样式，提升整体视觉一致性</li>
+    </ul>
+    <h4>🐛 Bug Fixes</h4>
+    <ul>
+        <li>修复在某些情况下粘贴内容后选中状态丢失的问题。</li>
+    </ul>
 </body>
+
 </html>
