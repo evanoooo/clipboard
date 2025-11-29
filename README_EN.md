@@ -69,6 +69,10 @@ sudo xattr -r -d com.apple.quarantine /Applications/Clipboard.app
 sudo codesign --force --deep --sign - /Applications/Clipboard.app
 ```
 
+### Accessibility permissions lost after app update?
+  - There is currently no good solution for this issue. Please remove and re-add the permissions.
+
+
 ## License
 
 This project is licensed under the Creative Commons Attribution-NonCommercial 4.0 International Public License. See the [LICENSE](LICENSE) file for details.

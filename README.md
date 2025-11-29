@@ -68,6 +68,10 @@ sudo xattr -r -d com.apple.quarantine /Applications/Clipboard.app
 sudo codesign --force --deep --sign - /Applications/Clipboard.app
 ```
 
+### 应用更新后辅助权限丢失？
+  - 目前没有好的办法处理，请删除后重新添加。
+
+
 ## 许可证
 
 Creative Commons Attribution-NonCommercial 4.0 International Public License [LICENSE](LICENSE)
