@@ -46,6 +46,8 @@ enum PrefKey: String {
     case appearance
     /// 快捷键
     case globalHotKeys
+    /// 粘贴时去掉末尾换行符
+    case removeTailingNewline
 }
 
 enum AppearanceMode: Int, CaseIterable {

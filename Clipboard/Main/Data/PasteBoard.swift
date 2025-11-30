@@ -183,7 +183,13 @@ final class PasteBoard {
         let shouldPasteAsPlainText = !isAttribute || PasteUserDefaults.pasteOnlyText
 
         if (data.type == .string) || (data.type == .rich), shouldPasteAsPlainText {
-            NSPasteboard.general.setString(data.searchText, forType: .string)
+            var textToPaste = data.searchText
+            if PasteUserDefaults.removeTailingNewline {
+                while textToPaste.hasSuffix("\n") || textToPaste.hasSuffix("\r") {
+                    textToPaste.removeLast()
+                }
+            }
+            NSPasteboard.general.setString(textToPaste, forType: .string)
         } else if data.type == .file {
             if let filePaths = String(data: data.data, encoding: .utf8) {
                 let paths = filePaths.components(separatedBy: "\n")
@@ -206,6 +212,39 @@ final class PasteBoard {
                 pasteboard.writeObjects(validURLs as [NSPasteboardWriting])
             }
         } else {
+            if data.pasteboardType.isText(), PasteUserDefaults.removeTailingNewline {
+                if let attributedString = NSAttributedString(with: data.data, type: data.pasteboardType) {
+                    let mutableString = NSMutableAttributedString(attributedString: attributedString)
+                    let originalLength = mutableString.length
+
+                    // 直接从 mutableString 末尾删除换行符
+                    var currentLength = originalLength
+                    while currentLength > 0 {
+                        let lastCharRange = NSRange(location: currentLength - 1, length: 1)
+                        let lastChar = mutableString.attributedSubstring(from: lastCharRange).string
+
+                        if lastChar == "\n" || lastChar == "\r" {
+                            currentLength -= 1
+                        } else {
+                            break
+                        }
+                    }
+
+                    if currentLength < originalLength {
+                        let rangeToDelete = NSRange(location: currentLength, length: originalLength - currentLength)
+                        mutableString.deleteCharacters(in: rangeToDelete)
+                    }
+
+                    if let processedData = mutableString.toData(with: data.pasteboardType) {
+                        NSPasteboard.general.setData(
+                            processedData,
+                            forType: data.pasteboardType,
+                        )
+                        return
+                    }
+                }
+            }
+
             NSPasteboard.general.setData(
                 data.data,
                 forType: data.pasteboardType,

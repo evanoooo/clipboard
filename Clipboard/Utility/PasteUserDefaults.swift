@@ -110,6 +110,9 @@ enum PasteUserDefaults {
     /// 外观设置
     @UserDefaultsWrapper(.appearance, defaultValue: 0)
     static var appearance
+    /// 粘贴时去掉末尾换行符
+    @UserDefaultsWrapper(.removeTailingNewline, defaultValue: false)
+    static var removeTailingNewline
 }
 
 @propertyWrapper
