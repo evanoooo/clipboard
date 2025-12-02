@@ -23,7 +23,7 @@ struct ContentView: View {
                     )
                 VStack {
                     Spacer()
-                    TopBarView()
+                    ClipTopBarView()
                     HistoryAreaView(pd: pd)
                         .focusable()
                         .focusEffectDisabled()
@@ -42,7 +42,7 @@ struct ContentView: View {
         } else {
             VStack {
                 Spacer()
-                TopBarView()
+                ClipTopBarView()
                 Spacer()
                 HistoryAreaView(pd: pd)
                     .focusable()

@@ -8,7 +8,7 @@
 import Combine
 import SwiftUI
 
-struct TopBarView: View {
+struct ClipTopBarView: View {
     @Bindable private var vm = ClipboardViewModel.shard
     @FocusState private var focus: FocusField?
     @State private var isIconHovered: Bool = false
@@ -226,5 +226,5 @@ struct TopBarView: View {
 }
 
 #Preview {
-    TopBarView()
+    ClipTopBarView()
 }
