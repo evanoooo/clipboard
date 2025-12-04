@@ -10,51 +10,42 @@ import SwiftUI
 // MARK: - ContentView
 
 struct ContentView: View {
-    @FocusState private var historyFocused: Bool
+    @FocusState private var focused: Bool
     @State private var pd = PasteDataStore.main
 
+    @ViewBuilder
+    private func contentStack() -> some View {
+        VStack {
+            Spacer()
+            ClipTopBarView()
+            HistoryAreaView(pd: pd)
+                .focusable()
+                .focusEffectDisabled()
+                .focused($focused)
+        }
+    }
+
     var body: some View {
-        if #available(macOS 26.0, *) {
-            ZStack {
-                RoundedRectangle(cornerRadius: Const.radius)
-                    .fill(Color.clear)
-                    .glassEffect(
-                        in: RoundedRectangle(cornerRadius: Const.radius),
-                    )
-                VStack {
-                    Spacer()
-                    ClipTopBarView()
-                    HistoryAreaView(pd: pd)
-                        .focusable()
-                        .focusEffectDisabled()
-                        .focused($historyFocused)
+        Group {
+            if #available(macOS 26.0, *) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: Const.radius)
+                        .fill(Color.clear)
+                        .glassEffect(
+                            in: RoundedRectangle(cornerRadius: Const.radius)
+                        )
+                    contentStack()
                 }
+            } else {
+                contentStack()
+                    .padding(.bottom, Const.cardBottomPadding)
             }
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity,
-            )
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    historyFocused = true
-                }
-            }
-        } else {
-            VStack {
-                Spacer()
-                ClipTopBarView()
-                Spacer()
-                HistoryAreaView(pd: pd)
-                    .focusable()
-                    .focusEffectDisabled()
-                    .focused($historyFocused)
-            }
-            .padding(.bottom, Const.cardBottomPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    historyFocused = true
-                }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            if Task.isCancelled { return }
+            await MainActor.run {
+                focused = true
             }
         }
     }
