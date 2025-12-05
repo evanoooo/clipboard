@@ -58,7 +58,7 @@ struct PreviewPopoverView: View {
                     .lineLimit(2)
                     .truncationMode(.head)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom,Const.space4)
+                    .padding(.bottom, Const.space4)
                     .frame(
                         maxWidth: Const.maxPreviewWidth - 128,
                         alignment: .topLeading
@@ -355,8 +355,8 @@ class InterceptingHostingView<Content: View>: NSHostingView<Content> {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hitView = super.hitTest(point)
-        if hitView != nil {
-            //onInteraction()
+        if hitView != nil, NSEvent.pressedMouseButtons == 1 {
+            onInteraction()
         }
         return hitView
     }

@@ -22,7 +22,7 @@ struct WebContentView: View {
         }
         .frame(
             width: Const.maxPreviewWidth - 32,
-            height: Const.maxPreviewHeight,
+            height: Const.maxContentHeight,
         )
         .onAppear {
             webPage.load(url)

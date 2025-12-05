@@ -22,7 +22,7 @@ struct UIWebView: View {
         }
         .frame(
             width: Const.maxPreviewWidth - 36,
-            height: Const.maxPreviewHeight,
+            height: Const.maxContentHeight,
         )
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
