@@ -23,13 +23,16 @@ class Const {
             8.0
         }
 
+    static let settingsRadius: CGFloat = 12.0
+
     static let topBarHeight: CGFloat = 52.0
     static let topBarWidth: CGFloat = 280.0
     static let cardBottomPadding: CGFloat = 16.0
     static let iconHdSize: CGFloat = 15.0
 
     static let hoverDarkColor: Color = .init(NSColor(hex: "#2e2e39"))
-    static let hoverLightColorLiquid: Color = .init(NSColor(hex: "#E1E4E7")).opacity(0.6)
+    static let hoverLightColorLiquid: Color = .init(NSColor(hex: "#E1E4E7"))
+        .opacity(0.6)
     static let hoverLightColorFrosted: Color = .white.opacity(0.6)
 
     static let chooseDarkColor: Color = .init(NSColor(hex: "#2e2e39"))

@@ -19,22 +19,13 @@ struct AppearanceSettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Const.space24) {
+        VStack(alignment: .leading, spacing: Const.space16) {
             AppearanceSettingsRow()
-                .background(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .fill(
-                            colorScheme == .light
-                                ? Const.lightBackground : Const.darkBackground,
-                        ),
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-                )
+                .settingsStyle()
 
             Text("背景")
                 .font(.headline)
+                .fontWeight(.medium)
 
             VStack(spacing: Const.space24) {
                 if #available(macOS 26.0, *) {
@@ -85,17 +76,7 @@ struct AppearanceSettingsView: View {
             .padding(.horizontal, Const.space16)
             .padding(.vertical, Const.space8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Const.radius)
-                    .fill(
-                        colorScheme == .light
-                            ? Const.lightBackground : Const.darkBackground,
-                    ),
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Const.radius)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-            )
+            .settingsStyle()
         }
         .padding(Const.space24)
         .frame(

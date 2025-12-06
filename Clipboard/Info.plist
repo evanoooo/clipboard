@@ -9,7 +9,7 @@
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 	<key>SUAllowsAutomaticUpdates</key>
-	<false/>
+	<true/>
     <key>SUPublicEDKey</key>
     <string>blW5K9TjhxvURPS+S9fxAyDcIp+QZYaxw2NqTagdiYU=</string>
 </dict>

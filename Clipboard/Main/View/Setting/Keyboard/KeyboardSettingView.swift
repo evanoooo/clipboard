@@ -24,18 +24,7 @@ struct KeyboardSettingView: View {
                 }
                 .padding(.vertical, Const.space4)
                 .padding(.horizontal, Const.space16)
-                .background(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .fill(
-                            scheme == .light
-                                ? Const.lightBackground
-                                : Const.darkBackground,
-                        ),
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-                )
+                .settingsStyle()
 
                 VStack(spacing: 0) {
                     QuickPasteModifierView()
@@ -45,21 +34,10 @@ struct KeyboardSettingView: View {
                 }
                 .padding(.vertical, Const.space8)
                 .padding(.horizontal, Const.space16)
-                .background(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .fill(
-                            scheme == .light
-                                ? Const.lightBackground
-                                : Const.darkBackground,
-                        ),
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-                )
+                .settingsStyle()
             }
         }
-        .padding(24)
+        .padding(Const.space24)
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,

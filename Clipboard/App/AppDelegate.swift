@@ -143,12 +143,12 @@ extension AppDelegate {
                 systemSymbolName: "heart.text.clipboard.fill",
                 accessibilityDescription: "",
             )?
-                .withSymbolConfiguration(config)
+            .withSymbolConfiguration(config)
         } else {
             menuBarItem.button?.image = NSImage(
                 named: "heart.text.clipboard.fill",
             )?
-                .withSymbolConfiguration(config)
+            .withSymbolConfiguration(config)
         }
         menuBarItem.button?.target = self
         menuBarItem.button?.action = #selector(statusBarClick)
@@ -208,13 +208,16 @@ extension AppDelegate {
             matching: .keyDown,
             key: "setting"
         ) { [weak self] event in
-            // Cmd+, 打开设置
-            if event.modifierFlags.contains(.command),
-               event.charactersIgnoringModifiers == ","
-               || event.charactersIgnoringModifiers == "，"
-            {
-                self?.settingWinController.toggleWindow()
-                return nil
+            if event.modifierFlags.contains(.command) {
+                let modifiers = event.charactersIgnoringModifiers
+                if modifiers == "," || modifiers == "，" {
+                    self?.settingWinController.toggleWindow()
+                    return nil
+                }
+                if modifiers == "q" || modifiers == "Q" {
+                    NSApplication.shared.terminate(nil)
+                    return nil
+                }
             }
             return event
         }

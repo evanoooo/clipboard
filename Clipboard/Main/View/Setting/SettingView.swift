@@ -7,7 +7,6 @@
 
 import SwiftUI
 
-/// 设置页面导航选项
 enum SettingPage: String, CaseIterable, Identifiable {
     case general = "通用"
     case appearance = "外观"
@@ -49,9 +48,8 @@ struct SettingView: View {
 
                 HelpCenterButton()
                     .padding(.bottom, Const.space12)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, Const.space8)
             }
-            .padding(.vertical, 8)
             .frame(minWidth: 150)
         } detail: {
             NavigationStack {

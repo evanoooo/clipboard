@@ -71,22 +71,12 @@ struct PrivacySettingView: View {
                         )
                     }
                     .padding(.horizontal, Const.space16)
-                    .background(
-                        RoundedRectangle(cornerRadius: Const.radius)
-                            .fill(
-                                colorScheme == .light
-                                    ? Const.lightBackground
-                                    : Const.darkBackground,
-                            ),
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Const.radius)
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-                    )
+                    .settingsStyle()
 
                     VStack(alignment: .leading, spacing: Const.space4) {
                         Text("忽略应用程序")
-                            .font(.body)
+                            .font(.headline)
+                            .fontWeight(.medium)
                         Text("不要保存从以下应用程序复制的内容。")
                             .font(.caption2)
                             .foregroundColor(.secondary)

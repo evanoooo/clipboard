@@ -47,20 +47,11 @@ struct GeneralSettingView: View {
                     )
                 }
                 .padding(.horizontal, Const.space16)
-                .background(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .fill(
-                            colorScheme == .light
-                                ? Const.lightBackground : Const.darkBackground,
-                        ),
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-                )
+                .settingsStyle()
 
                 Text("粘贴项目")
                     .font(.headline)
+                    .fontWeight(.medium)
 
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(spacing: 4) {
@@ -87,21 +78,12 @@ struct GeneralSettingView: View {
                     )
                 }
                 .padding(Const.space8)
-                .background(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .fill(
-                            colorScheme == .light
-                                ? Const.lightBackground : Const.darkBackground,
-                        ),
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-                )
+                .settingsStyle()
 
                 HStack {
                     Text("保留历史")
                         .font(.headline)
+                        .fontWeight(.medium)
                     Image(systemName: "exclamationmark.circle")
                         .help("每天仅删除一次")
                 }
@@ -116,24 +98,27 @@ struct GeneralSettingView: View {
 
                     HStack {
                         Spacer()
-                        Button("删除历史") {
-                            db.clearAllData()
+                        if #available(macOS 26.0, *) {
+                            Button {
+                                db.clearAllData()
+                            } label: {
+                                Text("删除历史")
+                                    .font(.callout)
+                            }
+                            .buttonStyle(.glass)
+                        } else {
+                            Button {
+                                db.clearAllData()
+                            } label: {
+                                Text("删除历史")
+                                    .font(.callout)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .fill(
-                            colorScheme == .light
-                                ? Const.lightBackground : Const.darkBackground,
-                        ),
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1),
-                )
+                .padding(Const.space12)
+                .settingsStyle()
 
                 Spacer(minLength: 20)
             }
@@ -171,7 +156,7 @@ struct PasteTargetModeRow: View {
     let onSelect: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Const.space12) {
             Image(systemName: isSelected ? "record.circle.fill" : "circle")
                 .foregroundColor(isSelected ? .accentColor : .secondary)
                 .font(.system(size: Const.space16))
@@ -179,7 +164,7 @@ struct PasteTargetModeRow: View {
                     onSelect()
                 }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Const.space4) {
                 Text(mode.title)
                     .font(.body)
 
@@ -193,7 +178,7 @@ struct PasteTargetModeRow: View {
 
             Spacer()
         }
-        .padding(4)
+        .padding(Const.space4)
         .contentShape(Rectangle())
         .onTapGesture {
             onSelect()
@@ -208,7 +193,7 @@ struct ToggleRow: View {
     let title: String
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: Const.space12) {
             Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
                 .foregroundColor(isEnabled ? .accentColor : .secondary)
                 .font(.system(size: Const.space16))
@@ -221,7 +206,7 @@ struct ToggleRow: View {
 
             Spacer()
         }
-        .padding(4)
+        .padding(Const.space4)
         .contentShape(Rectangle())
         .onTapGesture {
             isEnabled.toggle()
