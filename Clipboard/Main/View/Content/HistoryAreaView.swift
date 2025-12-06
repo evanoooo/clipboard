@@ -43,12 +43,12 @@ struct HistoryAreaView: View {
         } else {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    contentView(proxy: proxy)
-                        .scrollTargetLayout()
+                    contentView()
                 }
-                .onChange(of: selectionState.selectedId, initial: false) {
-                    scrollToSelectedId(proxy: proxy)
-                }
+                .scrollPosition(
+                    id: $selectionState.selectedId,
+                    anchor: scrollAnchor()
+                )
                 .onChange(of: pd.dataList) {
                     guard !isDel else { return }
                     lastLoadTriggerIndex = -1
@@ -98,7 +98,7 @@ struct HistoryAreaView: View {
         }
     }
 
-    private func contentView(proxy _: ScrollViewProxy) -> some View {
+    private func contentView() -> some View {
         LazyHStack(alignment: .top, spacing: Const.cardSpace) {
             ForEach(Array(pd.dataList.enumerated()), id: \.element.id) {
                 index, item in
@@ -144,8 +144,8 @@ struct HistoryAreaView: View {
         let now = ProcessInfo.processInfo.systemUptime
 
         if let lastId = selectionState.lastTapId,
-           lastId == item.id,
-           now - selectionState.lastTapTime <= Constants.doubleTapInterval
+            lastId == item.id,
+            now - selectionState.lastTapTime <= Constants.doubleTapInterval
         {
             handleDoubleTap(on: item)
             resetTapState()
@@ -220,8 +220,8 @@ struct HistoryAreaView: View {
             isDel = false
 
             if pd.dataList.count < 50,
-               pd.hasMoreData,
-               !pd.isLoadingPage
+                pd.hasMoreData,
+                !pd.isLoadingPage
             {
                 pd.loadNextPage()
             }
@@ -237,22 +237,20 @@ struct HistoryAreaView: View {
         }
     }
 
-    private func scrollToSelectedId(proxy: ScrollViewProxy) {
-        guard let id = selectionState.selectedId else { return }
+    private func scrollAnchor() -> UnitPoint? {
         guard let first = pd.dataList.first?.id,
-              let last = pd.dataList.last?.id
+            let last = pd.dataList.last?.id,
+            let id = selectionState.selectedId
         else {
-            return
+            return .none
         }
 
-        DispatchQueue.main.async {
-            if id == first {
-                proxy.scrollTo(id, anchor: .trailing)
-            } else if id == last {
-                proxy.scrollTo(id, anchor: .leading)
-            } else {
-                proxy.scrollTo(id)
-            }
+        if id == first {
+            return .trailing
+        } else if id == last {
+            return .leading
+        } else {
+            return .none
         }
     }
 
@@ -313,7 +311,7 @@ struct HistoryAreaView: View {
 
     private func flagsChangedEvent(_ event: NSEvent) -> NSEvent? {
         guard event.window == ClipMainWindowController.shared.window,
-              vm.focusView == .history
+            vm.focusView == .history
         else {
             return event
         }
@@ -342,7 +340,7 @@ struct HistoryAreaView: View {
         }
 
         if KeyCode.shouldTriggerSearch(for: event),
-           vm.focusView != .search
+            vm.focusView != .search
         {
             vm.focusView = .search
             return nil
@@ -445,7 +443,7 @@ struct HistoryAreaView: View {
 
     private func handleCopyCommand() {
         guard let id = selectionState.selectedId,
-              let item = pd.dataList.first(where: { $0.id == id })
+            let item = pd.dataList.first(where: { $0.id == id })
         else {
             NSSound.beep()
             return
@@ -532,15 +530,8 @@ struct HistoryAreaView: View {
             return
         }
         let firstId = pd.dataList.first?.id
-        let needsScrolling = selectionState.selectedId != firstId
         selectionState.selectedId = firstId
         showPreviewId = nil
-
-        if !needsScrolling {
-            DispatchQueue.main.async {
-                proxy.scrollTo(firstId, anchor: .trailing)
-            }
-        }
     }
 
     private func showDeleteAlert() {
