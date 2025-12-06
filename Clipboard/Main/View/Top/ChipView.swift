@@ -84,10 +84,14 @@ struct ChipView: View {
     private var normalView: some View {
         HStack(spacing: 6) {
             if chip.id == 1 {
-                Image(
-                    systemName:
-                        "clock.arrow.trianglehead.counterclockwise.rotate.90"
-                )
+                if #available(macOS 15.0, *) {
+                    Image(
+                        systemName:
+                            "clock.arrow.trianglehead.counterclockwise.rotate.90"
+                    )
+                } else {
+                    Image("clock.arrow.trianglehead.counterclockwise.rotate.90")
+                }
             } else {
                 Circle()
                     .fill(chip.color)
