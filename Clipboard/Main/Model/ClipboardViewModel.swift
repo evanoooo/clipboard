@@ -303,6 +303,17 @@ extension ClipboardViewModel {
     }
 
     func deleteAction(item: PasteboardModel) {
+        if item.group != -1 {
+            do {
+                try PasteDataStore.main.updateItemGroup(
+                    itemId: item.id!,
+                    groupId: -1,
+                )
+            } catch {
+                log.error("更新卡片 group 失败: \(error)")
+            }
+            return
+        }
         PasteDataStore.main.deleteItems(item)
     }
 }
