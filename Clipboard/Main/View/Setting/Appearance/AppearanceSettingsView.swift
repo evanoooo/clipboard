@@ -98,19 +98,34 @@ struct GlassMaterialSlider: View {
         nonmutating set { glassMaterialRaw = Int(newValue) }
     }
 
+    private var range: ClosedRange<Double> {
+        if #available(macOS 26.0, *) {
+            0 ... 4
+        } else {
+            0 ... 3
+        }
+    }
+
     var body: some View {
         HStack {
             Text("玻璃材质")
+                .font(.body)
             Spacer()
             Slider(
                 value: Binding(
                     get: { glassMaterial },
                     set: { glassMaterial = $0 }
                 ),
-                in: 0 ... 4,
+                in: range,
                 step: 1
-            )
-            .frame(width: 200)
+            ) {} minimumValueLabel: {
+                Text("透明")
+            } maximumValueLabel: {
+                Text("模糊")
+            }
+            .tint(.accentColor)
+            .padding(.horizontal, Const.space8)
+            .frame(width: 240.0)
         }
     }
 }

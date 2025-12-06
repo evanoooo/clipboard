@@ -21,13 +21,13 @@ final class ClipMainViewController: NSViewController {
             v.wantsLayer = true
             return v
         } else {
-            let v = NSVisualEffectView()
+            let v = NSView()
             v.translatesAutoresizingMaskIntoConstraints = false
             v.wantsLayer = true
-            v.material = .sidebar
-            v.blendingMode = .behindWindow
-            v.state = .active
-            v.isEmphasized = true
+            // v.material = .sidebar
+            // v.blendingMode = .behindWindow
+            // v.state = .active
+            // v.isEmphasized = true
             return v
         }
     }()

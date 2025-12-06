@@ -160,15 +160,32 @@ struct ChipView: View {
 
     @ViewBuilder
     private func overlayColor() -> some View {
-        let backgroundType = BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
+        let backgroundType =
+            BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
         if isSelected {
-            colorScheme == .dark
-                ? Const.chooseDarkColor
-                : (backgroundType == .liquid ? Const.chooseLightColorLiquid : Const.chooseLightColorFrosted)
+            if #available(macOS 26.0, *) {
+                colorScheme == .dark
+                    ? Const.chooseDarkColor
+                    : (backgroundType == .liquid
+                        ? Const.chooseLightColorLiquid
+                        : Const.chooseLightColorFrosted)
+            } else {
+                colorScheme == .dark
+                    ? Const.chooseDarkColor
+                    : Const.chooseLightColorFrostedLow
+            }
         } else if isDropTargeted || isTypeHovered {
-            colorScheme == .dark
-                ? Const.hoverDarkColor
-                : (backgroundType == .liquid ? Const.hoverLightColorLiquid : Const.hoverLightColorFrosted)
+            if #available(macOS 26.0, *) {
+                colorScheme == .dark
+                    ? Const.hoverDarkColor
+                    : (backgroundType == .liquid
+                        ? Const.hoverLightColorLiquid
+                        : Const.hoverLightColorFrosted)
+            } else {
+                colorScheme == .dark
+                    ? Const.hoverDarkColor
+                    : Const.hoverLightColorFrostedLow
+            }
         } else {
             Color.clear
         }

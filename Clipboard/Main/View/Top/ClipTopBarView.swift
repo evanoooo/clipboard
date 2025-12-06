@@ -118,17 +118,12 @@ struct ClipTopBarView: View {
     }
 
     private var searchIcon: some View {
-        let backgroundType = BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
-        let hoverColor = colorScheme == .dark
-            ? Const.hoverDarkColor
-            : (backgroundType == .liquid ? Const.hoverLightColorLiquid : Const.hoverLightColorFrosted)
-
-        return Image(systemName: "magnifyingglass")
+        Image(systemName: "magnifyingglass")
             .font(.system(size: Const.iconHdSize, weight: .regular))
             .padding(4)
             .background(
                 RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
-                    .fill(isIconHovered ? hoverColor : Color.clear)
+                    .fill(isIconHovered ? hoverColor() : Color.clear)
             )
             .contentShape(Rectangle())
             .onHover { hovering in
@@ -204,18 +199,13 @@ struct ClipTopBarView: View {
     }
 
     private var plusIcon: some View {
-        let backgroundType = BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
-        let hoverColor = colorScheme == .dark
-            ? Const.hoverDarkColor
-            : (backgroundType == .liquid ? Const.hoverLightColorLiquid : Const.hoverLightColorFrosted)
-
-        return Image(systemName: "plus")
+        Image(systemName: "plus")
             .font(.system(size: Const.iconHdSize, weight: .light))
             .symbolRenderingMode(.hierarchical)
             .padding(4)
             .background(
                 RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
-                    .fill(isPlusHovered ? hoverColor : Color.clear)
+                    .fill(isPlusHovered ? hoverColor() : Color.clear)
             )
             .onHover { hovering in
                 isPlusHovered = hovering
@@ -230,6 +220,19 @@ struct ClipTopBarView: View {
                     vm.commitNewChipOrCancel(commitIfNonEmpty: true)
                 }
             }
+    }
+
+    private func hoverColor() -> Color {
+        if #available(macOS 26.0, *) {
+            let backgroundType = BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
+            return colorScheme == .dark
+                ? Const.hoverDarkColor
+                : (backgroundType == .liquid ? Const.hoverLightColorLiquid : Const.hoverLightColorFrosted)
+        } else {
+            return colorScheme == .dark
+                ? Const.hoverDarkColor
+                : Const.hoverLightColorFrostedLow
+        }
     }
 }
 

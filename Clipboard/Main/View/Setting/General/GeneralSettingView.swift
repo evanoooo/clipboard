@@ -310,7 +310,7 @@ struct HistoryTimeSlider: View {
                                 id: \.offset,
                             ) { index, label in
                                 Text(label)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundColor(.secondary)
                                     .frame(width: 30)
                                     .offset(
@@ -323,14 +323,12 @@ struct HistoryTimeSlider: View {
                             }
                         }
                     }
-                    .transition(.opacity)
                 }
 
                 if isEditing {
                     Text(currentTimeUnit.displayText)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
-                        .transition(.opacity)
                 }
             }
             .frame(height: Const.space16)
@@ -344,19 +342,18 @@ struct HistoryTimeSlider: View {
                             !isEditing && abs(sliderValue - tickValue) < 0.01
                         if !isSelected {
                             Rectangle()
-                                .fill(Color.gray.opacity(0.4))
+                                .fill(Color.gray.opacity(0.5))
                                 .frame(width: 2.5, height: 3)
                                 .offset(
                                     x: tickPosition(
                                         for: index,
                                         in: geometry.size.width,
                                     ),
-                                    y: 3,
+                                    y: tickY(),
                                 )
                         }
                     }
                 }
-                .frame(height: Const.space24)
                 .allowsHitTesting(false)
 
                 // if #available(macOS 26, *) {
@@ -369,15 +366,13 @@ struct HistoryTimeSlider: View {
                     ),
                     in: 0 ... 4,
                     onEditingChanged: { editing in
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isEditing = editing
-                        }
+                        isEditing = editing
                         if !editing {
                             saveCurrentValue()
                         }
                     },
                 )
-                .tint(.accentColor)
+                // .tint(.accentColor)
                 // } else {
                 //     ThinSlider(
                 //         value: Binding(
@@ -434,6 +429,13 @@ struct HistoryTimeSlider: View {
         } else {
             return CGFloat(index) * width / 4.0 - 2.0
         }
+    }
+
+    private func tickY() -> CGFloat {
+        if #available(macOS 26.0, *) {
+            return 3
+        }
+        return 0
     }
 
     // 获取刻度线对应的滑块值
