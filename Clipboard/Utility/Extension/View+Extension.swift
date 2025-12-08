@@ -32,6 +32,8 @@ struct TextCardStyleModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .textSelection(.disabled)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(
                 .init(
                     top: Const.space8,
@@ -41,9 +43,9 @@ struct TextCardStyleModifier: ViewModifier {
                 )
             )
             .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity,
-                alignment: .topLeading,
+                maxWidth: Const.cardSize,
+                maxHeight: Const.cntSize,
+                alignment: .topLeading
             )
     }
 }

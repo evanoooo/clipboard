@@ -47,7 +47,7 @@ struct CommonBottomView: View {
             .padding(.horizontal, Const.space12)
             .padding(.bottom, Const.space4)
             .frame(
-                width: Const.cardSize,
+                width: Const.cardSize
             )
             .background {
                 if model.length > 200 {
@@ -60,10 +60,10 @@ struct CommonBottomView: View {
                             .init(color: .clear, location: 1.0),
                         ]),
                         startPoint: .bottom,
-                        endPoint: .top,
+                        endPoint: .top
                     )
-                    .clipShape(Const.contentShape)
                 }
             }
+            .clipShape(Const.contentShape)
     }
 }
