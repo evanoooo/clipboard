@@ -58,9 +58,9 @@ struct ClipCardView: View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
                 CardHeadView(model: model)
+                    .id("\(model.id ?? 0)-\(model.group)")
 
                 CardContentView(model: model)
-                    .padding(contetPadding)
                     .frame(
                         maxWidth: .infinity,
                         maxHeight: .infinity,
@@ -77,6 +77,7 @@ struct ClipCardView: View {
             }
 
             CardBottomView(model: model)
+                .id("\(model.id ?? 0)-\(model.group)")
         }
     }
 
@@ -98,6 +99,7 @@ struct ClipCardView: View {
     private var contetPadding: CGFloat {
         if model.pasteboardType.isImage()
             || (model.url != nil && enableLinkPreview)
+            || model.pasteboardType.isText()
         {
             return 0.0
         }

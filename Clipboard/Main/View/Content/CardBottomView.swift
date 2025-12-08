@@ -50,7 +50,7 @@ struct CommonBottomView: View {
                 width: Const.cardSize,
             )
             .background {
-                if model.length > 250 {
+                if model.length > 200 {
                     LinearGradient(
                         gradient: Gradient(stops: [
                             .init(color: baseColor, location: 0.0),
@@ -62,7 +62,7 @@ struct CommonBottomView: View {
                         startPoint: .bottom,
                         endPoint: .top,
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: Const.radius))
+                    .clipShape(Const.contentShape)
                 }
             }
     }

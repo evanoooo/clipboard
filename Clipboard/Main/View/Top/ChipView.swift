@@ -35,6 +35,7 @@ struct ChipView: View {
     @State private var syncingFocus = false
     @FocusState private var isTextFieldFocused: Bool
     @Bindable private var vm = ClipboardViewModel.shard
+    private var pd = PasteDataStore.main
 
     private var isEditing: Bool {
         vm.editingChipId == chip.id
@@ -67,27 +68,24 @@ struct ChipView: View {
         .onDrop(
             of: ChipView.dropTypes,
             isTargeted: $isDropTargeted,
-        ) { providers in
+        ) { _ in
             if chip.isSystem {
                 return false
             }
             if vm.draggingItemId != nil {
-                DispatchQueue.main.async {
-                    handleDrop(providers: providers)
-                }
-                return true
+                return handleDrop()
             }
             return false
         }
     }
 
     private var normalView: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Const.space6) {
             if chip.id == 1 {
                 if #available(macOS 15.0, *) {
                     Image(
                         systemName:
-                            "clock.arrow.trianglehead.counterclockwise.rotate.90"
+                        "clock.arrow.trianglehead.counterclockwise.rotate.90"
                     )
                 } else {
                     Image("clock.arrow.trianglehead.counterclockwise.rotate.90")
@@ -212,9 +210,13 @@ struct ChipView: View {
         }
     }
 
-    private func handleDrop(providers _: [NSItemProvider]) {
+    private func handleDrop() -> Bool {
         guard let draggingId = vm.draggingItemId else {
-            return
+            return false
+        }
+
+        if let item = pd.dataList.first(where: { $0.id == draggingId }) {
+            if item.group == chip.id { return false }
         }
 
         defer {
@@ -228,7 +230,9 @@ struct ChipView: View {
             )
         } catch {
             log.error("更新卡片 group 失败: \(error)")
+            return false
         }
+        return true
     }
 
     private func showDelAlert(_ chip: CategoryChip) {

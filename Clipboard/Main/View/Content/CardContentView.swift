@@ -302,12 +302,7 @@ struct StringContentView: View {
 
     var body: some View {
         Text(String(data: model.showData ?? Data(), encoding: .utf8) ?? "")
-            .textSelection(.disabled)
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity,
-                alignment: .topLeading,
-            )
+            .textCardStyle()
     }
 }
 
@@ -317,20 +312,10 @@ struct RichContentView: View {
     var body: some View {
         if model.hasBgColor {
             Text(model.attributed())
-                .textSelection(.disabled)
-                .frame(
-                    maxWidth: .infinity,
-                    maxHeight: .infinity,
-                    alignment: .topLeading,
-                )
+                .textCardStyle()
         } else {
             Text(model.attributeString.string)
-                .textSelection(.disabled)
-                .frame(
-                    maxWidth: .infinity,
-                    maxHeight: .infinity,
-                    alignment: .topLeading,
-                )
+                .textCardStyle()
         }
     }
 }
@@ -347,6 +332,7 @@ struct FileContentView: View {
                 MultipleFilesView(fileURLs: fileUrls)
             } else if let firstURL = fileUrls.first {
                 FileThumbnailView(fileURLString: firstURL)
+                    .padding(Const.space12)
                     .frame(
                         maxWidth: .infinity,
                         maxHeight: .infinity,

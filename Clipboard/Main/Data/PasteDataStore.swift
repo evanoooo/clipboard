@@ -363,15 +363,14 @@ extension PasteDataStore {
     }
 
     func updateItemGroup(itemId: Int64, groupId: Int) throws {
-        if let model = dataList.first(where: { $0.id == itemId }) {
-            model.updateGroup(val: groupId)
-        }
-
         Task {
             await sqlManager.updateItemGroup(
                 id: itemId,
                 groupId: groupId,
             )
+            if let model = dataList.first(where: { $0.id == itemId }), groupId != model.group {
+                model.updateGroup(val: groupId)
+            }
         }
     }
 }

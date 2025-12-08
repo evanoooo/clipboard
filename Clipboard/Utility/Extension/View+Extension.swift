@@ -28,8 +28,32 @@ struct SettingsStyleModifier: ViewModifier {
     }
 }
 
+struct TextCardStyleModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textSelection(.disabled)
+            .padding(
+                .init(
+                    top: Const.space8,
+                    leading: Const.space10,
+                    bottom: 0.0,
+                    trailing: Const.space8
+                )
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .topLeading,
+            )
+    }
+}
+
 extension View {
     func settingsStyle() -> some View {
         modifier(SettingsStyleModifier())
+    }
+
+    func textCardStyle() -> some View {
+        modifier(TextCardStyleModifier())
     }
 }

@@ -51,12 +51,7 @@ struct HistoryAreaView: View {
                     }
                 }
                 .onChange(of: pd.dataList) {
-                    guard !isDel else { return }
-                    lastLoadTriggerIndex = -1
-                    let changeType = pd.lastDataChangeType
-                    if changeType == .searchFilter || changeType == .reset {
-                        reset(proxy: proxy)
-                    }
+                    reset(proxy: proxy)
                 }
             }
             .onAppear {
@@ -101,8 +96,8 @@ struct HistoryAreaView: View {
 
     private func contentView() -> some View {
         LazyHStack(alignment: .top, spacing: Const.cardSpace) {
-            ForEach(pd.dataList) { item in
-                let index = pd.dataList.firstIndex(of: item) ?? 0
+            ForEach(Array(pd.dataList.enumerated()), id: \.element.id) {
+                index, item in
                 ClipCardView(
                     model: item,
                     isSelected: selectionState.selectedId == item.id,
@@ -526,15 +521,27 @@ struct HistoryAreaView: View {
         showDeleteAlert()
     }
 
-    private func reset(proxy _: ScrollViewProxy) {
-        if pd.dataList.isEmpty {
-            selectionState.selectedId = nil
+    private func reset(proxy : ScrollViewProxy) {
+        guard !isDel else { return }
+        lastLoadTriggerIndex = -1
+        let changeType = pd.lastDataChangeType
+        if changeType == .searchFilter || changeType == .reset {
+            if pd.dataList.isEmpty {
+                selectionState.selectedId = nil
+                showPreviewId = nil
+                return
+            }
+            let firstId = pd.dataList.first?.id
+            let needsScrolling = selectionState.selectedId != firstId
+            selectionState.selectedId = firstId
             showPreviewId = nil
-            return
+
+            if !needsScrolling {
+                DispatchQueue.main.async {
+                    proxy.scrollTo(firstId, anchor: .trailing)
+                }
+            }
         }
-        let firstId = pd.dataList.first?.id
-        selectionState.selectedId = firstId
-        showPreviewId = nil
     }
 
     private func showDeleteAlert() {

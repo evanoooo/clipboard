@@ -10,7 +10,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @Observable
-final class PasteboardModel: Identifiable, Codable, Hashable {
+final class PasteboardModel: Identifiable {
     var id: Int64?
     let uniqueId: String
     let pasteboardType: PasteboardType
@@ -40,63 +40,6 @@ final class PasteboardModel: Identifiable, Codable, Hashable {
     private var cachedForegroundColor: Color?
     private var cachedFilePaths: [String]?
     private var cachedHasBackgroundColor: Bool = false
-
-    enum CodingKeys: String, CodingKey {
-        case id, uniqueId, pasteboardType, data, showData, timestamp
-        case appPath, appName, searchText, length, group
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(id, forKey: .id)
-        try container.encode(uniqueId, forKey: .uniqueId)
-        try container.encode(pasteboardType.rawValue, forKey: .pasteboardType)
-        try container.encode(data, forKey: .data)
-        try container.encodeIfPresent(showData, forKey: .showData)
-        try container.encode(timestamp, forKey: .timestamp)
-        try container.encode(appPath, forKey: .appPath)
-        try container.encode(appName, forKey: .appName)
-        try container.encode(searchText, forKey: .searchText)
-        try container.encode(length, forKey: .length)
-        try container.encode(group, forKey: .group)
-    }
-
-    required init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(Int64.self, forKey: .id)
-        uniqueId = try container.decode(String.self, forKey: .uniqueId)
-        let pasteboardTypeString = try container.decode(
-            String.self,
-            forKey: .pasteboardType
-        )
-        pasteboardType = PasteboardType(rawValue: pasteboardTypeString)
-        data = try container.decode(Data.self, forKey: .data)
-        showData = try container.decodeIfPresent(Data.self, forKey: .showData)
-        timestamp = try container.decode(Int64.self, forKey: .timestamp)
-        appPath = try container.decode(String.self, forKey: .appPath)
-        appName = try container.decode(String.self, forKey: .appName)
-        searchText = try container.decode(String.self, forKey: .searchText)
-        length = try container.decode(Int.self, forKey: .length)
-        group = try container.decode(Int.self, forKey: .group)
-
-        attributeString =
-            NSAttributedString(
-                with: showData,
-                type: pasteboardType
-            ) ?? NSAttributedString()
-
-        let (bg, fg, hasBg) = computeColors()
-        cachedBackgroundColor = bg
-        cachedForegroundColor = fg
-        cachedHasBackgroundColor = hasBg
-
-        if pasteboardType == .fileURL {
-            if let urlString = String(data: data, encoding: .utf8) {
-                cachedFilePaths = urlString.components(separatedBy: "\n")
-                    .filter { !$0.isEmpty }
-            }
-        }
-    }
 
     var url: URL? {
         if pasteboardType == .string {
@@ -299,11 +242,6 @@ extension PasteboardModel: Equatable {
         lhs.uniqueId == rhs.uniqueId && lhs.id == rhs.id
     }
 
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(uniqueId)
-        hasher.combine(id)
-        hasher.combine(group)
-    }
 }
 
 extension PasteboardModel {

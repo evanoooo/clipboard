@@ -253,6 +253,8 @@ final class ClipboardViewModel {
             updateChip(chip, name: trimmed, color: editingChipColor)
         }
 
+        focusView = .history
+
         cancelEditingChip()
     }
 
@@ -269,11 +271,7 @@ final class ClipboardViewModel {
     // MARK: - Helper Methods
 
     private func cycleColorIndex(_ currentIndex: Int) -> Int {
-        var nextIndex = (currentIndex + 1) % CategoryChip.palette.count
-        if nextIndex == 0 {
-            nextIndex = 1
-        }
-        return nextIndex
+        return (currentIndex + 1) % CategoryChip.palette.count
     }
 }
 
