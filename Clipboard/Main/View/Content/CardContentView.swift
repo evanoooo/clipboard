@@ -16,12 +16,16 @@ struct CardContentView: View {
     @ViewBuilder
     var body: some View {
         switch model.type {
-        case .string:
-            if model.url != nil, enableLinkPreview {
+        case .link:
+            if enableLinkPreview {
                 LinkPreviewCard(model: model)
             } else {
                 StringContentView(model: model)
             }
+        case .color:
+            CSSView(model: model)
+        case .string:
+            StringContentView(model: model)
         case .rich:
             RichContentView(model: model)
         case .file:
@@ -32,6 +36,24 @@ struct CardContentView: View {
             EmptyView()
         @unknown default:
             EmptyView()
+        }
+    }
+}
+
+struct CSSView: View {
+    var model: PasteboardModel
+    var body: some View {
+        if let hex = String(data: model.data, encoding: .utf8) {
+            VStack(alignment: .center) {
+                Text(hex)
+                    .font(.title2)
+            }
+            .frame(
+                width: Const.cardSize,
+                height: Const.cntSize,
+                alignment: .center
+            )
+            .background(Color(nsColor: NSColor(hex: hex)))
         }
     }
 }
@@ -87,7 +109,7 @@ struct LinkPreviewCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                .padding(8)
+                .padding(Const.space8)
                 .frame(
                     width: Const.cardSize,
                     height: 48,
@@ -342,9 +364,9 @@ struct FileContentView: View {
                 VStack(alignment: .center) {
                     Image(systemName: "doc.text")
                         .resizable()
-                        .symbolRenderingMode(.multicolor)
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(Color.accentColor.opacity(0.8))
-                        .frame(width: 48.0, height: 56.0)
+                        .frame(width: 48.0, height: 48.0)
                 }
                 .frame(
                     maxWidth: .infinity,

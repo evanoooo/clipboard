@@ -8,8 +8,16 @@
 import Foundation
 
 extension String {
+
+    static let regex =
+        "^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$"
+
     func isCompleteURL() -> Bool {
-        guard let url = URL(string: trimmingCharacters(in: .whitespacesAndNewlines)) else {
+        guard
+            let url = URL(
+                string: trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        else {
             return false
         }
 
@@ -45,4 +53,12 @@ extension String {
         }
         return []
     }
+
+    var isCSSHexColor: Bool {
+
+        let predicate = NSPredicate(format: "SELF MATCHES %@", String.regex)
+
+        return predicate.evaluate(with: self)
+    }
+
 }

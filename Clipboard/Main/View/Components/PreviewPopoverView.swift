@@ -16,6 +16,9 @@ struct PreviewPopoverView: View {
 
     let model: PasteboardModel
 
+    @AppStorage(PrefKey.enableLinkPreview.rawValue)
+    private var enableLinkPreview: Bool = PasteUserDefaults.enableLinkPreview
+
     private let vm = ClipboardViewModel.shard
 
     var body: some View {
@@ -75,6 +78,7 @@ struct PreviewPopoverView: View {
                 }
 
                 if model.url != nil,
+                   enableLinkPreview,
                    let browserName = getDefaultBrowserName()
                 {
                     BorderedButton(title: "使用 \(browserName) 打开") {
@@ -85,7 +89,7 @@ struct PreviewPopoverView: View {
                 }
             }
         }
-        .padding(12)
+        .padding(Const.space12)
         .frame(
             minWidth: Const.minPreviewWidth,
             maxWidth: Const.maxPreviewWidth,
@@ -124,8 +128,8 @@ struct PreviewPopoverView: View {
     @ViewBuilder
     private var previewContent: some View {
         switch model.type {
-        case .string:
-            if model.url != nil {
+        case .link:
+            if enableLinkPreview {
                 if #available(macOS 26.0, *) {
                     WebContentView(url: model.url!)
                 } else {
@@ -134,6 +138,10 @@ struct PreviewPopoverView: View {
             } else {
                 textPreview
             }
+        case .color:
+            CSSView(model: model)
+        case .string:
+            textPreview
         case .rich:
             richTextPreview
         case .image:
@@ -237,7 +245,7 @@ struct PreviewPopoverView: View {
                 .resizable()
                 .font(.largeTitle)
                 .foregroundColor(Color.accentColor.opacity(0.8))
-                .frame(width: 128, height: 128, alignment: .center)
+                .frame(width: 144, height: 144, alignment: .center)
         }
     }
 
@@ -259,15 +267,18 @@ struct PreviewPopoverView: View {
                         maxHeight: Const.maxContentHeight,
                     )
                 } else {
-                    Image(systemName: "doc.text")
+                    Image(systemName: "folder")
                         .resizable()
-                        .symbolRenderingMode(.multicolor)
-                        .foregroundColor(Color.accentColor.opacity(0.8))
-                        .frame(width: 128, height: 144, alignment: .center)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(Color.accentColor.opacity(0.8))
+                        .frame(width: 144, height: 144, alignment: .center)
                 }
             }
         }
-        .frame(width: Const.maxPreviewWidth - 32, height: Const.maxContentHeight)
+        .frame(
+            width: Const.maxPreviewWidth - 32,
+            height: Const.maxContentHeight
+        )
     }
 
     private var appIcon: NSImage? {
@@ -289,12 +300,12 @@ struct BorderedButton: View {
             action()
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: .light))
+                .font(.system(size: Const.space12, weight: .light))
                 .foregroundStyle(scheme == .dark ? .white : .black)
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, Const.space8)
+        .padding(.vertical, Const.space4)
         .background(
             RoundedRectangle(cornerRadius: Const.radius)
                 .fill(isHovered ? .gray.opacity(0.1) : Color.clear),

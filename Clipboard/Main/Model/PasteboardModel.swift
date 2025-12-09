@@ -30,7 +30,10 @@ final class PasteboardModel: Identifiable {
         type: pasteboardType,
     )
     @ObservationIgnored
-    private(set) lazy var type = PasteModelType(with: pasteboardType)
+    private(set) lazy var type = PasteModelType(
+        with: pasteboardType,
+        model: self
+    )
 
     private(set) var group: Int
     private var cachedAttributed: AttributedString?
@@ -47,6 +50,14 @@ final class PasteboardModel: Identifiable {
             return urlString.asCompleteURL()
         }
         return nil
+    }
+
+    var isCSS: Bool {
+        if pasteboardType == .string {
+            let str = String(data: data, encoding: .utf8) ?? ""
+            return str.isCSSHexColor
+        }
+        return false
     }
 
     init(
@@ -148,10 +159,15 @@ final class PasteboardModel: Identifiable {
         case .image:
             guard let imgSize = imageSize() else { return "" }
             return "\(Int(imgSize.width)) × \(Int(imgSize.height)) "
-        case .string, .rich:
-            if url != nil, PasteUserDefaults.enableLinkPreview {
+        case .color:
+            return ""
+        case .link:
+            if PasteUserDefaults.enableLinkPreview {
                 return String(data: data, encoding: .utf8) ?? ""
             }
+            return
+                "\(PasteboardModel.formatter.string(from: NSNumber(value: length)) ?? "")个字符"
+        case .string, .rich:
             return
                 "\(PasteboardModel.formatter.string(from: NSNumber(value: length)) ?? "")个字符"
         case .file:
@@ -241,7 +257,6 @@ extension PasteboardModel: Equatable {
     static func == (lhs: PasteboardModel, rhs: PasteboardModel) -> Bool {
         lhs.uniqueId == rhs.uniqueId && lhs.id == rhs.id
     }
-
 }
 
 extension PasteboardModel {
@@ -436,13 +451,21 @@ enum PasteModelType {
     case string
     case rich
     case file
+    case link
+    case color
 
-    init(with type: PasteboardType) {
+    init(with type: PasteboardType, model: PasteboardModel) {
         switch type {
         case .rtf, .rtfd:
             self = .rich
         case .string:
-            self = .string
+            if model.isCSS {
+                self = .color
+            } else if model.url != nil {
+                self = .link
+            } else {
+                self = .string
+            }
         case .png, .tiff:
             self = .image
         case .fileURL:
@@ -456,6 +479,8 @@ enum PasteModelType {
         switch self {
         case .image: "图片"
         case .string, .rich: "文本"
+        case .color: "颜色"
+        case .link: "链接"
         case .file: "文件"
         default: ""
         }
