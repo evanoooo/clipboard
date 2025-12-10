@@ -117,8 +117,8 @@ struct HistoryView: View {
         env.actions.paste(
             item,
             isAttribute: true,
-            isSearchingProvider: { env.searchVM.isSearching },
-            setSearching: { env.searchVM.isSearching = $0 }
+            isSearchingProvider: { env.topBarVM.isSearching },
+            setSearching: { env.topBarVM.isSearching = $0 }
         )
     }
 
@@ -325,7 +325,7 @@ struct HistoryView: View {
             return nil
         }
 
-        if env.chipVM.isEditingChip || env.chipVM.editingNewChip {
+        if env.topBarVM.isEditingChip || env.topBarVM.editingNewChip {
             return event
         }
 
@@ -415,8 +415,8 @@ struct HistoryView: View {
         env.actions.paste(
             item,
             isAttribute: true,
-            isSearchingProvider: { env.searchVM.isSearching },
-            setSearching: { env.searchVM.isSearching = $0 }
+            isSearchingProvider: { env.topBarVM.isSearching },
+            setSearching: { env.topBarVM.isSearching = $0 }
         )
     }
 
@@ -452,12 +452,12 @@ struct HistoryView: View {
     }
 
     private func handleEscapeKeyEvent() {
-        if env.chipVM.isEditingChip {
-            env.chipVM.cancelEditingChip()
-        } else if env.chipVM.editingNewChip {
-            env.chipVM.commitNewChipOrCancel(commitIfNonEmpty: false)
+        if env.topBarVM.isEditingChip {
+            env.topBarVM.cancelEditingChip()
+        } else if env.topBarVM.editingNewChip {
+            env.topBarVM.commitNewChipOrCancel(commitIfNonEmpty: false)
         } else if env.focusView == .search {
-            env.searchVM.query = ""
+            env.topBarVM.query = ""
             env.focusView = .history
         } else {
             escapeKeyDown()
@@ -466,8 +466,8 @@ struct HistoryView: View {
 
     private func escapeKeyDown() {
         if env.focusView == .search {
-            if !env.searchVM.query.isEmpty {
-                env.searchVM.query = ""
+            if !env.topBarVM.query.isEmpty {
+                env.topBarVM.query = ""
             } else {
                 env.focusView = .history
             }
@@ -500,8 +500,8 @@ struct HistoryView: View {
         env.actions.paste(
             item,
             isAttribute: !hasPlainTextModifier(event),
-            isSearchingProvider: { env.searchVM.isSearching },
-            setSearching: { env.searchVM.isSearching = $0 }
+            isSearchingProvider: { env.topBarVM.isSearching },
+            setSearching: { env.topBarVM.isSearching = $0 }
         )
         return nil
     }

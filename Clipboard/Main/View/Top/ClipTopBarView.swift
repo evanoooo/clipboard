@@ -16,15 +16,18 @@ struct ClipTopBarView: View {
     @FocusState private var focus: FocusField?
     @State private var isIconHovered: Bool = false
     @State private var isPlusHovered: Bool = false
+    @State private var isFilterPopoverPresented: Bool = false
     @State private var syncingFocus = false
 
     var body: some View {
         GeometryReader { geo in
-            let leading = max(0, floor(geo.size.width / 2 - 200))
+            let leading = leadingSpace(geo: geo)
 
             HStack(alignment: .center, spacing: Const.space4) {
                 Spacer().frame(width: leading)
-                if env.focusView == .search || !env.searchVM.query.isEmpty {
+                if env.focusView == .search || env.focusView == .filter
+                    || !env.topBarVM.query.isEmpty
+                {
                     searchField
                 } else {
                     searchIcon
@@ -50,34 +53,28 @@ struct ClipTopBarView: View {
                     focus = env.focusView.asOptional
                     syncingFocus = false
                 }
-                if env.focusView != .editChip, env.chipVM.isEditingChip {
-                    env.chipVM.commitEditingChip()
+                if env.focusView != .editChip, env.topBarVM.isEditingChip {
+                    env.topBarVM.commitEditingChip()
                 }
-            }
-            .onChange(of: env.searchVM.query) { _, _ in
-                triggerSearchUpdate()
-            }
-            .onChange(of: env.chipVM.selectedChipId) { _, _ in
-                triggerSearchUpdate()
             }
         }
         .frame(height: Const.topBarHeight)
     }
 
     private var searchField: some View {
-        @Bindable var searchVM = env.searchVM
+        @Bindable var topBarVM = env.topBarVM
         return HStack(spacing: Const.space8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: Const.iconHdSize, weight: .regular))
-                .foregroundColor(.gray)
+                .foregroundColor(.black).opacity(0.6)
 
-            TextField("搜索...", text: $searchVM.query)
+            TextField("搜索...", text: $topBarVM.query)
                 .textFieldStyle(.plain)
                 .focused($focus, equals: .search)
 
-            if !env.searchVM.query.isEmpty {
+            if !env.topBarVM.query.isEmpty {
                 Button {
-                    env.searchVM.query = ""
+                    env.topBarVM.query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14, weight: .medium))
@@ -85,6 +82,26 @@ struct ClipTopBarView: View {
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
+            }
+
+            Button {
+                isFilterPopoverPresented.toggle()
+                if isFilterPopoverPresented {
+                    env.focusView = .filter
+                }
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 14.0, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 20.0, height: 20.0)
+            .contentShape(Rectangle())
+            .popover(isPresented: $isFilterPopoverPresented) {
+                FilterPopoverView(topBarVM: env.topBarVM)
+                    .environment(env)
+                    .onDisappear {
+                        env.focusView = .search
+                    }
             }
         }
         .padding(Const.space6)
@@ -129,27 +146,28 @@ struct ClipTopBarView: View {
     private var typeView: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Const.space8) {
-                ForEach(env.chipVM.chips) { chip in
+                ForEach(env.topBarVM.chips) { chip in
                     ChipView(
-                        isSelected: env.chipVM.selectedChipId == chip.id,
+                        isSelected: env.topBarVM.selectedChipId == chip.id,
                         chip: chip
                     )
                     .onTapGesture {
-                        env.chipVM.toggleChip(chip)
+                        env.topBarVM.clearAllFilters()
+                        env.topBarVM.toggleChip(chip)
                         guard env.focusView != .history else { return }
                         env.focusView = .history
                     }
                 }
 
-                if env.chipVM.editingNewChip {
+                if env.topBarVM.editingNewChip {
                     addChipView
                 }
-                if env.focusView != .search {
+                if env.focusView != .search && env.focusView != .filter {
                     plusIcon
                 }
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 4)
+            .padding(.vertical, Const.space12)
+            .padding(.horizontal, Const.space4)
         }
         .frame(height: Const.topBarHeight)
         .onTapGesture {
@@ -158,24 +176,25 @@ struct ClipTopBarView: View {
     }
 
     private var addChipView: some View {
-        @Bindable var chipVM = env.chipVM
+        @Bindable var topBarVM = env.topBarVM
         return EditableChip(
-            name: $chipVM.newChipName,
-            color: $chipVM.newChipColor,
+            name: $topBarVM.newChipName,
+            color: $topBarVM.newChipColor,
             focus: $focus,
             onCommit: {
-                chipVM.commitNewChipOrCancel(commitIfNonEmpty: true)
+                topBarVM.commitNewChipOrCancel(commitIfNonEmpty: true)
             },
             onCancel: {
-                chipVM.commitNewChipOrCancel(commitIfNonEmpty: false)
+                topBarVM.commitNewChipOrCancel(commitIfNonEmpty: false)
             },
             onCycleColor: {
                 var nextIndex =
-                    (chipVM.newChipColorIndex + 1) % CategoryChip.palette.count
+                    (topBarVM.newChipColorIndex + 1)
+                        % CategoryChip.palette.count
                 if nextIndex == 0 {
                     nextIndex = 1
                 }
-                chipVM.newChipColorIndex = nextIndex
+                topBarVM.newChipColorIndex = nextIndex
             }
         )
         .onAppear {
@@ -185,7 +204,7 @@ struct ClipTopBarView: View {
         }
         .onChange(of: env.focusView) {
             if env.focusView != .newChip {
-                env.chipVM.commitNewChipOrCancel(commitIfNonEmpty: true)
+                env.topBarVM.commitNewChipOrCancel(commitIfNonEmpty: true)
             }
         }
     }
@@ -203,23 +222,15 @@ struct ClipTopBarView: View {
                 isPlusHovered = hovering
             }
             .onTapGesture {
-                if !env.chipVM.editingNewChip {
-                    withAnimation(.easeOut(duration: 0.12)) {
-                        env.chipVM.editingNewChip = true
+                if !env.topBarVM.editingNewChip {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        env.topBarVM.editingNewChip = true
                     }
                     focus = .newChip
                 } else {
-                    env.chipVM.commitNewChipOrCancel(commitIfNonEmpty: true)
+                    env.topBarVM.commitNewChipOrCancel(commitIfNonEmpty: true)
                 }
             }
-    }
-
-    private func triggerSearchUpdate() {
-        env.searchVM.onSearchParametersChanged(
-            typeFilter: env.chipVM.getTypeFilterForCurrentChip(),
-            group: env.chipVM.getGroupFilterForCurrentChip(),
-            selectedChipId: env.chipVM.selectedChipId
-        )
     }
 
     private func hoverColor() -> Color {
@@ -236,6 +247,15 @@ struct ClipTopBarView: View {
                 ? Const.hoverDarkColor
                 : Const.hoverLightColorFrostedLow
         }
+    }
+
+    private func leadingSpace(geo: GeometryProxy) -> CGFloat {
+        if env.focusView == .search || env.focusView == .filter
+            || !env.topBarVM.query.isEmpty
+        {
+            return max(0, floor(geo.size.width / 2 - 200))
+        }
+        return max(0, floor(geo.size.width / 2 - 120))
     }
 }
 

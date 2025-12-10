@@ -26,7 +26,7 @@ class Const {
     static let settingsRadius: CGFloat = 12.0
 
     static let topBarHeight: CGFloat = 52.0
-    static let topBarWidth: CGFloat = 280.0
+    static let topBarWidth: CGFloat = 450.0
     static let cardBottomPadding: CGFloat = 16.0
     static let iconHdSize: CGFloat = 16.0
 

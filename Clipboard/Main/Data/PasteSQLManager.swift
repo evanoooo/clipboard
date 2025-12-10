@@ -214,4 +214,52 @@ extension PasteSQLManager {
             return []
         }
     }
+    
+    // 获取所有唯一的应用名称
+    func getDistinctAppNames() async -> [String] {
+        do {
+            let query = table.select(distinct: Col.appName)
+                .order(Col.appName.asc)
+            
+            var appNames: [String] = []
+            if let result = try db?.prepare(query) {
+                for row in result {
+                    if let appName = try? row.get(Col.appName), !appName.isEmpty {
+                        appNames.append(appName)
+                    }
+                }
+            }
+            return appNames
+        } catch {
+            log.error("获取应用名称列表失败：\(error)")
+            return []
+        }
+    }
+    
+    // 获取应用名称和对应的路径（每个应用名称取第一个路径）
+    func getDistinctAppInfo() async -> [(name: String, path: String)] {
+        do {
+            var appInfo: [(name: String, path: String)] = []
+            var seenNames: Set<String> = []
+            
+            let query = table.select(Col.appName, Col.appPath)
+                .order(Col.appName.asc, Col.ts.desc)
+            
+            if let result = try db?.prepare(query) {
+                for row in result {
+                    if let appName = try? row.get(Col.appName),
+                       let appPath = try? row.get(Col.appPath),
+                       !appName.isEmpty,
+                       !seenNames.contains(appName) {
+                        appInfo.append((name: appName, path: appPath))
+                        seenNames.insert(appName)
+                    }
+                }
+            }
+            return appInfo
+        } catch {
+            log.error("获取应用信息列表失败：\(error)")
+            return []
+        }
+    }
 }

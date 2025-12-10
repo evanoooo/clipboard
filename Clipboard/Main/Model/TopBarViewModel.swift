@@ -1,0 +1,494 @@
+//
+//  TopBarViewModel.swift
+//  Clipboard
+//
+//  Created by crown
+//
+
+import Foundation
+import SQLite
+import SwiftUI
+
+@Observable
+@MainActor
+final class TopBarViewModel {
+    // MARK: - Search Properties
+
+    var query: String = "" {
+        didSet {
+            performSearch()
+        }
+    }
+
+    var isSearching: Bool = false
+
+    // MARK: - Chip Properties
+
+    var chips: [CategoryChip] = []
+    var selectedChipId: Int = 1 {
+        didSet {
+            performSearch()
+        }
+    }
+
+    // New Chip State
+    var editingNewChip: Bool = false
+    var newChipName: String = "未命名"
+    var newChipColorIndex: Int = 1
+
+    // Edit Chip State
+    var editingChipId: Int?
+    var editingChipName: String = ""
+    var editingChipColorIndex: Int = 0
+
+    // MARK: - Filter Properties
+
+    // 类型筛选：支持多选
+    var selectedTypes: Set<PasteModelType> = [] {
+        didSet {
+            performSearch()
+        }
+    }
+
+    // 应用筛选：支持多选
+    var selectedAppNames: Set<String> = [] {
+        didSet {
+            performSearch()
+        }
+    }
+
+    // 日期筛选：单选
+    var selectedDateFilter: DateFilterOption? {
+        didSet {
+            performSearch()
+        }
+    }
+
+    // 分类筛选：支持多选（使用 CategoryChip ID）
+    var selectedCategoryIds: Set<Int> = [] {
+        didSet {
+            performSearch()
+        }
+    }
+
+    // MARK: - Computed Properties
+
+    var newChipColor: Color {
+        get {
+            CategoryChip.palette[newChipColorIndex % CategoryChip.palette.count]
+        }
+        set {
+            if let index = CategoryChip.palette.firstIndex(of: newValue) {
+                newChipColorIndex = index
+            }
+        }
+    }
+
+    var editingChipColor: Color {
+        get {
+            guard editingChipColorIndex >= 0,
+                  editingChipColorIndex < CategoryChip.palette.count
+            else {
+                return .blue
+            }
+            return CategoryChip.palette[editingChipColorIndex]
+        }
+        set {
+            if let index = CategoryChip.palette.firstIndex(of: newValue) {
+                editingChipColorIndex = index
+            }
+        }
+    }
+
+    var isEditingChip: Bool {
+        editingChipId != nil
+    }
+
+    var selectedChip: CategoryChip? {
+        chips.first { $0.id == selectedChipId }
+    }
+
+    var hasActiveFilters: Bool {
+        !selectedTypes.isEmpty || !selectedAppNames.isEmpty
+            || selectedDateFilter != nil || !selectedCategoryIds.isEmpty
+    }
+
+    // MARK: - Private Properties
+
+    private let dataStore: PasteDataStore
+    private var searchTask: Task<Void, Never>?
+
+    private var lastCriteria: PasteDataStore.SearchCriteria = .empty
+
+    // MARK: - DateFilterOption
+
+    enum DateFilterOption: String, CaseIterable {
+        case today = "Today"
+        case yesterday = "Yesterday"
+        case thisWeek = "This week"
+
+        var displayName: String {
+            switch self {
+            case .today: return "今天"
+            case .yesterday: return "昨天"
+            case .thisWeek: return "近七天"
+            }
+        }
+
+        func timestampRange() -> (start: Int64, end: Int64?) {
+            let calendar = Calendar.current
+            let now = Date()
+
+            switch self {
+            case .today:
+                let startOfDay = calendar.startOfDay(for: now)
+                let startTimestamp = Int64(startOfDay.timeIntervalSince1970)
+                return (startTimestamp, nil)
+
+            case .yesterday:
+                let yesterday =
+                    calendar.date(byAdding: .day, value: -1, to: now) ?? now
+                let startOfYesterday = calendar.startOfDay(for: yesterday)
+                let endOfYesterday =
+                    calendar.date(
+                        byAdding: .day,
+                        value: 1,
+                        to: startOfYesterday
+                    ) ?? now
+                let startTimestamp = Int64(
+                    startOfYesterday.timeIntervalSince1970
+                )
+                let endTimestamp = Int64(endOfYesterday.timeIntervalSince1970)
+                return (startTimestamp, endTimestamp)
+
+            case .thisWeek:
+                let startOfWeek =
+                    calendar.date(
+                        from: calendar.dateComponents(
+                            [.yearForWeekOfYear, .weekOfYear],
+                            from: now
+                        )
+                    ) ?? now
+                let startTimestamp = Int64(startOfWeek.timeIntervalSince1970)
+                return (startTimestamp, nil)
+            }
+        }
+    }
+
+    // MARK: - Initialization
+
+    init(dataStore: PasteDataStore = .main) {
+        self.dataStore = dataStore
+        loadCategories()
+    }
+
+    // MARK: - Category Management
+
+    private func loadCategories() {
+        chips = CategoryChip.systemChips + PasteUserDefaults.userCategoryChip
+    }
+
+    private func saveUserCategories() {
+        PasteUserDefaults.userCategoryChip = chips.filter { !$0.isSystem }
+    }
+
+    func toggleChip(_ chip: CategoryChip) {
+        selectedChipId = chip.id
+    }
+
+    func addChip(name: String, color: Color) {
+        let newId = (chips.last?.id ?? 0) + 1
+        let new = CategoryChip(
+            id: newId,
+            name: name,
+            color: color,
+            isSystem: false
+        )
+        chips.append(new)
+        saveUserCategories()
+    }
+
+    func updateChip(
+        _ chip: CategoryChip,
+        name: String? = nil,
+        color: Color? = nil
+    ) {
+        guard !chip.isSystem,
+              let index = chips.firstIndex(where: { $0.id == chip.id })
+        else {
+            return
+        }
+
+        if let newName = name {
+            chips[index].name = newName
+        }
+        if let newColor = color {
+            chips[index].color = newColor
+        }
+        saveUserCategories()
+    }
+
+    func removeChip(_ chip: CategoryChip) {
+        guard !chip.isSystem else { return }
+
+        chips.removeAll { $0.id == chip.id }
+
+        if selectedChipId == chip.id {
+            selectedChipId = CategoryChip.systemChips.first?.id ?? 1
+        }
+
+        saveUserCategories()
+        dataStore.deleteItemsByGroup(chip.id)
+    }
+
+    // MARK: - New Chip Methods
+
+    func commitNewChipOrCancel(commitIfNonEmpty: Bool) {
+        let trimmed = newChipName.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        if commitIfNonEmpty, !trimmed.isEmpty {
+            addChip(name: trimmed, color: newChipColor)
+        }
+
+        resetNewChipState()
+    }
+
+    private func resetNewChipState() {
+        editingNewChip = false
+        newChipName = "未命名"
+        newChipColorIndex = cycleColorIndex(newChipColorIndex)
+    }
+
+    // MARK: - Edit Chip Methods
+
+    func startEditingChip(_ chip: CategoryChip) {
+        guard !chip.isSystem else { return }
+
+        editingChipId = chip.id
+        editingChipName = chip.name
+        editingChipColorIndex = chip.colorIndex
+    }
+
+    func commitEditingChip() {
+        guard let chipId = editingChipId,
+              let chip = chips.first(where: { $0.id == chipId })
+        else {
+            cancelEditingChip()
+            return
+        }
+
+        let trimmed = editingChipName.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmed.isEmpty {
+            updateChip(chip, name: trimmed, color: editingChipColor)
+        }
+
+        cancelEditingChip()
+    }
+
+    func cancelEditingChip() {
+        editingChipId = nil
+        editingChipName = ""
+        editingChipColorIndex = 0
+    }
+
+    func cycleEditingChipColor() {
+        editingChipColorIndex = cycleColorIndex(editingChipColorIndex)
+    }
+
+    // MARK: - Helper Methods
+
+    private func cycleColorIndex(_ currentIndex: Int) -> Int {
+        (currentIndex + 1) % CategoryChip.palette.count
+    }
+
+    func getGroupFilterForCurrentChip() -> Int {
+        guard let chip = selectedChip else { return -1 }
+        return chip.isSystem ? -1 : chip.id
+    }
+
+    // MARK: - Filter Methods
+
+    func toggleType(_ type: PasteModelType) {
+        if selectedTypes.contains(type) {
+            selectedTypes.remove(type)
+        } else {
+            selectedTypes.insert(type)
+        }
+    }
+
+    func toggleApp(_ appName: String) {
+        if selectedAppNames.contains(appName) {
+            selectedAppNames.remove(appName)
+        } else {
+            selectedAppNames.insert(appName)
+        }
+    }
+
+    func setDateFilter(_ option: DateFilterOption?) {
+        selectedDateFilter = option
+    }
+
+    func toggleCategory(_ categoryId: Int) {
+        if selectedCategoryIds.contains(categoryId) {
+            selectedCategoryIds.remove(categoryId)
+        } else {
+            selectedCategoryIds.insert(categoryId)
+        }
+    }
+
+    func clearAllFilters() {
+        selectedTypes.removeAll()
+        selectedAppNames.removeAll()
+        selectedDateFilter = nil
+        selectedCategoryIds.removeAll()
+    }
+
+    // MARK: - Filter Expression Building
+
+    func buildFilterExpression() -> Expression<Bool>? {
+        var conditions: [Expression<Bool>] = []
+
+        // 类型筛选
+        if !selectedTypes.isEmpty {
+            let typeStrings = selectedTypes.flatMap { type -> [String] in
+                switch type {
+                case .image:
+                    return [
+                        PasteboardType.png.rawValue,
+                        PasteboardType.tiff.rawValue,
+                    ]
+                case .string, .rich:
+                    return [
+                        PasteboardType.string.rawValue,
+                        PasteboardType.rtf.rawValue,
+                        PasteboardType.rtfd.rawValue,
+                    ]
+                case .file:
+                    return [PasteboardType.fileURL.rawValue]
+                case .link, .color:
+                    return [PasteboardType.string.rawValue]
+                case .none:
+                    return []
+                }
+            }
+            let uniqueTypes = Array(Set(typeStrings))
+            if !uniqueTypes.isEmpty {
+                let typeCondition = uniqueTypes.map { Col.type == $0 }.reduce(
+                    Expression<Bool>(value: false)
+                ) { result, condition in
+                    result || condition
+                }
+                conditions.append(typeCondition)
+            }
+        }
+
+        // 应用筛选
+        if !selectedAppNames.isEmpty {
+            let appNamesArray = Array(selectedAppNames)
+            let appCondition = appNamesArray.map { Col.appName == $0 }.reduce(
+                Expression<Bool>(value: false)
+            ) { result, condition in
+                result || condition
+            }
+            conditions.append(appCondition)
+        }
+
+        // 日期筛选
+        if let dateFilter = selectedDateFilter {
+            let (start, end) = dateFilter.timestampRange()
+            if let endTimestamp = end {
+                let dateCondition = Col.ts >= start && Col.ts < endTimestamp
+                conditions.append(dateCondition)
+            } else {
+                let dateCondition = Col.ts >= start
+                conditions.append(dateCondition)
+            }
+        }
+
+        // 分类筛选
+        if !selectedCategoryIds.isEmpty {
+            let categoryIdsArray = Array(selectedCategoryIds)
+            let categoryCondition = categoryIdsArray.map { Col.group == $0 }
+                .reduce(
+                    Expression<Bool>(value: false)
+                ) { result, condition in
+                    result || condition
+                }
+            conditions.append(categoryCondition)
+        }
+
+        guard !conditions.isEmpty else { return nil }
+        return conditions.reduce(conditions[0]) { result, condition in
+            result && condition
+        }
+    }
+
+    // MARK: - Search Methods
+
+    private func performSearch() {
+        searchTask?.cancel()
+
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(200))
+
+            guard !Task.isCancelled else { return }
+            await executeSearch()
+        }
+    }
+
+    private func makeSearchCriteria(from trimmedQuery: String) -> PasteDataStore.SearchCriteria {
+        let chipGroup = selectedCategoryIds.isEmpty ? getGroupFilterForCurrentChip() : -1
+        let filterExpression = buildFilterExpression()
+
+        return PasteDataStore.SearchCriteria(
+            keyword: trimmedQuery,
+            chipGroup: chipGroup,
+            filterExpression: filterExpression
+        )
+    }
+
+    private func criteriaUnchanged(_ criteria: PasteDataStore.SearchCriteria) -> Bool {
+        criteria.keyword == lastCriteria.keyword
+            && criteria.chipGroup == lastCriteria.chipGroup
+            && compareExpressions(criteria.filterExpression, lastCriteria.filterExpression)
+    }
+
+    private func executeSearch() async {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let criteria = makeSearchCriteria(from: trimmedQuery)
+
+        if criteriaUnchanged(criteria) {
+            return
+        }
+
+        let hasFilters = !criteria.isEmpty
+
+        if !hasFilters, selectedChipId == 1 {
+            dataStore.resetDefaultList()
+            isSearching = false
+        } else {
+            dataStore.searchData(criteria)
+            isSearching = true
+        }
+
+        lastCriteria = criteria
+    }
+
+    private func compareExpressions(
+        _ expr1: Expression<Bool>?,
+        _ expr2: Expression<Bool>?
+    ) -> Bool {
+        if expr1 == nil && expr2 == nil {
+            return true
+        }
+        if expr1 == nil || expr2 == nil {
+            return false
+        }
+        return false
+    }
+}

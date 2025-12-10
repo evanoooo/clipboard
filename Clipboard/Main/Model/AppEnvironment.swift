@@ -2,8 +2,7 @@ import SwiftUI
 
 @Observable
 final class AppEnvironment {
-    let searchVM = SearchViewModel()
-    let chipVM = ChipBarViewModel()
+    let topBarVM = TopBarViewModel()
 
     var actions: ClipboardActionService {
         ClipboardActionService()
@@ -12,7 +11,7 @@ final class AppEnvironment {
     var focusView: FocusField = .history {
         didSet {
             EventDispatcher.shared.bypassAllEvents =
-                (focusView == .popover || focusView == .search)
+                (focusView == .popover || focusView == .search || focusView == .filter)
         }
     }
 

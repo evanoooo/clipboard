@@ -13,6 +13,7 @@ enum FocusField: Hashable {
     case editChip
     case history
     case popover
+    case filter
 
     static func fromOptional(_ field: FocusField?) -> FocusField {
         field ?? .history
@@ -21,7 +22,7 @@ enum FocusField: Hashable {
     var asOptional: FocusField? {
         switch self {
         case .search, .newChip, .editChip: self
-        case .history, .popover: nil
+        case .history, .popover, .filter: nil
         }
     }
 }

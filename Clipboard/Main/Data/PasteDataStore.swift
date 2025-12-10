@@ -25,6 +25,25 @@ final class PasteDataStore {
 
     private(set) var hasMoreData = false
 
+    /// 搜索条件：关键词 + 顶栏分组（自定义 chip）+ 过滤视图的表达式
+    struct SearchCriteria {
+        var keyword: String
+        var chipGroup: Int
+        var filterExpression: Expression<Bool>?
+
+        static let empty = SearchCriteria(
+            keyword: "",
+            chipGroup: -1,
+            filterExpression: nil
+        )
+
+        var isEmpty: Bool {
+            keyword.isEmpty
+                && chipGroup == -1
+                && filterExpression == nil
+        }
+    }
+
     enum DataChangeType {
         case loadMore
         case searchFilter // 搜索或筛选（首次）
@@ -40,6 +59,7 @@ final class PasteDataStore {
     private var sqlManager = PasteSQLManager.manager
     private var searchTask: Task<Void, Error>?
     private var colorDict = [String: String]()
+    private var cachedAppInfo: [(name: String, path: String)]?
 
     func setup() {
         Task {
@@ -113,6 +133,36 @@ extension PasteDataStore {
             return nil
         }
     }
+
+    /// 将关键词 + chip 分组 + 过滤视图表达式组合成最终 SQL 过滤器
+    private func buildFilter(
+        keyword: String,
+        chipGroup: Int,
+        additional: Expression<Bool>?
+    ) -> Expression<Bool>? {
+        var clauses: [Expression<Bool>] = []
+
+        if !keyword.isEmpty {
+            clauses.append(
+                Col.appName.like("%\(keyword)%") || Col.searchText.like("%\(keyword)%")
+            )
+        }
+
+        if chipGroup != -1 {
+            clauses.append(Col.group == chipGroup)
+        }
+
+        if let additional {
+            clauses.append(additional)
+        }
+
+        return clauses.reduce(nil) { partial, next in
+            if let existing = partial {
+                return existing && next
+            }
+            return next
+        }
+    }
 }
 
 // MARK: - 数据操作 对外接口
@@ -184,48 +234,15 @@ extension PasteDataStore {
         hasMoreData = list.count == pageSize
     }
 
-    /// 数据搜索
-    /// - Parameter keyWord: 搜索关键词
-    /// - Parameter typeFilter: 类型过滤条件，nil表示不过滤类型
-    /// - Parameter group: 自定义过滤条件，-1默认值
-    /// - Returns: 搜索结果list
-    func searchData(
-        _ keyWord: String,
-        _ typeFilter: [String]?,
-        _ group: Int,
-    ) {
+    /// 数据搜索（关键词 + 自定义分组 + 过滤视图）
+    func searchData(_ criteria: SearchCriteria) {
         searchTask?.cancel()
         searchTask = Task {
-            var filter: Expression<Bool>?
-
-            if !keyWord.isEmpty {
-                filter =
-                    Col.appName.like("%\(keyWord)%")
-                        || Col.searchText.like("%\(keyWord)%")
-            }
-
-            if let types = typeFilter, !types.isEmpty {
-                let typeCondition = types.map { Col.type == $0 }.reduce(
-                    Expression<Bool>(value: false),
-                ) { result, condition in
-                    result || condition
-                }
-
-                if let existingFilter = filter {
-                    filter = existingFilter && typeCondition
-                } else {
-                    filter = typeCondition
-                }
-            }
-
-            if group != -1 {
-                let groupCondition = Col.group == group
-                if let existingFilter = filter {
-                    filter = existingFilter && groupCondition
-                } else {
-                    filter = groupCondition
-                }
-            }
+            let filter = buildFilter(
+                keyword: criteria.keyword,
+                chipGroup: criteria.chipGroup,
+                additional: criteria.filterExpression
+            )
 
             currentFilter = filter
             isInFilterMode = (filter != nil)
@@ -240,17 +257,15 @@ extension PasteDataStore {
         }
     }
 
-    /// 增加新数据
     func addNewItem(_ item: NSPasteboard) {
         guard let model = PasteboardModel(with: item) else { return }
         insertModel(model)
         Task {
             await updateColor(model)
+            invalidateAppInfoCache(model)
         }
     }
 
-    /// 插入数据
-    /// - Parameter model: PasteboardModel
     func insertModel(_ model: PasteboardModel) {
         Task {
             let itemId: Int64
@@ -370,6 +385,24 @@ extension PasteDataStore {
             if let model = dataList.first(where: { $0.id == itemId }), groupId != model.group {
                 model.updateGroup(val: groupId)
             }
+        }
+    }
+
+    func getAllAppInfo() async -> [(name: String, path: String)] {
+        if let cached = cachedAppInfo {
+            return cached
+        }
+
+        let appInfo = await sqlManager.getDistinctAppInfo()
+        cachedAppInfo = appInfo
+        return appInfo
+    }
+
+    func invalidateAppInfoCache(_ model: PasteboardModel) {
+        if let index = cachedAppInfo?.firstIndex(where: { $0.name == model.appName }) {
+            cachedAppInfo?[index].path = model.appPath
+        } else {
+            cachedAppInfo?.append((name: model.appName, path: model.appPath))
         }
     }
 }
