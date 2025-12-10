@@ -144,9 +144,7 @@ struct ClipTopBarView: View {
                 if env.chipVM.editingNewChip {
                     addChipView
                 }
-                if env.focusView != .search {
-                    plusIcon
-                }
+                plusIcon
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 4)
@@ -224,13 +222,10 @@ struct ClipTopBarView: View {
 
     private func hoverColor() -> Color {
         if #available(macOS 26.0, *) {
-            let backgroundType =
-                BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
+            let backgroundType = BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
             return colorScheme == .dark
                 ? Const.hoverDarkColor
-                : (backgroundType == .liquid
-                    ? Const.hoverLightColorLiquid
-                    : Const.hoverLightColorFrosted)
+                : (backgroundType == .liquid ? Const.hoverLightColorLiquid : Const.hoverLightColorFrosted)
         } else {
             return colorScheme == .dark
                 ? Const.hoverDarkColor
