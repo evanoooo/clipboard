@@ -73,13 +73,11 @@ final class EventDispatcher {
         handlers.sort { a, b in
             a.priority > b.priority
         }
-        log.debug("Registered handler \(key) priority:\(priority)")
     }
 
     func unregisterHandler(_ key: String) {
         if let idx = handlers.firstIndex(where: { $0.key == key }) {
             handlers.remove(at: idx)
-            log.debug("Unregistered handler \(key)")
         }
     }
 

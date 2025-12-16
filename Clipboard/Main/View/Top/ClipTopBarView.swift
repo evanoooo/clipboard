@@ -42,6 +42,24 @@ struct ClipTopBarView: View {
             }
         }
         .frame(height: Const.topBarHeight)
+        .onChange(of: env.focusView) {
+            switch env.focusView {
+            case .search:
+                DispatchQueue.main.async {
+                    focus = .search
+                }
+            case .newChip:
+                DispatchQueue.main.async {
+                    focus = .newChip
+                }
+            case .editChip:
+                DispatchQueue.main.async {
+                    focus = .editChip
+                }
+            case .history, .filter, .popover:
+                focus = nil
+            }
+        }
         .onAppear {
             EventDispatcher.shared.registerHandler(
                 matching: .keyDown,
@@ -84,7 +102,8 @@ struct ClipTopBarView: View {
                 }
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle")
-                    .font(.system(size: 14.0, weight: .medium))
+                    .font(.system(size: Const.iconHdSize, weight: .regular))
+                    .foregroundColor(.black).opacity(0.6)
             }
             .buttonStyle(.plain)
             .frame(width: 20.0, height: 20.0)
@@ -122,9 +141,6 @@ struct ClipTopBarView: View {
             }
             .onTapGesture {
                 env.focusView = .search
-                DispatchQueue.main.async {
-                    focus = .search
-                }
             }
     }
 
@@ -236,7 +252,7 @@ struct ClipTopBarView: View {
     }
 
     private func topKeyDownEvent(_ event: NSEvent) -> NSEvent? {
-        guard event.window == ClipMainWindowController.shared.window
+        guard event.window === ClipMainWindowController.shared.window
         else {
             return event
         }
@@ -246,7 +262,6 @@ struct ClipTopBarView: View {
                 return event
             }
             env.focusView = .search
-            focus = .search
             return nil
         }
 
@@ -270,7 +285,11 @@ struct ClipTopBarView: View {
                 return nil
             }
             if env.focusView == .filter {
-                return event
+                if isFilterPopoverPresented {
+                    isFilterPopoverPresented.toggle()
+                }
+                env.focusView = .search
+                return nil
             }
         }
 
