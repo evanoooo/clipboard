@@ -50,7 +50,7 @@ struct CommonBottomView: View {
                 width: Const.cardSize
             )
             .background {
-                if model.length > 200 {
+                if model.length > 150 {
                     LinearGradient(
                         gradient: Gradient(stops: [
                             .init(color: baseColor, location: 0.0),

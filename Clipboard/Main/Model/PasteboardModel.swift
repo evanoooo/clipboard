@@ -129,13 +129,13 @@ final class PasteboardModel: Identifiable {
         if type.isText() {
             att =
                 NSAttributedString(with: content, type: type)
-                    ?? NSAttributedString()
+                ?? NSAttributedString()
             guard !att.string.allSatisfy(\.isWhitespace) else {
                 return nil
             }
             showAtt =
                 att.length > 250
-                    ? att.attributedSubstring(from: NSMakeRange(0, 250)) : att
+                ? att.attributedSubstring(from: NSMakeRange(0, 250)) : att
             showData = showAtt?.toData(with: type)
         }
 
@@ -242,7 +242,8 @@ final class PasteboardModel: Identifiable {
 
     func getGroupChip() -> CategoryChip? {
         guard group != -1 else { return nil }
-        let allChips = CategoryChip.systemChips + PasteUserDefaults.userCategoryChip
+        let allChips =
+            CategoryChip.systemChips + PasteUserDefaults.userCategoryChip
         return allChips.first(where: { $0.id == group })
     }
 
@@ -287,11 +288,11 @@ extension PasteboardModel {
             return (fallbackBG, .secondary, false)
         }
         if attributeString.length > 0,
-           let bg = attributeString.attribute(
-               .backgroundColor,
-               at: 0,
-               effectiveRange: nil,
-           ) as? NSColor
+            let bg = attributeString.attribute(
+                .backgroundColor,
+                at: 0,
+                effectiveRange: nil,
+            ) as? NSColor
         {
             return (Color(bg), getRTFColor(baseNS: bg), true)
         }
@@ -327,8 +328,7 @@ extension PasteboardModel {
 
 extension PasteboardModel {
     func itemProvider() -> NSItemProvider {
-        // 拖拽状态由 DragDropViewModel 管理，不在此处设置
-        if type == .string {
+        if type == .string || type == .color || type == .link {
             if let str = String(data: data, encoding: .utf8) {
                 return NSItemProvider(object: str as NSString)
             }
@@ -413,7 +413,7 @@ extension PasteboardModel {
     private func promisedTypeIdentifier(for fileURL: URL) -> String {
         do {
             let values = try fileURL.resourceValues(forKeys: [
-                .contentTypeKey,
+                .contentTypeKey
             ])
             if let type = values.contentType {
                 return type.identifier
