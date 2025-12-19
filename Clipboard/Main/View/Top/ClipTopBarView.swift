@@ -214,7 +214,7 @@ struct ClipTopBarView: View {
             onCycleColor: {
                 let nextIndex =
                     (topBarVM.newChipColorIndex + 1)
-                    % CategoryChip.palette.count
+                        % CategoryChip.palette.count
                 topBarVM.newChipColorIndex = nextIndex
             }
         )
