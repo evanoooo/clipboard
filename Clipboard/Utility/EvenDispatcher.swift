@@ -32,7 +32,7 @@ final class EventDispatcher {
 
     func start(
         matching mask: NSEvent.EventTypeMask = [
-            .keyDown, .flagsChanged,
+            .keyDown,
         ]
     ) {
         guard monitorToken == nil else { return }
@@ -87,7 +87,7 @@ final class EventDispatcher {
     /// Propagate modified event through chain; returning nil consumes.
     private func handle(event: NSEvent) -> NSEvent? {
         if bypassAllEvents, event.keyCode != KeyCode.escape,
-            event.keyCode != KeyCode.delete
+           event.keyCode != KeyCode.delete
         {
             if event.type == .keyDown {
                 let keyChar =

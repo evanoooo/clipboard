@@ -17,10 +17,8 @@ enum FocusField: Hashable, Sendable {
 
     var requiresSystemFocus: Bool {
         switch self {
-        case .search, .newChip, .editChip:
-            return true
-        case .history, .popover, .filter:
-            return false
+        case .search, .newChip, .editChip: true
+        case .history, .popover, .filter: false
         }
     }
 }

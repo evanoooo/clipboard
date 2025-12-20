@@ -242,11 +242,9 @@ struct HistoryView: View {
             handler: keyDownEvent(_:),
         )
 
-        EventDispatcher.shared.registerHandler(
-            matching: .flagsChanged,
-            key: "historyFlags",
-            handler: flagsChangedEvent(_:)
-        )
+        NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            flagsChangedEvent(event)
+        }
 
         if historyVM.selectedId == nil {
             historyVM.selectedId = pd.dataList.first?.id

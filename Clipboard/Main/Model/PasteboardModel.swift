@@ -159,7 +159,7 @@ final class PasteboardModel: Identifiable {
         }
 
         let calculatedTag = Self.calculateTag(
-            type: type, 
+            type: type,
             content: content ?? Data()
         )
 
@@ -556,17 +556,17 @@ enum PasteModelType: String {
     var iconAndLabel: (icon: String, label: String) {
         switch self {
         case .image:
-            return ("photo", "图片")
+            ("photo", "图片")
         case .string, .rich:
-            return ("text.document", "文本")
+            ("text.document", "文本")
         case .file:
-            return ("folder", "文件")
+            ("folder", "文件")
         case .link:
-            return ("link", "链接")
+            ("link", "链接")
         case .color:
-            return ("paintpalette", "颜色")
+            ("paintpalette", "颜色")
         case .none:
-            return ("", "")
+            ("", "")
         }
     }
 }

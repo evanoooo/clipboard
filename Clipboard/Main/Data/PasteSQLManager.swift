@@ -365,5 +365,4 @@ extension PasteSQLManager {
 
         log.info("tag 字段数据迁移完成，共迁移 \(totalMigrated) 条记录")
     }
-
 }

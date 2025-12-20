@@ -400,6 +400,7 @@ final class TopBarViewModel {
     }
 
     // MARK: - Tags Management
+
     private let textTagAssociatedValue = "text"
 
     private func addTagForType(_ type: PasteModelType) {
@@ -446,15 +447,14 @@ final class TopBarViewModel {
 
     private func addTagForApp(_ appName: String) {
         let appPath = appPathCache[appName] ?? ""
-        let appIcon: AnyView
-        if FileManager.default.fileExists(atPath: appPath) {
-            appIcon = AnyView(
+        let appIcon = if FileManager.default.fileExists(atPath: appPath) {
+            AnyView(
                 Image(nsImage: NSWorkspace.shared.icon(forFile: appPath))
                     .resizable()
                     .scaledToFit()
             )
         } else {
-            appIcon = AnyView(Image(systemName: "app.fill"))
+            AnyView(Image(systemName: "app.fill"))
         }
         let tag = InputTag(
             icon: appIcon,
