@@ -323,7 +323,7 @@ struct StringContentView: View {
     var model: PasteboardModel
 
     var body: some View {
-        Text(String(data: model.showData ?? Data(), encoding: .utf8) ?? "")
+        Text(model.attributeString.string)
             .textCardStyle()
     }
 }
