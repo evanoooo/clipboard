@@ -37,25 +37,25 @@ class AppDelegate: NSObject {
         )
         menu.addItem(item1)
 
-        let item3 = NSMenuItem(
+        let item2 = NSMenuItem(
             title: "检查更新",
             action: #selector(checkUpdate),
             keyEquivalent: "",
         )
-        item3.image = NSImage(
+        item2.image = NSImage(
             systemSymbolName: "arrow.clockwise",
             accessibilityDescription: nil,
         )
-        menu.addItem(item3)
+        menu.addItem(item2)
 
         menu.addItem(NSMenuItem.separator())
 
-        let item2 = NSMenuItem(
+        let item3 = NSMenuItem(
             title: "退出",
             action: #selector(NSApplication.shared.terminate),
             keyEquivalent: "q",
         )
-        menu.addItem(item2)
+        menu.addItem(item3)
 
         return menu
     }()
@@ -206,7 +206,7 @@ extension AppDelegate {
 
         EventDispatcher.shared.registerHandler(
             matching: .keyDown,
-            key: "setting"
+            key: "setting",
         ) { [weak self] event in
             if event.modifierFlags.contains(.command) {
                 let modifiers = event.charactersIgnoringModifiers

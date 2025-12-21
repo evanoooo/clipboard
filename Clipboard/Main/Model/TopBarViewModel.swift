@@ -116,13 +116,41 @@ final class TopBarViewModel {
     private let dataStore: PasteDataStore
     private var searchTask: Task<Void, Never>?
 
-    private var lastCriteria: PasteDataStore.SearchCriteria = .empty
+    private var lastSearchCriteria: SearchCriteria?
 
     private var appPathCache: [String: String] = [:]
 
+    /// 搜索条件：关键词 + 顶栏分组（自定义 chip）+ 原始筛选条件
+    struct SearchCriteria: Equatable {
+        var keyword: String
+        var chipGroup: Int
+        var selectedTypes: Set<PasteModelType>
+        var selectedAppNames: Set<String>
+        var selectedDateFilter: DateFilterOption?
+        var selectedCategoryIds: Set<Int>
+
+        static let empty = SearchCriteria(
+            keyword: "",
+            chipGroup: -1,
+            selectedTypes: [],
+            selectedAppNames: [],
+            selectedDateFilter: nil,
+            selectedCategoryIds: [],
+        )
+
+        var isEmpty: Bool {
+            keyword.isEmpty
+                && chipGroup == -1
+                && selectedTypes.isEmpty
+                && selectedAppNames.isEmpty
+                && selectedDateFilter == nil
+                && selectedCategoryIds.isEmpty
+        }
+    }
+
     // MARK: - DateFilterOption
 
-    enum DateFilterOption: String, CaseIterable {
+    enum DateFilterOption: String, CaseIterable, Equatable {
         case today = "Today"
         case yesterday = "Yesterday"
         case thisWeek = "This week"
@@ -157,10 +185,10 @@ final class TopBarViewModel {
                     calendar.date(
                         byAdding: .day,
                         value: 1,
-                        to: startOfYesterday
+                        to: startOfYesterday,
                     ) ?? now
                 let startTimestamp = Int64(
-                    startOfYesterday.timeIntervalSince1970
+                    startOfYesterday.timeIntervalSince1970,
                 )
                 let endTimestamp = Int64(endOfYesterday.timeIntervalSince1970)
                 return (startTimestamp, endTimestamp)
@@ -170,8 +198,8 @@ final class TopBarViewModel {
                     calendar.date(
                         from: calendar.dateComponents(
                             [.yearForWeekOfYear, .weekOfYear],
-                            from: now
-                        )
+                            from: now,
+                        ),
                     ) ?? now
                 let startTimestamp = Int64(startOfWeek.timeIntervalSince1970)
                 return (startTimestamp, nil)
@@ -181,14 +209,14 @@ final class TopBarViewModel {
                     calendar.date(
                         from: calendar.dateComponents(
                             [.yearForWeekOfYear, .weekOfYear],
-                            from: now
-                        )
+                            from: now,
+                        ),
                     ) ?? now
                 let lastWeekStart =
                     calendar.date(
                         byAdding: .weekOfYear,
                         value: -1,
-                        to: thisWeekStart
+                        to: thisWeekStart,
                     ) ?? now
                 let endOfLastWeek = thisWeekStart
                 let startTimestamp = Int64(lastWeekStart.timeIntervalSince1970)
@@ -200,8 +228,8 @@ final class TopBarViewModel {
                     calendar.date(
                         from: calendar.dateComponents(
                             [.year, .month],
-                            from: now
-                        )
+                            from: now,
+                        ),
                     ) ?? now
                 let startTimestamp = Int64(startOfMonth.timeIntervalSince1970)
                 return (startTimestamp, nil)
@@ -236,7 +264,7 @@ final class TopBarViewModel {
             id: newId,
             name: name,
             color: color,
-            isSystem: false
+            isSystem: false,
         )
         chips.append(new)
         saveUserCategories()
@@ -245,7 +273,7 @@ final class TopBarViewModel {
     func updateChip(
         _ chip: CategoryChip,
         name: String? = nil,
-        color: Color? = nil
+        color: Color? = nil,
     ) {
         guard !chip.isSystem,
               let index = chips.firstIndex(where: { $0.id == chip.id })
@@ -279,7 +307,7 @@ final class TopBarViewModel {
 
     func commitNewChipOrCancel(commitIfNonEmpty: Bool) {
         let trimmed = newChipName.trimmingCharacters(
-            in: .whitespacesAndNewlines
+            in: .whitespacesAndNewlines,
         )
 
         if commitIfNonEmpty, !trimmed.isEmpty {
@@ -314,7 +342,7 @@ final class TopBarViewModel {
         }
 
         let trimmed = editingChipName.trimmingCharacters(
-            in: .whitespacesAndNewlines
+            in: .whitespacesAndNewlines,
         )
         if !trimmed.isEmpty {
             updateChip(chip, name: trimmed, color: editingChipColor)
@@ -360,7 +388,9 @@ final class TopBarViewModel {
     func toggleApp(_ appName: String) {
         if selectedAppNames.contains(appName) {
             selectedAppNames.remove(appName)
-            tags.removeAll { $0.type == .filterApp && $0.associatedValue == appName }
+            tags.removeAll {
+                $0.type == .filterApp && $0.associatedValue == appName
+            }
         } else {
             selectedAppNames.insert(appName)
             addTagForApp(appName)
@@ -376,7 +406,7 @@ final class TopBarViewModel {
                 icon: AnyView(Image(systemName: "calendar")),
                 label: dateFilter.displayName,
                 type: .filterDate,
-                associatedValue: dateFilter.rawValue
+                associatedValue: dateFilter.rawValue,
             )
             tags.append(tag)
         }
@@ -406,14 +436,15 @@ final class TopBarViewModel {
     private func addTagForType(_ type: PasteModelType) {
         if type == .string || type == .rich {
             let hasTextTag = tags.contains {
-                $0.type == .filterType && $0.associatedValue == textTagAssociatedValue
+                $0.type == .filterType
+                    && $0.associatedValue == textTagAssociatedValue
             }
             if !hasTextTag {
                 let tag = InputTag(
                     icon: AnyView(Image(systemName: "text.document")),
                     label: "文本",
                     type: .filterType,
-                    associatedValue: textTagAssociatedValue
+                    associatedValue: textTagAssociatedValue,
                 )
                 tags.append(tag)
             }
@@ -423,7 +454,7 @@ final class TopBarViewModel {
                 icon: AnyView(Image(systemName: icon)),
                 label: label,
                 type: .filterType,
-                associatedValue: type.rawValue
+                associatedValue: type.rawValue,
             )
             tags.append(tag)
         }
@@ -435,7 +466,8 @@ final class TopBarViewModel {
             let hasRich = selectedTypes.contains(.rich)
             if !hasString, !hasRich {
                 tags.removeAll {
-                    $0.type == .filterType && $0.associatedValue == textTagAssociatedValue
+                    $0.type == .filterType
+                        && $0.associatedValue == textTagAssociatedValue
                 }
             }
         } else {
@@ -447,21 +479,22 @@ final class TopBarViewModel {
 
     private func addTagForApp(_ appName: String) {
         let appPath = appPathCache[appName] ?? ""
-        let appIcon = if FileManager.default.fileExists(atPath: appPath) {
-            AnyView(
-                Image(nsImage: NSWorkspace.shared.icon(forFile: appPath))
-                    .resizable()
-                    .scaledToFit()
-            )
-        } else {
-            AnyView(Image(systemName: "app.fill"))
-        }
+        let appIcon =
+            if FileManager.default.fileExists(atPath: appPath) {
+                AnyView(
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: appPath))
+                        .resizable()
+                        .scaledToFit(),
+                )
+            } else {
+                AnyView(Image(systemName: "app.fill"))
+            }
         let tag = InputTag(
             icon: appIcon,
             label: appName,
             type: .filterApp,
             associatedValue: appName,
-            appPath: appPath
+            appPath: appPath,
         )
         tags.append(tag)
     }
@@ -470,7 +503,7 @@ final class TopBarViewModel {
         let appInfo = await dataStore.getAllAppInfo()
         await MainActor.run {
             appPathCache = Dictionary(
-                uniqueKeysWithValues: appInfo.map { ($0.name, $0.path) }
+                uniqueKeysWithValues: appInfo.map { ($0.name, $0.path) },
             )
         }
     }
@@ -507,7 +540,8 @@ final class TopBarViewModel {
             selectedTypes.remove(.string)
             selectedTypes.remove(.rich)
             tags.removeAll {
-                $0.type == .filterType && $0.associatedValue == textTagAssociatedValue
+                $0.type == .filterType
+                    && $0.associatedValue == textTagAssociatedValue
             }
         } else {
             let needAddTag = !hasString && !hasRich
@@ -518,7 +552,7 @@ final class TopBarViewModel {
                     icon: AnyView(Image(systemName: "text.document")),
                     label: "文本",
                     type: .filterType,
-                    associatedValue: textTagAssociatedValue
+                    associatedValue: textTagAssociatedValue,
                 )
                 tags.append(tag)
             }
@@ -528,74 +562,6 @@ final class TopBarViewModel {
 
     func isTextTypeSelected() -> Bool {
         selectedTypes.contains(.string) || selectedTypes.contains(.rich)
-    }
-
-    // MARK: - Filter Expression Building
-
-    func buildFilterExpression() -> Expression<Bool>? {
-        var conditions: [Expression<Bool>] = []
-
-        // 类型筛选
-        if !selectedTypes.isEmpty {
-            var tagValues: [String] = []
-
-            for type in selectedTypes {
-                let value = type.tagValue
-                if !value.isEmpty {
-                    tagValues.append(value)
-                }
-            }
-
-            if !tagValues.isEmpty {
-                let tagCondition = tagValues.map { (Col.tag ?? "") == $0 }
-                    .reduce(Expression<Bool>(value: false)) { result, condition in
-                        result || condition
-                    }
-                conditions.append(tagCondition)
-            }
-        }
-
-        // 应用筛选
-        if !selectedAppNames.isEmpty {
-            let appNamesArray = Array(selectedAppNames)
-            let appCondition = appNamesArray.map { Col.appName == $0 }.reduce(
-                Expression<Bool>(value: false)
-            ) { result, condition in
-                result || condition
-            }
-            conditions.append(appCondition)
-        }
-
-        // 日期筛选
-        if let dateFilter = selectedDateFilter {
-            let (start, end) = dateFilter.timestampRange()
-            if let endTimestamp = end {
-                let dateCondition = Col.ts >= start && Col.ts < endTimestamp
-                conditions.append(dateCondition)
-            } else {
-                let dateCondition = Col.ts >= start
-                conditions.append(dateCondition)
-            }
-        }
-
-        // 分类筛选
-        if !selectedCategoryIds.isEmpty {
-            let categoryIdsArray = Array(selectedCategoryIds)
-            let categoryCondition = categoryIdsArray.map { Col.group == $0 }
-                .reduce(
-                    Expression<Bool>(value: false)
-                ) { result, condition in
-                    result || condition
-                }
-            conditions.append(categoryCondition)
-        }
-
-        return conditions.reduce(nil) { partial, next in
-            if let existing = partial {
-                return existing && next
-            }
-            return next
-        }
     }
 
     // MARK: - Search Methods
@@ -612,28 +578,19 @@ final class TopBarViewModel {
     }
 
     private func makeSearchCriteria(from trimmedQuery: String)
-        -> PasteDataStore.SearchCriteria
+        -> SearchCriteria
     {
         let chipGroup =
             selectedCategoryIds.isEmpty ? getGroupFilterForCurrentChip() : -1
-        let filterExpression = buildFilterExpression()
 
-        return PasteDataStore.SearchCriteria(
+        return SearchCriteria(
             keyword: trimmedQuery,
             chipGroup: chipGroup,
-            filterExpression: filterExpression
+            selectedTypes: selectedTypes,
+            selectedAppNames: selectedAppNames,
+            selectedDateFilter: selectedDateFilter,
+            selectedCategoryIds: selectedCategoryIds,
         )
-    }
-
-    private func criteriaUnchanged(_ criteria: PasteDataStore.SearchCriteria)
-        -> Bool
-    {
-        criteria.keyword == lastCriteria.keyword
-            && criteria.chipGroup == lastCriteria.chipGroup
-            && compareExpressions(
-                criteria.filterExpression,
-                lastCriteria.filterExpression
-            )
     }
 
     private func executeSearch() async {
@@ -641,31 +598,17 @@ final class TopBarViewModel {
 
         let criteria = makeSearchCriteria(from: trimmedQuery)
 
-        if criteriaUnchanged(criteria) {
+        if criteria == lastSearchCriteria {
             return
         }
+        lastSearchCriteria = criteria
 
         let hasFilters = !criteria.isEmpty
 
         if !hasFilters, selectedChipId == 1 {
-            dataStore.resetDefaultList()
+            await dataStore.resetDefaultList()
         } else {
-            dataStore.searchData(criteria)
+            await dataStore.searchData(criteria)
         }
-
-        lastCriteria = criteria
-    }
-
-    private func compareExpressions(
-        _ expr1: Expression<Bool>?,
-        _ expr2: Expression<Bool>?
-    ) -> Bool {
-        if expr1 == nil && expr2 == nil {
-            return true
-        }
-        if expr1 == nil || expr2 == nil {
-            return false
-        }
-        return false
     }
 }

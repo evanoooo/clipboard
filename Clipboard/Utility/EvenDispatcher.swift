@@ -33,7 +33,7 @@ final class EventDispatcher {
     func start(
         matching mask: NSEvent.EventTypeMask = [
             .keyDown,
-        ]
+        ],
     ) {
         guard monitorToken == nil else { return }
 
@@ -60,14 +60,14 @@ final class EventDispatcher {
         matching mask: NSEvent.EventTypeMask,
         key: String,
         priority: Int = 0,
-        handler: @escaping (NSEvent) -> NSEvent?
+        handler: @escaping (NSEvent) -> NSEvent?,
     ) {
         unregisterHandler(key)
         let h = Handler(
             key: key,
             mask: mask,
             priority: priority,
-            handler: handler
+            handler: handler,
         )
         handlers.append(h)
         handlers.sort { a, b in
@@ -106,35 +106,35 @@ final class EventDispatcher {
                         handled = NSApp.sendAction(
                             #selector(NSText.copy(_:)),
                             to: nil,
-                            from: nil
+                            from: nil,
                         )
                         log.debug("Sent copy command: \(handled)")
                     case "v":
                         handled = NSApp.sendAction(
                             #selector(NSText.paste(_:)),
                             to: nil,
-                            from: nil
+                            from: nil,
                         )
                         log.debug("Sent paste command: \(handled)")
                     case "x":
                         handled = NSApp.sendAction(
                             #selector(NSText.cut(_:)),
                             to: nil,
-                            from: nil
+                            from: nil,
                         )
                         log.debug("Sent cut command: \(handled)")
                     case "a":
                         handled = NSApp.sendAction(
                             #selector(NSResponder.selectAll(_:)),
                             to: nil,
-                            from: nil
+                            from: nil,
                         )
                         log.debug("Sent selectAll command: \(handled)")
                     case "z":
                         handled = NSApp.sendAction(
                             Selector(("undo:")),
                             to: nil,
-                            from: nil
+                            from: nil,
                         )
                         log.debug("Sent undo command: \(handled)")
                     default:
@@ -154,7 +154,7 @@ final class EventDispatcher {
         var currentEvent = event
         for h in handlers {
             let eventMask = NSEvent.EventTypeMask(
-                rawValue: 1 << currentEvent.type.rawValue
+                rawValue: 1 << currentEvent.type.rawValue,
             )
             if !h.mask.contains(eventMask) { continue }
             if let next = h.handler(currentEvent) {

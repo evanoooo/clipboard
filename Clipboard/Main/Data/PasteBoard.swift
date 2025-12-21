@@ -21,7 +21,7 @@ final class PasteBoard {
         guard
             let soundURL = Bundle.main.url(
                 forResource: "copy",
-                withExtension: "aiff"
+                withExtension: "aiff",
             )
         else {
             log.warn("无法找到音效文件: copy.aiff")
@@ -242,10 +242,10 @@ final class PasteBoard {
             {
                 if let attributedString = NSAttributedString(
                     with: data.data,
-                    type: data.pasteboardType
+                    type: data.pasteboardType,
                 ) {
                     let mutableString = NSMutableAttributedString(
-                        attributedString: attributedString
+                        attributedString: attributedString,
                     )
                     let originalLength = mutableString.length
 
@@ -253,10 +253,10 @@ final class PasteBoard {
                     while currentLength > 0 {
                         let lastCharRange = NSRange(
                             location: currentLength - 1,
-                            length: 1
+                            length: 1,
                         )
                         let lastChar = mutableString.attributedSubstring(
-                            from: lastCharRange
+                            from: lastCharRange,
                         ).string
 
                         if lastChar == "\n" || lastChar == "\r" {
@@ -269,13 +269,13 @@ final class PasteBoard {
                     if currentLength < originalLength {
                         let rangeToDelete = NSRange(
                             location: currentLength,
-                            length: originalLength - currentLength
+                            length: originalLength - currentLength,
                         )
                         mutableString.deleteCharacters(in: rangeToDelete)
                     }
 
                     if let processedData = mutableString.toData(
-                        with: data.pasteboardType
+                        with: data.pasteboardType,
                     ) {
                         NSPasteboard.general.setData(
                             processedData,

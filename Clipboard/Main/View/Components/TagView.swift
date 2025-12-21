@@ -31,7 +31,7 @@ struct TagView: View {
         .frame(height: 24.0, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Const.radius * 2)
-                .fill(Color.accentColor.opacity(0.2))
+                .fill(Color.accentColor.opacity(0.2)),
         )
     }
 }

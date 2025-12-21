@@ -124,7 +124,7 @@ struct ShortcutRecorder: View {
     private func installEventHandle() {
         EventDispatcher.shared.registerHandler(
             matching: .keyDown,
-            key: "shortcutRecorder"
+            key: "shortcutRecorder",
         ) { [self] event in
             return handleKeyEvent(event)
         }

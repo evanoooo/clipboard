@@ -122,7 +122,7 @@ extension PasteSQLManager {
             Col.searchText <- item.searchText,
             Col.length <- item.length,
             Col.group <- item.group,
-            Col.tag <- item.tag
+            Col.tag <- item.tag,
         )
         do {
             let rowId = try db?.run(insert)
@@ -165,7 +165,7 @@ extension PasteSQLManager {
             Col.searchText <- item.searchText,
             Col.length <- item.length,
             Col.group <- item.group,
-            Col.tag <- item.tag
+            Col.tag <- item.tag,
         )
         do {
             let count = try db?.run(update)
@@ -337,7 +337,7 @@ extension PasteSQLManager {
                             let pasteboardType = PasteboardType(typeStr)
                             let tagValue = PasteboardModel.calculateTag(
                                 type: pasteboardType,
-                                content: data
+                                content: data,
                             )
 
                             let update = table.filter(Col.id == id)

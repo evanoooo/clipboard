@@ -164,7 +164,7 @@ struct ClipCardView: View {
     private func pasteAsPlainText() {
         env.actions.paste(
             model,
-            isAttribute: false
+            isAttribute: false,
         )
     }
 
@@ -186,10 +186,10 @@ struct ClipCardView: View {
             searchText: "",
             length: 9,
             group: -1,
-            tag: "string"
+            tag: "string",
         ),
         isSelected: true,
         showPreview: .constant(false),
-        quickPasteIndex: 1
+        quickPasteIndex: 1,
     )
 }

@@ -84,7 +84,7 @@ struct ChipView: View {
                 if #available(macOS 15.0, *) {
                     Image(
                         systemName:
-                            "clock.arrow.trianglehead.counterclockwise.rotate.90"
+                        "clock.arrow.trianglehead.counterclockwise.rotate.90",
                     )
                 } else {
                     Image("clock.arrow.trianglehead.counterclockwise.rotate.90")
@@ -95,9 +95,8 @@ struct ChipView: View {
                     .frame(width: Const.space12, height: Const.space12)
                     .padding(Const.space2)
             }
-            if env.focusView != .search, env.focusView != .filter {
+            if !topBarVM.hasInput {
                 Text(chip.name)
-                    .font(.body)
             }
         }
         .padding(
@@ -105,8 +104,8 @@ struct ChipView: View {
                 top: Const.space6,
                 leading: Const.space10,
                 bottom: Const.space6,
-                trailing: Const.space10
-            )
+                trailing: Const.space10,
+            ),
         )
         .background {
             overlayColor()
@@ -130,7 +129,7 @@ struct ChipView: View {
             },
             onCycleColor: {
                 topBarVM.cycleEditingChipColor()
-            }
+            },
         )
         .onChange(of: env.focusView) {
             if env.focusView != .editChip {
@@ -267,7 +266,7 @@ private struct ChipViewPreviewWrapper: View {
             isSelected: true,
             chip: topBarVM.chips[0],
             focus: $focus,
-            topBarVM: topBarVM
+            topBarVM: topBarVM,
         )
         .environmentObject(env)
         .frame(width: 128, height: 32)

@@ -14,7 +14,7 @@ extension String {
     func isCompleteURL() -> Bool {
         guard
             let url = URL(
-                string: trimmingCharacters(in: .whitespacesAndNewlines)
+                string: trimmingCharacters(in: .whitespacesAndNewlines),
             )
         else {
             return false

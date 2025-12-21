@@ -68,7 +68,7 @@ struct FilterPopoverView: View {
                     GridItem(.flexible(), spacing: Const.space8),
                     GridItem(.flexible(), spacing: Const.space8),
                 ],
-                spacing: Const.space8
+                spacing: Const.space8,
             ) {
                 typeButton(type: .color, icon: "paintpalette", label: "颜色")
                 typeButton(type: .file, icon: "folder", label: "文件")
@@ -87,14 +87,14 @@ struct FilterPopoverView: View {
                 Image(systemName: icon)
                     .foregroundStyle(
                         topBarVM.selectedTypes.contains(type)
-                            ? .white : .secondary
+                            ? .white : .secondary,
                     )
             },
             label: label,
             isSelected: topBarVM.selectedTypes.contains(type),
             action: {
                 topBarVM.toggleType(type)
-            }
+            },
         )
     }
 
@@ -104,14 +104,14 @@ struct FilterPopoverView: View {
                 Image(systemName: "text.document")
                     .foregroundStyle(
                         topBarVM.isTextTypeSelected()
-                            ? .white : .secondary
+                            ? .white : .secondary,
                     )
             },
             label: "文本",
             isSelected: topBarVM.isTextTypeSelected(),
             action: {
                 topBarVM.toggleTextType()
-            }
+            },
         )
     }
 
@@ -129,7 +129,7 @@ struct FilterPopoverView: View {
                     GridItem(.flexible(), spacing: Const.space8),
                     GridItem(.flexible(), spacing: Const.space8),
                 ],
-                spacing: Const.space8
+                spacing: Const.space8,
             ) {
                 ForEach(displayedAppInfo, id: \.name) { appInfo in
                     appButton(name: appInfo.name, path: appInfo.path)
@@ -159,7 +159,7 @@ struct FilterPopoverView: View {
             isSelected: topBarVM.selectedAppNames.contains(name),
             action: {
                 topBarVM.toggleApp(name)
-            }
+            },
         )
     }
 
@@ -168,7 +168,7 @@ struct FilterPopoverView: View {
             icon: {
                 Image(
                     systemName: showAllApps
-                        ? "chevron.up.circle" : "chevron.down.circle"
+                        ? "chevron.up.circle" : "chevron.down.circle",
                 )
                 .font(.system(size: Const.space16))
             },
@@ -176,7 +176,7 @@ struct FilterPopoverView: View {
             isSelected: false,
             action: {
                 showAllApps.toggle()
-            }
+            },
         )
     }
 
@@ -194,7 +194,7 @@ struct FilterPopoverView: View {
                     GridItem(.flexible(), spacing: Const.space8),
                     GridItem(.flexible(), spacing: Const.space8),
                 ],
-                spacing: Const.space8
+                spacing: Const.space8,
             ) {
                 ForEach(TopBarViewModel.DateFilterOption.allCases, id: \.self) {
                     option in
@@ -212,7 +212,7 @@ struct FilterPopoverView: View {
                 Image(systemName: "calendar")
                     .foregroundStyle(
                         topBarVM.selectedDateFilter == option
-                            ? .white : .secondary
+                            ? .white : .secondary,
                     )
             },
             label: option.displayName,
@@ -223,7 +223,7 @@ struct FilterPopoverView: View {
                 } else {
                     topBarVM.setDateFilter(option)
                 }
-            }
+            },
         )
     }
 
@@ -239,7 +239,7 @@ struct FilterPopoverView: View {
             isSelected: false,
             action: {
                 topBarVM.clearAllFilters()
-            }
+            },
         )
     }
 

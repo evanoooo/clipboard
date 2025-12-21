@@ -60,7 +60,7 @@ struct PreviewPopoverView: View {
                     .padding(.bottom, Const.space4)
                     .frame(
                         maxWidth: Const.maxPreviewWidth - 128,
-                        alignment: .topLeading
+                        alignment: .topLeading,
                     )
 
                 Spacer()
@@ -74,8 +74,8 @@ struct PreviewPopoverView: View {
                 }
 
                 if model.url != nil,
-                    enableLinkPreview,
-                    let browserName = getDefaultBrowserName()
+                   enableLinkPreview,
+                   let browserName = getDefaultBrowserName()
                 {
                     BorderedButton(title: "使用 \(browserName) 打开") {
                         withAnimation {
@@ -105,7 +105,7 @@ struct PreviewPopoverView: View {
 
     func getDefaultBrowserName() -> String? {
         if let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
-            let bundle = Bundle(url: appURL)
+           let bundle = Bundle(url: appURL)
         {
             return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
                 as? String ?? bundle.object(
@@ -166,7 +166,7 @@ struct PreviewPopoverView: View {
             .frame(
                 maxWidth: Const.maxPreviewWidth,
                 maxHeight: Const.maxPreviewHeight,
-                alignment: .center
+                alignment: .center,
             )
             .background(Color(nsColor: NSColor(hex: hex)))
         }
@@ -289,7 +289,7 @@ struct PreviewPopoverView: View {
         }
         .frame(
             width: Const.maxPreviewWidth - 32,
-            height: Const.maxContentHeight
+            height: Const.maxContentHeight,
         )
     }
 
@@ -349,7 +349,7 @@ struct FocusableContainer<Content: View>: NSViewRepresentable {
     func makeNSView(context _: Context) -> NSHostingView<Content> {
         let hostingView = InterceptingHostingView(
             rootView: content,
-            onInteraction: onInteraction
+            onInteraction: onInteraction,
         )
         return hostingView
     }
@@ -404,7 +404,7 @@ class InterceptingHostingView<Content: View>: NSHostingView<Content> {
             searchText: "",
             length: 0,
             group: -1,
-            tag: "string"
+            tag: "string",
         ),
     )
     .frame(width: 800, height: 600)

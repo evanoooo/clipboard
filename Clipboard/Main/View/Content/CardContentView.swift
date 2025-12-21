@@ -51,7 +51,7 @@ struct CSSView: View {
             .frame(
                 width: Const.cardSize,
                 height: Const.cntSize,
-                alignment: .center
+                alignment: .center,
             )
             .background(Color(nsColor: NSColor(hex: hex)))
         }

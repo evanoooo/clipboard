@@ -74,7 +74,7 @@ struct GeneralSettingView: View {
 
                     ToggleRow(
                         isEnabled: $removeTailingNewline,
-                        title: "粘贴时去掉末尾的换行符"
+                        title: "粘贴时去掉末尾的换行符",
                     )
                 }
                 .padding(Const.space8)
@@ -247,7 +247,7 @@ struct ThinSlider: View {
                         color: Color.black.opacity(0.2),
                         radius: 2,
                         x: 0,
-                        y: 1
+                        y: 1,
                     )
                     .offset(x: geometry.size.width * normalizedValue - 2)
                     .gesture(
@@ -261,9 +261,9 @@ struct ThinSlider: View {
                                     max(
                                         0,
                                         dragValue.location.x
-                                            / geometry.size.width
+                                            / geometry.size.width,
                                     ),
-                                    1
+                                    1,
                                 )
                                 value =
                                     bounds.lowerBound

@@ -48,7 +48,7 @@ struct CommonBottomView: View {
             .padding(.horizontal, Const.space12)
             .padding(.bottom, Const.space4)
             .frame(
-                width: Const.cardSize
+                width: Const.cardSize,
             )
             .background {
                 if needsMask {
@@ -61,7 +61,7 @@ struct CommonBottomView: View {
                             .init(color: .clear, location: 1.0),
                         ]),
                         startPoint: .bottom,
-                        endPoint: .top
+                        endPoint: .top,
                     )
                 }
             }
@@ -93,7 +93,7 @@ struct CommonBottomView: View {
         let availableWidth = Const.cardSize - (Const.space12 * 2)
         let constraintRect = CGSize(
             width: max(0, availableWidth),
-            height: .greatestFiniteMagnitude
+            height: .greatestFiniteMagnitude,
         )
 
         let boundingBox = (normalized as NSString).boundingRect(
@@ -103,7 +103,7 @@ struct CommonBottomView: View {
                 .font: font,
                 .paragraphStyle: paragraphStyle,
             ],
-            context: nil
+            context: nil,
         )
 
         return ceil(boundingBox.height) + Const.space8

@@ -110,7 +110,7 @@ struct HistoryView: View {
             quickPasteIndex: historyVM.isQuickPastePressed
                 && index < 9
                 ? index + 1 : nil,
-            onRequestDelete: { requestDel(id: item.id) }
+            onRequestDelete: { requestDel(id: item.id) },
         )
         .id(item.id)
         .contentShape(Rectangle())
@@ -131,7 +131,7 @@ struct HistoryView: View {
         }
         env.actions.paste(
             item,
-            isAttribute: true
+            isAttribute: true,
         )
     }
 
@@ -149,7 +149,7 @@ struct HistoryView: View {
         if historyVM.shouldHandleDoubleTap(
             for: item.id,
             currentTime: now,
-            interval: 0.2
+            interval: 0.2,
         ) {
             handleDoubleTap(on: item)
             historyVM.resetTapState()
@@ -251,8 +251,7 @@ struct HistoryView: View {
     }
 
     private func flagsChangedEvent(_ event: NSEvent) -> NSEvent? {
-        guard event.window == ClipMainWindowController.shared.window,
-              env.focusView == .history
+        guard event.window == ClipMainWindowController.shared.window
         else {
             return event
         }
@@ -314,7 +313,7 @@ struct HistoryView: View {
         historyVM.selectedId = item.id
         env.actions.paste(
             item,
-            isAttribute: true
+            isAttribute: true,
         )
     }
 
@@ -372,7 +371,7 @@ struct HistoryView: View {
         }
         env.actions.paste(
             item,
-            isAttribute: !hasPlainTextModifier(event)
+            isAttribute: !hasPlainTextModifier(event),
         )
         return nil
     }
@@ -427,7 +426,7 @@ struct HistoryView: View {
             if let window = NSApp.keyWindow {
                 alert.beginSheetModal(
                     for: window,
-                    completionHandler: handleResponse
+                    completionHandler: handleResponse,
                 )
             }
         } else {

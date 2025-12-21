@@ -7,7 +7,7 @@ struct ClipboardActionService {
 
     func paste(
         _ item: PasteboardModel,
-        isAttribute: Bool = true
+        isAttribute: Bool = true,
     ) {
         pasteBoard.pasteData(item, isAttribute)
         guard userDefaults.pasteDirect else {
@@ -28,7 +28,7 @@ struct ClipboardActionService {
             do {
                 try dataStore.updateItemGroup(
                     itemId: item.id!,
-                    groupId: -1
+                    groupId: -1,
                 )
             } catch {
                 log.error("更新卡片 group 失败: \(error)")

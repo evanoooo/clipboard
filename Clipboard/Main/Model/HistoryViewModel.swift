@@ -21,7 +21,7 @@ final class HistoryViewModel {
     func shouldHandleDoubleTap(
         for itemId: PasteboardModel.ID,
         currentTime: TimeInterval,
-        interval: TimeInterval
+        interval: TimeInterval,
     ) -> Bool {
         guard let lastId = lastTapId else { return false }
         return lastId == itemId && currentTime - lastTapTime <= interval
@@ -122,14 +122,14 @@ final class HistoryViewModel {
         guard
             KeyCode.hasModifier(
                 event,
-                modifierIndex: PasteUserDefaults.quickPasteModifier
+                modifierIndex: PasteUserDefaults.quickPasteModifier,
             )
         else {
             return nil
         }
 
         let quickPasteModifier = KeyCode.modifierFlags(
-            from: PasteUserDefaults.quickPasteModifier
+            from: PasteUserDefaults.quickPasteModifier,
         )
         let otherModifiers = event.modifierFlags.subtracting(quickPasteModifier)
             .intersection([.command, .option, .control])

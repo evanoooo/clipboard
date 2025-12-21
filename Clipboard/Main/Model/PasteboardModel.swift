@@ -32,7 +32,7 @@ final class PasteboardModel: Identifiable {
     @ObservationIgnored
     private(set) lazy var type = PasteModelType(
         with: pasteboardType,
-        model: self
+        model: self,
     )
 
     private(set) var group: Int
@@ -86,12 +86,12 @@ final class PasteboardModel: Identifiable {
 
         attributeString = NSAttributedString(
             with: showData,
-            type: pasteboardType
+            type: pasteboardType,
         ) ?? NSAttributedString()
 
         uniqueId = Self.generateUniqueId(
             for: pasteboardType,
-            data: data
+            data: data,
         )
 
         let (bg, fg, hasBg) = computeColors()
@@ -134,7 +134,7 @@ final class PasteboardModel: Identifiable {
             let pathsToSave = filePaths!
             Task.detached(priority: .utility) {
                 await FileAccessHelper.shared.saveSecurityBookmarks(
-                    for: pathsToSave
+                    for: pathsToSave,
                 )
             }
 
@@ -164,7 +164,7 @@ final class PasteboardModel: Identifiable {
 
         let calculatedTag = Self.calculateTag(
             type: type,
-            content: content ?? Data()
+            content: content ?? Data(),
         )
 
         let app = NSWorkspace.shared.frontmostApplication
@@ -179,7 +179,7 @@ final class PasteboardModel: Identifiable {
             searchText: searchText,
             length: length,
             group: -1,
-            tag: calculatedTag
+            tag: calculatedTag,
         )
     }
 
@@ -448,7 +448,7 @@ extension PasteboardModel {
                                 let error = NSError(
                                     domain: NSCocoaErrorDomain,
                                     code: NSFileReadNoSuchFileError,
-                                    userInfo: [NSFilePathErrorKey: path]
+                                    userInfo: [NSFilePathErrorKey: path],
                                 )
                                 completion(nil, false, error)
                             }
@@ -490,7 +490,7 @@ extension PasteboardModel {
     /// 唯一标识符
     private static func generateUniqueId(
         for type: PasteboardType,
-        data: Data
+        data: Data,
     ) -> String {
         switch type {
         case .rtf, .rtfd:
@@ -517,7 +517,7 @@ struct ClipDragToken: Codable, Sendable, Identifiable, Transferable {
             },
             importing: { data in
                 try JSONDecoder().decode(ClipDragToken.self, from: data)
-            }
+            },
         )
     }
 }

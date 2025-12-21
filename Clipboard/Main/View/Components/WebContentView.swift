@@ -29,8 +29,8 @@ struct WebContentView: View {
                 URLRequest(
                     url: url,
                     cachePolicy: .reloadIgnoringCacheData,
-                    timeoutInterval: 5.0
-                )
+                    timeoutInterval: 5.0,
+                ),
             )
         }
     }

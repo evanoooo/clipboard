@@ -117,7 +117,7 @@ struct MultipleFilesView: View {
         .frame(width: maxSize, height: maxSize)
         .offset(
             x: -Const.space32,
-            y: Const.space32
+            y: Const.space32,
         )
     }
 }

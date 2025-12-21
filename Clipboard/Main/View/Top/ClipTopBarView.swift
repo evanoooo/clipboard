@@ -6,6 +6,7 @@
 //
 
 import Combine
+import Sparkle
 import SwiftUI
 
 struct ClipTopBarView: View {
@@ -38,7 +39,8 @@ struct ClipTopBarView: View {
                     searchIcon
                 }
                 typeView
-                Spacer(minLength: Const.space14)
+                Spacer()
+                SettingsMenu()
             }
         }
         .frame(height: Const.topBarHeight)
@@ -84,9 +86,9 @@ struct ClipTopBarView: View {
                     focus == .search
                         ? Color.accentColor.opacity(0.4)
                         : Color.gray.opacity(0.4),
-                    lineWidth: 3.5
+                    lineWidth: 3.5,
                 )
-                .padding(-1)
+                .padding(-1),
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -106,7 +108,7 @@ struct ClipTopBarView: View {
                         }
                         TextField(
                             topBarVM.hasInput ? "" : "搜索",
-                            text: $topBarVM.query
+                            text: $topBarVM.query,
                         )
                         .textFieldStyle(.plain)
                         .focused($focus, equals: .search)
@@ -123,7 +125,7 @@ struct ClipTopBarView: View {
                     .frame(
                         minWidth: geo.size.width,
                         minHeight: geo.size.height,
-                        alignment: .leading
+                        alignment: .leading,
                     )
                 }
                 .onChange(of: topBarVM.tags.count) {
@@ -156,12 +158,12 @@ struct ClipTopBarView: View {
             .padding(Const.space6)
             .background(
                 RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
-                    .fill(isIconHovered ? hoverColor() : Color.clear)
+                    .fill(isIconHovered ? hoverColor() : Color.clear),
             )
-            .contentShape(Rectangle())
             .onHover { hovering in
                 isIconHovered = hovering
             }
+            .contentShape(Rectangle())
             .onTapGesture {
                 env.focusView = .search
             }
@@ -175,7 +177,7 @@ struct ClipTopBarView: View {
                         isSelected: topBarVM.selectedChipId == chip.id,
                         chip: chip,
                         focus: $focus,
-                        topBarVM: topBarVM
+                        topBarVM: topBarVM,
                     )
                     .onTapGesture {
                         topBarVM.clearInput()
@@ -216,7 +218,7 @@ struct ClipTopBarView: View {
                     (topBarVM.newChipColorIndex + 1)
                         % CategoryChip.palette.count
                 topBarVM.newChipColorIndex = nextIndex
-            }
+            },
         )
         .onChange(of: env.focusView) {
             if env.focusView != .newChip {
@@ -232,7 +234,7 @@ struct ClipTopBarView: View {
             .padding(Const.space6)
             .background(
                 RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
-                    .fill(isPlusHovered ? hoverColor() : Color.clear)
+                    .fill(isPlusHovered ? hoverColor() : Color.clear),
             )
             .onHover { hovering in
                 isPlusHovered = hovering
@@ -348,6 +350,108 @@ struct ClipTopBarView: View {
         if showFilter {
             focus = nil
             env.focusView = .filter
+        }
+    }
+}
+
+struct SettingsMenu: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(PrefKey.backgroundType.rawValue)
+    private var backgroundTypeRaw: Int = 0
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Image(systemName: "ellipsis")
+            .font(.system(size: Const.iconHdSize, weight: .regular))
+            .padding(.horizontal, Const.space6)
+            .padding(.vertical, Const.space10)
+            .background(
+                RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
+                    .fill(isHovered ? hoverColor() : Color.clear),
+            )
+            .padding(.trailing)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                showNativeMenu()
+            }
+    }
+
+    private func hoverColor() -> Color {
+        if #available(macOS 26.0, *) {
+            let backgroundType =
+                BackgroundType(rawValue: backgroundTypeRaw) ?? .liquid
+            return colorScheme == .dark
+                ? Const.hoverDarkColor
+                : (backgroundType == .liquid
+                    ? Const.hoverLightColorLiquid
+                    : Const.hoverLightColorFrosted)
+        } else {
+            return colorScheme == .dark
+                ? Const.hoverDarkColor
+                : Const.hoverLightColorFrostedLow
+        }
+    }
+
+    private func showNativeMenu() {
+        let menu = NSMenu()
+
+        let settingsItem = NSMenuItem(
+            title: "设置...",
+            action: #selector(MenuActions.openSettings),
+            keyEquivalent: ",",
+        )
+        settingsItem.target = MenuActions.shared
+        menu.addItem(settingsItem)
+
+        let updateItem = NSMenuItem(
+            title: "检查更新",
+            action: #selector(MenuActions.checkForUpdates),
+            keyEquivalent: "",
+        )
+        updateItem.target = MenuActions.shared
+        menu.addItem(updateItem)
+
+        let helpItem = NSMenuItem(
+            title: "帮助",
+            action: #selector(MenuActions.invokeHelp),
+            keyEquivalent: "",
+        )
+        helpItem.target = MenuActions.shared
+        menu.addItem(helpItem)
+
+        let quitItem = NSMenuItem(
+            title: "退出",
+            action: #selector(NSApplication.shared.terminate),
+            keyEquivalent: "q",
+        )
+        menu.addItem(quitItem)
+
+        if let event = NSApp.currentEvent {
+            NSMenu.popUpContextMenu(menu, with: event, for: NSView())
+        }
+    }
+}
+
+class MenuActions: NSObject {
+    static let shared = MenuActions()
+
+    @objc func openSettings() {
+        SettingWindowController.shared.toggleWindow()
+    }
+
+    @objc func checkForUpdates() {
+        AppDelegate.shared?.updaterController.checkForUpdates(nil)
+    }
+
+    @objc func invokeHelp() {
+        if let url = URL(
+            string:
+            "https://github.com/Ineffable919/clipboard/blob/master/README.md",
+        ) {
+            NSWorkspace.shared.open(url)
         }
     }
 }

@@ -47,7 +47,7 @@ struct ContentView: View {
                         RoundedRectangle(cornerRadius: Const.radius)
                             .fill(Color.clear)
                             .glassEffect(
-                                in: RoundedRectangle(cornerRadius: Const.radius)
+                                in: RoundedRectangle(cornerRadius: Const.radius),
                             )
                         contentStack()
                     }

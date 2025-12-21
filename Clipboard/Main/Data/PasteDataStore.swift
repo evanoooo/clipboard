@@ -25,29 +25,10 @@ final class PasteDataStore {
 
     private(set) var hasMoreData = false
 
-    /// 搜索条件：关键词 + 顶栏分组（自定义 chip）+ 过滤视图的表达式
-    struct SearchCriteria {
-        var keyword: String
-        var chipGroup: Int
-        var filterExpression: Expression<Bool>?
-
-        static let empty = SearchCriteria(
-            keyword: "",
-            chipGroup: -1,
-            filterExpression: nil
-        )
-
-        var isEmpty: Bool {
-            keyword.isEmpty
-                && chipGroup == -1
-                && filterExpression == nil
-        }
-    }
-
     enum DataChangeType {
         case loadMore
-        case searchFilter // 搜索或筛选（首次）
-        case reset // 重置/初始化
+        case searchFilter
+        case reset
     }
 
     private(set) var lastDataChangeType: DataChangeType = .reset
@@ -115,7 +96,7 @@ extension PasteDataStore {
                 if pType.isText(), showData == nil {
                     if let searchText {
                         showData = String(searchText.prefix(250)).data(
-                            using: .utf8
+                            using: .utf8,
                         )
                     }
                 }
@@ -130,7 +111,7 @@ extension PasteDataStore {
                     searchText: searchText ?? "",
                     length: length ?? 0,
                     group: group ?? -1,
-                    tag: tag ?? ""
+                    tag: tag ?? "",
                 )
                 pasteModel.id = id
                 return pasteModel
@@ -161,26 +142,71 @@ extension PasteDataStore {
         }
     }
 
-    private func buildFilter(
-        keyword: String,
-        chipGroup: Int,
-        additional: Expression<Bool>?
-    ) -> Expression<Bool>? {
+    private func buildFilter(from criteria: TopBarViewModel.SearchCriteria) -> Expression<Bool>? {
         var clauses: [Expression<Bool>] = []
 
-        if !keyword.isEmpty {
+        // 关键词搜索
+        if !criteria.keyword.isEmpty {
             clauses.append(
-                Col.appName.like("%\(keyword)%")
-                    || Col.searchText.like("%\(keyword)%")
+                Col.appName.like("%\(criteria.keyword)%")
+                    || Col.searchText.like("%\(criteria.keyword)%"),
             )
         }
 
-        if chipGroup != -1 {
-            clauses.append(Col.group == chipGroup)
+        // 分组筛选
+        if criteria.chipGroup != -1 {
+            clauses.append(Col.group == criteria.chipGroup)
         }
 
-        if let additional {
-            clauses.append(additional)
+        // 类型筛选
+        if !criteria.selectedTypes.isEmpty {
+            var tagValues: [String] = []
+            for type in criteria.selectedTypes {
+                let value = type.tagValue
+                if !value.isEmpty {
+                    tagValues.append(value)
+                }
+            }
+            if !tagValues.isEmpty {
+                let tagCondition = tagValues.map { (Col.tag ?? "") == $0 }
+                    .reduce(Expression<Bool>(value: false)) { result, condition in
+                        result || condition
+                    }
+                clauses.append(tagCondition)
+            }
+        }
+
+        // 应用筛选
+        if !criteria.selectedAppNames.isEmpty {
+            let appNamesArray = Array(criteria.selectedAppNames)
+            let appCondition = appNamesArray.map { Col.appName == $0 }.reduce(
+                Expression<Bool>(value: false),
+            ) { result, condition in
+                result || condition
+            }
+            clauses.append(appCondition)
+        }
+
+        // 日期筛选
+        if let dateFilter = criteria.selectedDateFilter {
+            let (start, end) = dateFilter.timestampRange()
+            if let endTimestamp = end {
+                let dateCondition = Col.ts >= start && Col.ts < endTimestamp
+                clauses.append(dateCondition)
+            } else {
+                let dateCondition = Col.ts >= start
+                clauses.append(dateCondition)
+            }
+        }
+
+        // 分类筛选
+        if !criteria.selectedCategoryIds.isEmpty {
+            let categoryIdsArray = Array(criteria.selectedCategoryIds)
+            let categoryCondition = categoryIdsArray.map { Col.group == $0 }
+                .reduce(Expression<Bool>(value: false)) { result, condition in
+                    result || condition
+                }
+            clauses.append(categoryCondition)
         }
 
         return clauses.reduce(nil) { partial, next in
@@ -244,10 +270,8 @@ extension PasteDataStore {
         }
     }
 
-    func resetDefaultList() {
-        Task {
-            await resetDefaultListAsync()
-        }
+    func resetDefaultList() async {
+        await resetDefaultListAsync()
     }
 
     private func resetDefaultListAsync() async {
@@ -260,14 +284,10 @@ extension PasteDataStore {
     }
 
     /// 数据搜索（关键词 + 自定义分组 + 过滤视图）
-    func searchData(_ criteria: SearchCriteria) {
+    func searchData(_ criteria: TopBarViewModel.SearchCriteria) async {
         searchTask?.cancel()
         searchTask = Task {
-            let filter = buildFilter(
-                keyword: criteria.keyword,
-                chipGroup: criteria.chipGroup,
-                additional: criteria.filterExpression
-            )
+            let filter = buildFilter(from: criteria)
 
             currentFilter = filter
             isInFilterMode = (filter != nil)
@@ -275,8 +295,11 @@ extension PasteDataStore {
             lastRequestedPage = 0
 
             let rows = await sqlManager.search(filter: filter, limit: pageSize)
+            try Task.checkCancellation()
+
             let result = await getItems(rows: rows)
             try Task.checkCancellation()
+
             updateData(with: result, changeType: .searchFilter)
             hasMoreData = result.count == pageSize
         }
