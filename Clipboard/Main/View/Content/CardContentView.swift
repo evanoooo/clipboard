@@ -32,9 +32,7 @@ struct CardContentView: View {
             FileContentView(model: model)
         case .image:
             ImageContentView(model: model)
-        case .none:
-            EmptyView()
-        @unknown default:
+        default:
             EmptyView()
         }
     }
@@ -43,18 +41,17 @@ struct CardContentView: View {
 struct CSSView: View {
     var model: PasteboardModel
     var body: some View {
-        if let hex = String(data: model.data, encoding: .utf8) {
-            VStack(alignment: .center) {
-                Text(hex)
-                    .font(.title2)
-            }
-            .frame(
-                width: Const.cardSize,
-                height: Const.cntSize,
-                alignment: .center,
-            )
-            .background(Color(nsColor: NSColor(hex: hex)))
+        VStack(alignment: .center) {
+            Text(model.attributeString.string)
+                .font(.title2)
+                .foregroundStyle(.primary)
         }
+        .frame(
+            width: Const.cardSize,
+            height: Const.cntSize,
+            alignment: .center,
+        )
+        .background(Color(nsColor: NSColor(hex: model.attributeString.string)))
     }
 }
 
@@ -195,8 +192,8 @@ struct LinkPreviewCard: View {
             guard !Task.isCancelled else { return }
 
             if let html = String(data: data, encoding: .utf8),
-               let iconURL = parseFirstHTMLIconURL(html: html, baseURL: url),
-               let img = await fetchImage(iconURL, session: session)
+                let iconURL = parseFirstHTMLIconURL(html: html, baseURL: url),
+                let img = await fetchImage(iconURL, session: session)
             {
                 await MainActor.run { favicon = img }
                 return
@@ -239,7 +236,7 @@ struct LinkPreviewCard: View {
             if let dataRange = url.absoluteString.range(of: ",") {
                 let b64 = String(url.absoluteString[dataRange.upperBound...])
                 if let data = Data(base64Encoded: b64),
-                   let img = NSImage(data: data)
+                    let img = NSImage(data: data)
                 {
                     img.cacheMode = .bySize
                     return img
@@ -300,12 +297,12 @@ struct LinkPreviewCard: View {
                     let titleHTML = String(html[titleMatch])
                     let title =
                         titleHTML
-                            .replacingOccurrences(
-                                of: "<[^>]+>",
-                                with: "",
-                                options: .regularExpression,
-                            )
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .replacingOccurrences(
+                            of: "<[^>]+>",
+                            with: "",
+                            options: .regularExpression,
+                        )
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
 
                     if !title.isEmpty, title != url.host {
                         guard !Task.isCancelled else { return }
@@ -448,8 +445,8 @@ struct CheckerboardBackground: View {
 
     var darkColor: Color {
         colorScheme == .light
-            ? Color(nsColor: NSColor(hex: "#f2f2f2"))
-            : Color(nsColor: NSColor(hex: "#282828"))
+            ? Const.lightImageColor
+            : Const.darkImageColor
     }
 
     var body: some View {
@@ -457,8 +454,8 @@ struct CheckerboardBackground: View {
             let rows = Int(ceil(size.height / squareSize))
             let cols = Int(ceil(size.width / squareSize))
 
-            for row in 0 ..< rows {
-                for col in 0 ..< cols {
+            for row in 0..<rows {
+                for col in 0..<cols {
                     let rect = CGRect(
                         x: CGFloat(col) * squareSize,
                         y: CGFloat(row) * squareSize,

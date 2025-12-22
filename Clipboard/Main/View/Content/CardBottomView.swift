@@ -14,9 +14,9 @@ struct CardBottomView: View {
 
     @ViewBuilder
     var body: some View {
-        if model.type == .image {
-            let intro = model.introString()
-            Text(intro)
+        switch model.type {
+        case .image:
+            Text(model.introString())
                 .padding(Const.space4)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -24,9 +24,15 @@ struct CardBottomView: View {
                 .cornerRadius(Const.radius)
                 .frame(maxHeight: Const.bottomSize, alignment: .bottom)
                 .padding(.bottom, Const.space4)
-        } else if model.url != nil, enableLinkPreview {
+        case .link:
+            if enableLinkPreview {
+                EmptyView()
+            } else {
+                CommonBottomView(model: model)
+            }
+        case .color:
             EmptyView()
-        } else {
+        default:
             CommonBottomView(model: model)
         }
     }
@@ -56,8 +62,14 @@ struct CommonBottomView: View {
                         gradient: Gradient(stops: [
                             .init(color: baseColor, location: 0.0),
                             .init(color: baseColor, location: 0.35),
-                            .init(color: baseColor.opacity(0.9), location: 0.65),
-                            .init(color: baseColor.opacity(0.8), location: 0.85),
+                            .init(
+                                color: baseColor.opacity(0.9),
+                                location: 0.65
+                            ),
+                            .init(
+                                color: baseColor.opacity(0.8),
+                                location: 0.85
+                            ),
                             .init(color: .clear, location: 1.0),
                         ]),
                         startPoint: .bottom,
@@ -68,13 +80,11 @@ struct CommonBottomView: View {
     }
 
     private func calculateNeedsMask() -> Bool {
-        guard let data = model.showData,
-              let text = String(data: data, encoding: .utf8),
-              !text.isEmpty
+        guard model.pasteboardType.isText()
         else {
             return false
         }
-
+        let text = model.attributeString.string
         let textHeight = calculateTextHeight(text: text)
         return textHeight > (Const.cntSize - Const.bottomSize)
     }
@@ -98,7 +108,9 @@ struct CommonBottomView: View {
 
         let boundingBox = (normalized as NSString).boundingRect(
             with: constraintRect,
-            options: [.usesLineFragmentOrigin, .usesFontLeading, .usesDeviceMetrics],
+            options: [
+                .usesLineFragmentOrigin, .usesFontLeading, .usesDeviceMetrics,
+            ],
             attributes: [
                 .font: font,
                 .paragraphStyle: paragraphStyle,

@@ -54,11 +54,7 @@ final class PasteboardModel: Identifiable {
     }
 
     var isCSS: Bool {
-        if pasteboardType == .string {
-            let str = String(data: data, encoding: .utf8) ?? ""
-            return str.isCSSHexColor
-        }
-        return false
+        return attributeString.string.isCSSHexColor
     }
 
     init(
@@ -84,10 +80,11 @@ final class PasteboardModel: Identifiable {
         self.group = group
         self.tag = tag
 
-        attributeString = NSAttributedString(
-            with: showData,
-            type: pasteboardType,
-        ) ?? NSAttributedString()
+        attributeString =
+            NSAttributedString(
+                with: showData,
+                type: pasteboardType,
+            ) ?? NSAttributedString()
 
         uniqueId = Self.generateUniqueId(
             for: pasteboardType,
@@ -150,14 +147,14 @@ final class PasteboardModel: Identifiable {
         if type.isText() {
             let att =
                 NSAttributedString(with: content, type: type)
-                    ?? NSAttributedString()
+                ?? NSAttributedString()
             guard !att.string.allSatisfy(\.isWhitespace) else {
                 return nil
             }
             length = att.length
             showAtt =
                 length > 250
-                    ? att.attributedSubstring(from: NSMakeRange(0, 250)) : att
+                ? att.attributedSubstring(from: NSMakeRange(0, 250)) : att
             showData = showAtt?.toData(with: type)
             searchText = att.string
         }
@@ -190,6 +187,14 @@ final class PasteboardModel: Identifiable {
     {
         switch type {
         case .rtf, .rtfd:
+            if let attr = NSAttributedString(with: content, type: type) {
+                if attr.string.isCSSHexColor {
+                    return "color"
+                }
+                if attr.string.asCompleteURL() != nil {
+                    return "link"
+                }
+            }
             return "rich"
         case .string:
             guard let str = String(data: content, encoding: .utf8) else {
@@ -347,11 +352,11 @@ extension PasteboardModel {
             return (fallbackBG, .secondary, false)
         }
         if attributeString.length > 0,
-           let bg = attributeString.attribute(
-               .backgroundColor,
-               at: 0,
-               effectiveRange: nil,
-           ) as? NSColor
+            let bg = attributeString.attribute(
+                .backgroundColor,
+                at: 0,
+                effectiveRange: nil,
+            ) as? NSColor
         {
             return (Color(bg), getRTFColor(baseNS: bg), true)
         }
@@ -472,7 +477,7 @@ extension PasteboardModel {
     private func promisedTypeIdentifier(for fileURL: URL) -> String {
         do {
             let values = try fileURL.resourceValues(forKeys: [
-                .contentTypeKey,
+                .contentTypeKey
             ])
             if let type = values.contentType {
                 return type.identifier
@@ -495,7 +500,7 @@ extension PasteboardModel {
         switch type {
         case .rtf, .rtfd:
             if let attributeString = NSAttributedString(with: data, type: type),
-               let textData = attributeString.string.data(using: .utf8)
+                let textData = attributeString.string.data(using: .utf8)
             {
                 return textData.sha256Hex
             }
@@ -534,7 +539,13 @@ enum PasteModelType: String {
     init(with type: PasteboardType, model: PasteboardModel) {
         switch type {
         case .rtf, .rtfd:
-            self = .rich
+            if model.isCSS {
+                self = .color
+            } else if model.url != nil {
+                self = .link
+            } else {
+                self = .rich
+            }
         case .string:
             if model.isCSS {
                 self = .color
