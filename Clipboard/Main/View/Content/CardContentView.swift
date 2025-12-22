@@ -343,10 +343,7 @@ struct FileContentView: View {
     var model: PasteboardModel
 
     var body: some View {
-        if let url = String(data: model.data, encoding: .utf8) {
-            let fileUrls = url.components(separatedBy: "\n").filter {
-                !$0.isEmpty
-            }
+        if let fileUrls = model.cachedFilePaths {
             if fileUrls.count > 1 {
                 MultipleFilesView(fileURLs: fileUrls)
             } else if let firstURL = fileUrls.first {

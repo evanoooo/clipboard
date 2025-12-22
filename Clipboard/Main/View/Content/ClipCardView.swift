@@ -68,7 +68,6 @@ struct ClipCardView: View {
                     )
 
                 CardBottomView(model: model)
-                    .id("\(model.id ?? 0)-\(model.group)")
             }
             .background {
                 if model.url == nil

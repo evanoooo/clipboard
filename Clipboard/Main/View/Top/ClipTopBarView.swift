@@ -81,12 +81,12 @@ struct ClipTopBarView: View {
         .padding(Const.space4)
         .frame(width: Const.topBarWidth, height: 32.0)
         .overlay(
-            RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
+            RoundedRectangle(cornerRadius: Const.radius * 2, style: .continuous)
                 .stroke(
                     focus == .search
                         ? Color.accentColor.opacity(0.4)
                         : Color.gray.opacity(0.4),
-                    lineWidth: 3.5,
+                    lineWidth: 4.0,
                 )
                 .padding(-1),
         )
@@ -190,7 +190,7 @@ struct ClipTopBarView: View {
                 if topBarVM.editingNewChip {
                     addChipView
                 }
-                if env.focusView != .search, env.focusView != .filter {
+                if isFocusHistory {
                     plusIcon
                 }
             }
@@ -216,7 +216,7 @@ struct ClipTopBarView: View {
             onCycleColor: {
                 let nextIndex =
                     (topBarVM.newChipColorIndex + 1)
-                        % CategoryChip.palette.count
+                    % CategoryChip.palette.count
                 topBarVM.newChipColorIndex = nextIndex
             },
         )
@@ -328,6 +328,11 @@ struct ClipTopBarView: View {
         }
 
         return event
+    }
+
+    private var isFocusHistory: Bool {
+        !topBarVM.hasInput && env.focusView != .search
+            && env.focusView != .filter
     }
 
     private func focusHistory() {
@@ -461,7 +466,7 @@ class MenuActions: NSObject {
     @objc func invokeHelp() {
         if let url = URL(
             string:
-            "https://github.com/Ineffable919/clipboard/blob/master/README.md",
+                "https://github.com/Ineffable919/clipboard/blob/master/README.md",
         ) {
             NSWorkspace.shared.open(url)
         }

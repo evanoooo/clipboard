@@ -42,7 +42,7 @@ final class PasteboardModel: Identifiable {
     private var cachedImageSize: CGSize?
     private var cachedBackgroundColor: Color?
     private var cachedForegroundColor: Color?
-    private var cachedFilePaths: [String]?
+    var cachedFilePaths: [String]?
     private var cachedHasBackgroundColor: Bool = false
 
     var url: URL? {
