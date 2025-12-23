@@ -26,11 +26,11 @@ struct TagView: View {
         //    .buttonStyle(.plain)
         }
         .padding(.horizontal, Const.space6)
-        .padding(.vertical, Const.space2)
+        .padding(.vertical, Const.space4)
         .frame(height: 20.0, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Const.radius * 2)
-                .fill(Color.accentColor.opacity(0.2)),
+                .fill(Color.secondary.opacity(0.2)),
         )
     }
 }
