@@ -44,6 +44,19 @@ struct AboutSettingView: View {
                             x: 0,
                             y: 6,
                         )
+                        .onDrag {
+                            if let appURL = Bundle.main.bundleURL as NSURL? {
+                                return NSItemProvider(object: appURL)
+                            }
+                            return NSItemProvider()
+                        }
+                        .onHover { isHovered in
+                            if isHovered {
+                                NSCursor.openHand.set()
+                            } else {
+                                NSCursor.arrow.set()
+                            }
+                        }
                 }
                 Text(appName)
                     .font(
@@ -95,7 +108,7 @@ struct AboutSettingView: View {
                     ) {
                         if let url = URL(
                             string:
-                            "https://github.com/Ineffable919/clipboard",
+                                "https://github.com/Ineffable919/clipboard",
                         ) {
                             NSWorkspace.shared.open(url)
                         }
@@ -104,7 +117,7 @@ struct AboutSettingView: View {
                     LinkButton(title: "反馈建议", icon: "envelope") {
                         if let url = URL(
                             string:
-                            "https://github.com/Ineffable919/clipboard/issues",
+                                "https://github.com/Ineffable919/clipboard/issues",
                         ) {
                             NSWorkspace.shared.open(url)
                         }
@@ -155,7 +168,8 @@ struct LinkButton: View {
             .background(
                 RoundedRectangle(cornerRadius: Const.radius)
                     .fill(
-                        isHovered ? Color.accentColor.opacity(0.1) : Color.clear,
+                        isHovered
+                            ? Color.accentColor.opacity(0.1) : Color.clear,
                     ),
             )
             .overlay(
