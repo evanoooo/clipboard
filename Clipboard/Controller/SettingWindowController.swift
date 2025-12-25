@@ -10,7 +10,7 @@ import SwiftUI
 
 class SettingWindowController: NSWindowController {
     static let shared = SettingWindowController()
-    private static var settingView = SettingView()
+    private var settingView = SettingView()
 
     private init() {
         let window = NSWindow(
@@ -31,11 +31,9 @@ class SettingWindowController: NSWindowController {
         window.center()
         window.isReleasedWhenClosed = false
         window.titlebarSeparatorStyle = .none
-
         window.titlebarAppearsTransparent = true
-        window.backgroundColor = NSColor.windowBackgroundColor
 
-        window.contentView = NSHostingView(rootView: Self.settingView)
+        window.contentView = NSHostingView(rootView: self.settingView)
 
         super.init(window: window)
 
@@ -51,9 +49,9 @@ class SettingWindowController: NSWindowController {
             guard event.window === SettingWindowController.shared.window else {
                 return event
             }
-            // Cmd+W 关闭窗口
+            // Cmd + W 关闭窗口
             if event.modifierFlags.contains(.command),
-               event.charactersIgnoringModifiers == "w"
+                event.charactersIgnoringModifiers == "w"
             {
                 if self?.window?.isKeyWindow == true {
                     self?.hideWindow()
@@ -62,7 +60,7 @@ class SettingWindowController: NSWindowController {
             }
             // Cmd + M 最小化窗口
             if event.modifierFlags.contains(.command),
-               event.charactersIgnoringModifiers == "m"
+                event.charactersIgnoringModifiers == "m"
             {
                 if self?.window?.isKeyWindow == true {
                     self?.minWindow()

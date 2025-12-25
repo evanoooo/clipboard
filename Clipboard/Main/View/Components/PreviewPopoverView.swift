@@ -49,6 +49,20 @@ struct PreviewPopoverView: View {
 
                 Text(model.type.string)
                     .font(.body)
+
+                if model.type == .file, model.fileSize() == 1,
+                    let fileUrl = model.cachedFilePaths?[0],
+                    let defaultApp = openWithDefaultApp(
+                        fileURL: URL(fileURLWithPath: fileUrl)
+                    )
+                {
+                    BorderedButton(title: "通过 \(defaultApp) 打开") {
+                        NSWorkspace.shared.open(
+                            URL(fileURLWithPath: fileUrl)
+                        )
+
+                    }
+                }
             }
 
             previewContent
@@ -57,7 +71,6 @@ struct PreviewPopoverView: View {
 
             HStack {
                 Text(model.introString())
-                    .font(.body)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                     .truncationMode(.head)
@@ -78,7 +91,7 @@ struct PreviewPopoverView: View {
                     }
                 }
 
-                if model.url != nil,
+                if model.type == .link,
                     enableLinkPreview,
                     let browserName = getDefaultBrowserName()
                 {
@@ -110,6 +123,18 @@ struct PreviewPopoverView: View {
 
     func getDefaultBrowserName() -> String? {
         if let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
+            let bundle = Bundle(url: appURL)
+        {
+            return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
+                as? String ?? bundle.object(
+                    forInfoDictionaryKey: "CFBundleName",
+                ) as? String
+        }
+        return nil
+    }
+
+    func openWithDefaultApp(fileURL: URL) -> String? {
+        if let appURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL),
             let bundle = Bundle(url: appURL)
         {
             return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
@@ -320,6 +345,7 @@ struct BorderedButton: View {
                 .font(.system(size: Const.space12, weight: .light))
                 .foregroundStyle(scheme == .dark ? .white : .black)
         }
+        .focusable(false)
         .buttonStyle(.borderless)
         .padding(.horizontal, Const.space8)
         .padding(.vertical, Const.space4)
