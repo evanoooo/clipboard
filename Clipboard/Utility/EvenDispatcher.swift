@@ -87,7 +87,7 @@ final class EventDispatcher {
     /// Propagate modified event through chain; returning nil consumes.
     private func handle(event: NSEvent) -> NSEvent? {
         if bypassAllEvents, event.keyCode != KeyCode.escape,
-            event.keyCode != KeyCode.delete
+           event.keyCode != KeyCode.delete
         {
             if event.type == .keyDown {
                 let keyChar =
@@ -97,7 +97,7 @@ final class EventDispatcher {
                 ])
 
                 if modifiers.contains(.command), !modifiers.contains(.option),
-                    !modifiers.contains(.control)
+                   !modifiers.contains(.control)
                 {
                     var handled = false
 
@@ -152,7 +152,7 @@ final class EventDispatcher {
                     case "q":
                         log.debug("Quit command received")
                         NSApp.terminate(nil)
-                        handled = true    
+                        handled = true
                     default:
                         break
                     }

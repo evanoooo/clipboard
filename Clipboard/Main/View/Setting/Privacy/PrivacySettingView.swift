@@ -17,13 +17,13 @@ struct PrivacySettingView: View {
     @State private var ignoredApps: [IgnoredAppInfo] = PasteUserDefaults
         .ignoredApps
     @AppStorage(PrefKey.showDuringScreenShare.rawValue) private
-        var showDuringScreenShare = true
+    var showDuringScreenShare = true
     @AppStorage(PrefKey.enableLinkPreview.rawValue) private
-        var enableLinkPreview = true
+    var enableLinkPreview = true
     @AppStorage(PrefKey.ignoreSensitiveContent.rawValue) private
-        var ignoreSensitiveContent = true
+    var ignoreSensitiveContent = true
     @AppStorage(PrefKey.ignoreEphemeralContent.rawValue) private
-        var ignoreEphemeralContent = true
+    var ignoreEphemeralContent = true
     @AppStorage(PrefKey.delConfirm.rawValue) private var delConfirm = false
     @State private var hasAccessibilityPermission: Bool = AXIsProcessTrusted()
     @State private var permissionTimer: Timer?
@@ -36,7 +36,7 @@ struct PrivacySettingView: View {
                         PrivacyToggleRow(
                             title: "允许在屏幕共享中显示",
                             subtitle:
-                                "关闭后，在屏幕共享、录屏或演示时，窗口不会被捕获，保护您的隐私。",
+                            "关闭后，在屏幕共享、录屏或演示时，窗口不会被捕获，保护您的隐私。",
                             isOn: $showDuringScreenShare,
                         )
                         Divider()
@@ -166,15 +166,15 @@ struct PrivacySettingView: View {
         }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: NSWindow.didBecomeKeyNotification
-            )
+                for: NSWindow.didBecomeKeyNotification,
+            ),
         ) { _ in
             startPermissionTimer()
         }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: NSWindow.didResignKeyNotification
-            )
+                for: NSWindow.didResignKeyNotification,
+            ),
         ) { _ in
             stopPermissionTimer()
         }
@@ -232,7 +232,7 @@ struct PrivacySettingView: View {
     private func openAccessibilitySettings() {
         if let url = URL(
             string:
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
         ) {
             NSWorkspace.shared.open(url)
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -339,9 +339,9 @@ struct IgnoredAppRow: View {
         }
 
         if let bundleId = appInfo.bundleIdentifier,
-            let appURL = NSWorkspace.shared.urlForApplication(
-                withBundleIdentifier: bundleId,
-            )
+           let appURL = NSWorkspace.shared.urlForApplication(
+               withBundleIdentifier: bundleId,
+           )
         {
             return NSWorkspace.shared.icon(forFile: appURL.path)
         }

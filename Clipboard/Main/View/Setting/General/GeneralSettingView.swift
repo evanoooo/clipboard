@@ -39,7 +39,7 @@ struct GeneralSettingView: View {
                     )
                     .onChange(of: launchAtLogin) { _, newValue in
                         let success = LaunchAtLoginHelper.shared.setEnabled(
-                            newValue
+                            newValue,
                         )
                         if success {
                             PasteUserDefaults.onStart = newValue
@@ -146,15 +146,15 @@ struct GeneralSettingView: View {
         }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: NSWindow.didBecomeKeyNotification
-            )
+                for: NSWindow.didBecomeKeyNotification,
+            ),
         ) { _ in
             startLaunchAtLoginTimer()
         }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: NSWindow.didResignKeyNotification
-            )
+                for: NSWindow.didResignKeyNotification,
+            ),
         ) { _ in
             stopLaunchAtLoginTimer()
         }
@@ -171,7 +171,7 @@ struct GeneralSettingView: View {
         stopLaunchAtLoginTimer()
         launchAtLoginTimer = Timer.scheduledTimer(
             withTimeInterval: 2.0,
-            repeats: true
+            repeats: true,
         ) { _ in
             Task { @MainActor in
                 refreshLaunchAtLoginStatus()

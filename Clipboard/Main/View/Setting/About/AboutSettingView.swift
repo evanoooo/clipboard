@@ -108,7 +108,7 @@ struct AboutSettingView: View {
                     ) {
                         if let url = URL(
                             string:
-                                "https://github.com/Ineffable919/clipboard",
+                            "https://github.com/Ineffable919/clipboard",
                         ) {
                             NSWorkspace.shared.open(url)
                         }
@@ -117,7 +117,7 @@ struct AboutSettingView: View {
                     LinkButton(title: "反馈建议", icon: "envelope") {
                         if let url = URL(
                             string:
-                                "https://github.com/Ineffable919/clipboard/issues",
+                            "https://github.com/Ineffable919/clipboard/issues",
                         ) {
                             NSWorkspace.shared.open(url)
                         }

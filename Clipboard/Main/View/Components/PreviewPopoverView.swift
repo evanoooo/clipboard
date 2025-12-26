@@ -26,11 +26,11 @@ struct PreviewPopoverView: View {
                 env.focusView = .popover
             }
         }) { contentView }
-        .onDisappear {
-            if env.focusView != .search {
-                env.focusView = .history
+            .onDisappear {
+                if env.focusView != .search {
+                    env.focusView = .history
+                }
             }
-        }
     }
 
     private var contentView: some View {
@@ -51,16 +51,15 @@ struct PreviewPopoverView: View {
                     .font(.body)
 
                 if model.type == .file, model.fileSize() == 1,
-                    let fileUrl = model.cachedFilePaths?[0],
-                    let defaultApp = openWithDefaultApp(
-                        fileURL: URL(fileURLWithPath: fileUrl)
-                    )
+                   let fileUrl = model.cachedFilePaths?[0],
+                   let defaultApp = openWithDefaultApp(
+                       fileURL: URL(fileURLWithPath: fileUrl),
+                   )
                 {
                     BorderedButton(title: "通过 \(defaultApp) 打开") {
                         NSWorkspace.shared.open(
-                            URL(fileURLWithPath: fileUrl)
+                            URL(fileURLWithPath: fileUrl),
                         )
-
                     }
                 }
             }
@@ -92,8 +91,8 @@ struct PreviewPopoverView: View {
                 }
 
                 if model.type == .link,
-                    enableLinkPreview,
-                    let browserName = getDefaultBrowserName()
+                   enableLinkPreview,
+                   let browserName = getDefaultBrowserName()
                 {
                     BorderedButton(title: "使用 \(browserName) 打开") {
                         withAnimation {
@@ -123,7 +122,7 @@ struct PreviewPopoverView: View {
 
     func getDefaultBrowserName() -> String? {
         if let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
-            let bundle = Bundle(url: appURL)
+           let bundle = Bundle(url: appURL)
         {
             return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
                 as? String ?? bundle.object(
@@ -135,7 +134,7 @@ struct PreviewPopoverView: View {
 
     func openWithDefaultApp(fileURL: URL) -> String? {
         if let appURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL),
-            let bundle = Bundle(url: appURL)
+           let bundle = Bundle(url: appURL)
         {
             return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
                 as? String ?? bundle.object(
