@@ -21,31 +21,30 @@ struct ClipTopBarView: View {
     @State private var showFilter: Bool = false
 
     var body: some View {
-        GeometryReader { geo in
-            let leading = leadingSpace(geo: geo)
-
-            HStack(alignment: .center, spacing: Const.space4) {
-                Color.clear
-                    .frame(width: leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        focusHistory()
-                    }
-                if env.focusView == .search || env.focusView == .filter
-                    || topBarVM.hasInput
-                {
-                    searchField
-                } else {
-                    searchIcon
+        HStack(alignment: .center, spacing: Const.space4) {
+            Color.clear
+                .containerRelativeFrame(.horizontal) { width, _ in
+                    let hasInput = env.focusView == .search || env.focusView == .filter || topBarVM.hasInput
+                    return max(0, floor(width / 2 - (hasInput ? 200 : 120)))
                 }
-                typeView
-                Spacer()
-                SettingsMenu(topBarVM: topBarVM)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    focusHistory()
+                }
+            if env.focusView == .search || env.focusView == .filter
+                || topBarVM.hasInput
+            {
+                searchField
+            } else {
+                searchIcon
             }
-            .overlay(alignment: .leading) {
-                if topBarVM.isPaused {
-                    pauseIndicator
-                }
+            typeView
+            Spacer()
+            SettingsMenu(topBarVM: topBarVM)
+        }
+        .overlay(alignment: .leading) {
+            if topBarVM.isPaused {
+                pauseIndicator
             }
         }
         .frame(height: Const.topBarHeight)
@@ -60,29 +59,33 @@ struct ClipTopBarView: View {
             )
             topBarVM.startPauseDisplayTimer()
         }
-        .onDisappear {
-            topBarVM.stopPauseDisplayTimer()
-        }
     }
 
     private var pauseIndicator: some View {
         Button {
             topBarVM.resumePasteboard()
         } label: {
-            HStack(spacing: Const.space4) {
-                Image(systemName: "pause.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.orange)
+            HStack(spacing: Const.space6) {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: Const.space10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 18, height: 18)
+                    .background(.orange, in: .circle)
                 Text(topBarVM.formattedRemainingTime)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            .padding(.horizontal, Const.space10)
+            .padding(.leading, Const.space6)
+            .padding(.trailing, Const.space10)
             .padding(.vertical, Const.space6)
             .background(
-                RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
-                    .fill(Color.orange.opacity(0.2))
+                .ultraThinMaterial,
+                in: .capsule
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(.orange.opacity(0.5), lineWidth: 1)
             )
         }
         .padding(.leading, Const.space8)
@@ -137,39 +140,43 @@ struct ClipTopBarView: View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Const.space6) {
-                        ForEach(topBarVM.tags) { tag in
-                            TagView(tag: tag) {
-                                topBarVM.removeTag(tag)
-                            }
-                        }
-                        TextField(
-                            topBarVM.hasInput ? "" : "搜索",
-                            text: $topBarVM.query,
+                    inputContent(proxy: proxy)
+                        .frame(
+                            minWidth: geo.size.width,
+                            minHeight: geo.size.height,
+                            alignment: .leading
                         )
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .search)
-                        .id("textfield")
-                        .autoScrollOnIMEInput {
-                            proxy.scrollTo("textfield", anchor: .trailing)
-                        }
-                        .onChange(of: focus) {
-                            if focus == .search, env.focusView != .search {
-                                env.focusView = .search
-                            }
-                        }
-                    }
-                    .frame(
-                        minWidth: geo.size.width,
-                        minHeight: geo.size.height,
-                        alignment: .leading,
-                    )
                 }
                 .onChange(of: topBarVM.tags.count) {
                     proxy.scrollTo("textfield", anchor: .trailing)
                 }
                 .onChange(of: topBarVM.query) {
                     proxy.scrollTo("textfield", anchor: .trailing)
+                }
+            }
+        }
+    }
+
+    private func inputContent(proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: Const.space6) {
+            ForEach(topBarVM.tags) { tag in
+                TagView(tag: tag) {
+                    topBarVM.removeTag(tag)
+                }
+            }
+            TextField(
+                topBarVM.hasInput ? "" : "搜索",
+                text: $topBarVM.query
+            )
+            .textFieldStyle(.plain)
+            .focused($focus, equals: .search)
+            .id("textfield")
+            .autoScrollOnIMEInput {
+                proxy.scrollTo("textfield", anchor: .trailing)
+            }
+            .onChange(of: focus) {
+                if focus == .search, env.focusView != .search {
+                    env.focusView = .search
                 }
             }
         }
@@ -307,14 +314,7 @@ struct ClipTopBarView: View {
         }
     }
 
-    private func leadingSpace(geo: GeometryProxy) -> CGFloat {
-        if env.focusView == .search || env.focusView == .filter
-            || topBarVM.hasInput
-        {
-            return max(0, floor(geo.size.width / 2 - 200))
-        }
-        return max(0, floor(geo.size.width / 2 - 120))
-    }
+
 
     private func topKeyDownEvent(_ event: NSEvent) -> NSEvent? {
         guard event.window === ClipMainWindowController.shared.window
