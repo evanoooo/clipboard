@@ -15,6 +15,8 @@ struct HistoryView: View {
     @EnvironmentObject private var env: AppEnvironment
     @State private var historyVM = HistoryViewModel()
     @FocusState private var isFocused: Bool
+    @AppStorage(PrefKey.enableLinkPreview.rawValue)
+    private var enableLinkPreview: Bool = PasteUserDefaults.enableLinkPreview
     private let pd = PasteDataStore.main
 
     var body: some View {
@@ -57,33 +59,26 @@ struct HistoryView: View {
     }
 
     private var emptyStateView: some View {
-        GeometryReader { geo in
-            HStack(alignment: .center) {
-                VStack(alignment: .center, spacing: Const.space12) {
-                    if #available(macOS 26.0, *) {
-                        Image(systemName: "sparkle.text.clipboard")
-                            .font(.system(size: 64))
-                            .foregroundColor(.accentColor.opacity(0.8))
-                    } else {
-                        Image("sparkle.text.clipboard")
-                            .font(.system(size: 64))
-                            .foregroundColor(.accentColor.opacity(0.8))
-                    }
-
-                    Text("没有剪贴板历史")
-                        .foregroundColor(.secondary)
-
-                    Text("复制内容后将显示在这里")
-                        .font(.callout)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
+        VStack(spacing: Const.space12) {
+            if #available(macOS 26.0, *) {
+                Image(systemName: "sparkle.text.clipboard")
+                    .font(.system(size: 64))
+                    .foregroundStyle(Color.accentColor.opacity(0.8))
+            } else {
+                Image("sparkle.text.clipboard")
+                    .font(.system(size: 64))
+                    .foregroundStyle(Color.accentColor.opacity(0.8))
             }
-            .frame(
-                width: geo.size.width,
-                height: geo.size.height,
-            )
+
+            Text("没有剪贴板历史")
+                .foregroundStyle(.secondary)
+
+            Text("复制内容后将显示在这里")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func contentView() -> some View {
@@ -91,19 +86,23 @@ struct HistoryView: View {
             if #available(macOS 26.0, *) {
                 ForEach(pd.dataList.enumerated(), id: \.element.id) {
                     index,
-                        item in
+                    item in
                     cardViewItem(for: item, at: index)
                 }
             } else {
                 ForEach(Array(pd.dataList.enumerated()), id: \.element.id) {
                     index,
-                        item in
+                    item in
                     cardViewItem(for: item, at: index)
                 }
             }
         }
         .padding(.horizontal, Const.cardSpace)
         .padding(.vertical, Const.space4)
+    }
+
+    private var searchKeyword: String {
+        pd.lastDataChangeType == .searchFilter ? pd.currentSearchKeyword : ""
     }
 
     private func cardViewItem(for item: PasteboardModel, at index: Int)
@@ -114,13 +113,15 @@ struct HistoryView: View {
             isSelected: historyVM.selectedId == item.id,
             showPreview: makePreviewBinding(for: item.id),
             quickPasteIndex: quickPasteIndex(for: index),
-            onRequestDelete: { requestDel(id: item.id) },
+            enableLinkPreview: enableLinkPreview,
+            searchKeyword: searchKeyword,
+            onRequestDelete: { requestDel(id: item.id) }
         )
         .contentShape(Rectangle())
         .onTapGesture { handleOptimisticTap(on: item, index: index) }
         .onDrag {
             env.draggingItemId = item.id
-            historyVM.selectedId = item.id
+            historyVM.setSelection(id: item.id, index: index)
             return item.itemProvider()
         }
         .task(id: item.id) {
@@ -189,12 +190,13 @@ struct HistoryView: View {
             updateSelectionAfterDeletion(at: index)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(200))
             historyVM.isDel = false
 
             if pd.dataList.count < 50,
-               pd.hasMoreData,
-               !pd.isLoadingPage
+                pd.hasMoreData,
+                !pd.isLoadingPage
             {
                 pd.loadNextPage()
             }
@@ -207,7 +209,10 @@ struct HistoryView: View {
             historyVM.selectedIndex = nil
         } else {
             let newIndex = min(index, pd.dataList.count - 1)
-            historyVM.setSelection(id: pd.dataList[newIndex].id, index: newIndex)
+            historyVM.setSelection(
+                id: pd.dataList[newIndex].id,
+                index: newIndex
+            )
         }
     }
 
@@ -343,7 +348,7 @@ struct HistoryView: View {
 
     private func handleCopyCommand() -> NSEvent? {
         guard let id = historyVM.selectedId,
-              let item = pd.dataList.first(where: { $0.id == id })
+            let item = pd.dataList.first(where: { $0.id == id })
         else {
             NSSound.beep()
             return nil
@@ -369,7 +374,7 @@ struct HistoryView: View {
     private func handleReturnKey(_ event: NSEvent) -> NSEvent? {
         guard env.focusView == .history else { return event }
         guard let id = historyVM.selectedId,
-              let item = pd.dataList.first(where: { $0.id == id })
+            let item = pd.dataList.first(where: { $0.id == id })
         else {
             return event
         }
@@ -418,7 +423,7 @@ struct HistoryView: View {
             }
 
             guard response == .alertFirstButtonReturn,
-                  let id = historyVM.pendingDeleteId
+                let id = historyVM.pendingDeleteId
             else {
                 return
             }

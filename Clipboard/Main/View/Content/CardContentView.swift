@@ -9,17 +9,17 @@ import SwiftUI
 import WebKit
 
 struct CardContentView: View {
-    var model: PasteboardModel
-    private let pd = PasteDataStore.main
-    @AppStorage(PrefKey.enableLinkPreview.rawValue)
-    private var enableLinkPreview: Bool = PasteUserDefaults.enableLinkPreview
+    let model: PasteboardModel
+    let keyword: String
+    let enableLinkPreview: Bool
+    
+    init(model: PasteboardModel, keyword: String = "", enableLinkPreview: Bool = false) {
+        self.model = model
+        self.keyword = keyword
+        self.enableLinkPreview = enableLinkPreview
+    }
 
-    @ViewBuilder
     var body: some View {
-        let keyword = pd.lastDataChangeType == .searchFilter
-            ? pd.currentSearchKeyword
-            : ""
-
         switch model.type {
         case .link:
             if enableLinkPreview {

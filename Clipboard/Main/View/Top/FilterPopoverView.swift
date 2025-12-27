@@ -16,6 +16,13 @@ struct FilterPopoverView: View {
     @State private var showAllApps: Bool = false
     @State private var tagTypes: [PasteModelType] = []
 
+    // MARK: - 统一的三列网格布局
+    private let threeColumnGrid = [
+        GridItem(.flexible(), spacing: Const.space8),
+        GridItem(.flexible(), spacing: Const.space8),
+        GridItem(.flexible(), spacing: Const.space8),
+    ]
+
     private var displayedAppInfo: [(name: String, path: String)] {
         let totalCount = appInfoList.count
         if totalCount <= 9 {
@@ -62,94 +69,45 @@ struct FilterPopoverView: View {
     // MARK: - Type Section
 
     private var typeSection: some View {
-        VStack(alignment: .leading, spacing: Const.space8) {
-            Text("Type")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Const.space8),
-                    GridItem(.flexible(), spacing: Const.space8),
-                    GridItem(.flexible(), spacing: Const.space8),
-                ],
-                spacing: Const.space8,
-            ) {
-                ForEach(tagTypes, id: \.self) { type in
-                    if type == .string {
-                        textTypeButton()
-                    } else {
-                        let iconAndLabel = type.iconAndLabel
-                        typeButton(
-                            type: type,
-                            icon: iconAndLabel.icon,
-                            label: iconAndLabel.label,
-                        )
-                    }
+        filterSection(title: "Type") {
+            ForEach(tagTypes, id: \.self) { type in
+                if type == .string {
+                    textTypeButton()
+                } else {
+                    let iconAndLabel = type.iconAndLabel
+                    FilterButton(
+                        systemImage: iconAndLabel.icon,
+                        label: iconAndLabel.label,
+                        isSelected: topBarVM.selectedTypes.contains(type),
+                        action: { topBarVM.toggleType(type) }
+                    )
                 }
             }
         }
     }
 
-    private func typeButton(type: PasteModelType, icon: String, label: String)
-        -> some View
-    {
-        FilterButton(
-            icon: {
-                Image(systemName: icon)
-                    .foregroundStyle(
-                        topBarVM.selectedTypes.contains(type)
-                            ? .white : .secondary,
-                    )
-            },
-            label: label,
-            isSelected: topBarVM.selectedTypes.contains(type),
-            action: {
-                topBarVM.toggleType(type)
-            },
-        )
-    }
-
     private func textTypeButton() -> some View {
-        FilterButton(
-            icon: {
-                Image(systemName: "text.document")
-                    .foregroundStyle(
-                        topBarVM.isTextTypeSelected()
-                            ? .white : .secondary,
-                    )
-            },
+        let isSelected = topBarVM.isTextTypeSelected()
+        let iconName = if #available(macOS 15.0, *) { "text.document" } else { "doc.text" }
+        
+        return FilterButton(
+            systemImage: iconName,
             label: "文本",
-            isSelected: topBarVM.isTextTypeSelected(),
-            action: {
-                topBarVM.toggleTextType()
-            },
+            isSelected: isSelected,
+            action: { topBarVM.toggleTextType() }
         )
     }
 
     // MARK: - App Section
 
     private var appSection: some View {
-        VStack(alignment: .leading, spacing: Const.space8) {
-            Text("App")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+        filterSection(title: "App") {
+            ForEach(displayedAppInfo, id: \.name) { appInfo in
+                appButton(name: appInfo.name, path: appInfo.path)
+            }
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Const.space8),
-                    GridItem(.flexible(), spacing: Const.space8),
-                    GridItem(.flexible(), spacing: Const.space8),
-                ],
-                spacing: Const.space8,
-            ) {
-                ForEach(displayedAppInfo, id: \.name) { appInfo in
-                    appButton(name: appInfo.name, path: appInfo.path)
-                }
-
-                if shouldShowMoreButton {
-                    moreButton
-                }
+            if shouldShowMoreButton {
+                moreButton
             }
         }
     }
@@ -177,82 +135,56 @@ struct FilterPopoverView: View {
 
     private var moreButton: some View {
         FilterButton(
-            icon: {
-                Image(
-                    systemName: showAllApps
-                        ? "chevron.up.circle" : "chevron.down.circle",
-                )
-                .font(.system(size: Const.space16))
-            },
+            systemImage: showAllApps ? "chevron.up.circle" : "chevron.down.circle",
             label: showAllApps ? "收起" : "更多",
             isSelected: false,
-            action: {
-                showAllApps.toggle()
-            },
+            action: { showAllApps.toggle() }
         )
     }
 
     // MARK: - Date Section
 
     private var dateSection: some View {
-        VStack(alignment: .leading, spacing: Const.space8) {
-            Text("Date")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: Const.space8),
-                    GridItem(.flexible(), spacing: Const.space8),
-                    GridItem(.flexible(), spacing: Const.space8),
-                ],
-                spacing: Const.space8,
-            ) {
-                ForEach(TopBarViewModel.DateFilterOption.allCases, id: \.self) {
-                    option in
-                    dateButton(option: option)
-                }
+        filterSection(title: "Date") {
+            ForEach(TopBarViewModel.DateFilterOption.allCases, id: \.self) { option in
+                let isSelected = topBarVM.selectedDateFilter == option
+                FilterButton(
+                    systemImage: "calendar",
+                    label: option.displayName,
+                    isSelected: isSelected,
+                    action: { topBarVM.setDateFilter(isSelected ? nil : option) }
+                )
             }
         }
-    }
-
-    private func dateButton(option: TopBarViewModel.DateFilterOption)
-        -> some View
-    {
-        FilterButton(
-            icon: {
-                Image(systemName: "calendar")
-                    .foregroundStyle(
-                        topBarVM.selectedDateFilter == option
-                            ? .white : .secondary,
-                    )
-            },
-            label: option.displayName,
-            isSelected: topBarVM.selectedDateFilter == option,
-            action: {
-                if topBarVM.selectedDateFilter == option {
-                    topBarVM.setDateFilter(nil)
-                } else {
-                    topBarVM.setDateFilter(option)
-                }
-            },
-        )
     }
 
     // MARK: - Clear Filters Button
 
     private var clearFiltersButton: some View {
         FilterButton(
-            icon: {
-                Image(systemName: "xmark.circle")
-                    .font(.system(size: Const.space16))
-            },
+            systemImage: "xmark.circle",
             label: "清除筛选",
             isSelected: false,
-            action: {
-                topBarVM.clearAllFilters()
-            },
+            action: { topBarVM.clearAllFilters() }
         )
+    }
+
+    // MARK: - Reusable Components
+
+    /// 通用筛选区块
+    private func filterSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Const.space8) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(columns: threeColumnGrid, spacing: Const.space8) {
+                content()
+            }
+        }
     }
 
     // MARK: - Helper Methods

@@ -67,9 +67,14 @@ class AppDelegate: NSObject {
 extension AppDelegate: NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         Self.shared = self
-        initClipboard()
-        syncLaunchAtLoginStatus()
+
+        initStatus()
+
         applyAppearanceSettings()
+
+        Task {
+            await initClipboardAsync()
+        }
     }
 
     func applicationSupportsSecureRestorableState(_: NSApplication) -> Bool {
@@ -82,44 +87,41 @@ extension AppDelegate: NSApplicationDelegate {
     }
 
     private func applyAppearanceSettings() {
-        let appearanceMode =
-            AppearanceMode(
-                rawValue: PasteUserDefaults.appearance,
-            ) ?? .system
+        let appearanceMode = AppearanceMode(
+            rawValue: PasteUserDefaults.appearance,
+        ) ?? .system
 
-        DispatchQueue.main.async {
-            switch appearanceMode {
-            case .system:
-                NSApp.appearance = nil
-            case .light:
-                NSApp.appearance = NSAppearance(named: .aqua)
-            case .dark:
-                NSApp.appearance = NSAppearance(named: .darkAqua)
-            }
+        switch appearanceMode {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
         }
     }
 }
 
 extension AppDelegate {
-    private func initClipboard() {
-        initStatus()
-
+    private func initClipboardAsync() async {
         PasteBoard.main.startListening()
-
+        
         PasteDataStore.main.setup()
-
+        
+        initEvent()
+        
         HotKeyManager.shared.initialize()
-
-        DispatchQueue.main.async { [weak self] in
-            FileAccessHelper.shared.restoreAllAccesses()
-            self?.initEvent()
+        
+        syncLaunchAtLoginStatus()
+        
+        Task.detached(priority: .utility) {
+            await FileAccessHelper.shared.restoreAllAccesses()
         }
     }
-
+    
     private func syncLaunchAtLoginStatus() {
         let userDefaultsValue = PasteUserDefaults.onStart
         let actualValue = LaunchAtLoginHelper.shared.isEnabled
-
         if userDefaultsValue != actualValue {
             LaunchAtLoginHelper.shared.setEnabled(userDefaultsValue)
         }
@@ -138,18 +140,16 @@ extension AppDelegate {
             weight: .medium,
             scale: .large,
         )
+
+        let iconName = "heart.text.clipboard.fill"
+        let icon: NSImage?
         if #available(macOS 15.0, *) {
-            menuBarItem.button?.image = NSImage(
-                systemSymbolName: "heart.text.clipboard.fill",
-                accessibilityDescription: "",
-            )?
-                .withSymbolConfiguration(config)
+            icon = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
         } else {
-            menuBarItem.button?.image = NSImage(
-                named: "heart.text.clipboard.fill",
-            )?
-                .withSymbolConfiguration(config)
+            icon = NSImage(named: iconName)
         }
+
+        menuBarItem.button?.image = icon?.withSymbolConfiguration(config)
         menuBarItem.button?.target = self
         menuBarItem.button?.action = #selector(statusBarClick)
         menuBarItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])

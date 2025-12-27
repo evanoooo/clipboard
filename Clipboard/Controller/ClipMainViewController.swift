@@ -56,13 +56,13 @@ final class ClipMainViewController: NSViewController {
             slideContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.view.layoutSubtreeIfNeeded()
             let h = max(self.view.bounds.height, self.defaultHeight)
             self.slideContainer.layer?.transform = CATransform3DMakeTranslation(
                 0,
                 -h,
-                0,
+                0
             )
         }
     }
@@ -106,7 +106,7 @@ final class ClipMainViewController: NSViewController {
     private func animateSlide(
         presented: Bool,
         duration: CFTimeInterval,
-        completion: (() -> Void)?,
+        completion: (() -> Void)?
     ) {
         guard let layer = slideContainer.layer else {
             completion?()
@@ -120,6 +120,7 @@ final class ClipMainViewController: NSViewController {
         let to = CATransform3DMakeTranslation(0, presented ? 0 : -h, 0)
 
         layer.removeAnimation(forKey: "slide")
+        currentAnimDelegate = nil
 
         if duration <= 0 {
             layer.transform = to
@@ -136,31 +137,27 @@ final class ClipMainViewController: NSViewController {
         anim.isRemovedOnCompletion = false
 
         class AnimDelegate: NSObject, CAAnimationDelegate {
-            let onStop: () -> Void
+            var onStop: (() -> Void)?
             init(_ onStop: @escaping () -> Void) { self.onStop = onStop }
             func animationDidStop(_: CAAnimation, finished flag: Bool) {
-                if flag { onStop() }
+                if flag { onStop?() }
+                onStop = nil
             }
         }
 
-        var delegateRef: AnimDelegate!
-        delegateRef = AnimDelegate { [weak self] in
+        let delegate = AnimDelegate { [weak self] in
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             layer.transform = to
-            if let strongSelf = self,
-               strongSelf.currentAnimDelegate === delegateRef
-            {
-                strongSelf.currentAnimDelegate = nil
-            }
+            CATransaction.commit()
+            layer.removeAnimation(forKey: "slide")
+            self?.currentAnimDelegate = nil
             completion?()
         }
 
-        currentAnimDelegate = delegateRef
-        anim.delegate = delegateRef
+        currentAnimDelegate = delegate
+        anim.delegate = delegate
 
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
         layer.add(anim, forKey: "slide")
-        layer.transform = to
-        CATransaction.commit()
     }
 }

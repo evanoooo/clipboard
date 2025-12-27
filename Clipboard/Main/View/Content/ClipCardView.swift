@@ -9,70 +9,73 @@ import AppKit
 import SwiftUI
 
 struct ClipCardView: View {
-    var model: PasteboardModel
-    var isSelected: Bool
+    let model: PasteboardModel
+    let isSelected: Bool
     @Binding var showPreview: Bool
-    var quickPasteIndex: Int?
+    let quickPasteIndex: Int?
+    let enableLinkPreview: Bool
+    let searchKeyword: String
     var onRequestDelete: (() -> Void)?
 
     @EnvironmentObject private var env: AppEnvironment
     private let controller = ClipMainWindowController.shared
-    @AppStorage(PrefKey.enableLinkPreview.rawValue)
-    private var enableLinkPreview: Bool = PasteUserDefaults.enableLinkPreview
 
     var body: some View {
         cardContent
-            .overlay(alignment: .bottomTrailing) {
-                if let index = quickPasteIndex {
-                    quickPasteIndexBadge(index: index)
-                }
-            }
             .overlay {
-                if isSelected {
-                    RoundedRectangle(
-                        cornerRadius: Const.radius + 4,
-                        style: .continuous,
-                    )
-                    .strokeBorder(selectionColor, lineWidth: 4)
-                    .padding(-4)
-                }
+                cardOverlay
             }
             .frame(width: Const.cardSize, height: Const.cardSize)
             .shadow(
                 color: isSelected ? .clear : .black.opacity(0.1),
                 radius: isSelected ? 0 : 4,
                 x: 0,
-                y: isSelected ? 0 : 2,
+                y: isSelected ? 0 : 2
             )
             .padding(Const.space4)
-            .contextMenu(menuItems: {
-                contextMenuContent
-            })
+            .contextMenu { contextMenuContent }
             .popover(isPresented: $showPreview) {
                 PreviewPopoverView(model: model)
             }
     }
 
     @ViewBuilder
+    private var cardOverlay: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if isSelected {
+                RoundedRectangle(cornerRadius: Const.radius + 4, style: .continuous)
+                    .strokeBorder(selectionColor, lineWidth: 4)
+                    .padding(-4)
+            }
+            
+            if let index = quickPasteIndex {
+                quickPasteIndexBadge(index: index)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            }
+        }
+    }
+
     private var cardContent: some View {
         VStack(spacing: 0) {
             CardHeadView(model: model)
                 .id("\(model.id ?? 0)-\(model.group)")
 
             ZStack(alignment: .bottom) {
-                CardContentView(model: model)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: textAlignment,
-                    )
+                CardContentView(
+                    model: model,
+                    keyword: searchKeyword,
+                    enableLinkPreview: enableLinkPreview
+                )
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: textAlignment
+                )
 
-                CardBottomView(model: model)
+                CardBottomView(model: model, enableLinkPreview: enableLinkPreview)
             }
             .background {
-                if model.url == nil
-                    || !enableLinkPreview
-                {
+                if model.url == nil || !enableLinkPreview {
                     model.backgroundColor
                 }
             }
@@ -80,12 +83,11 @@ struct ClipCardView: View {
         }
     }
 
-    @ViewBuilder
     private func quickPasteIndexBadge(index: Int) -> some View {
         let (_, textColor) = model.colors()
-        Text("\(index)")
+        return Text(index, format: .number)
             .font(.system(size: 12, weight: .regular, design: .rounded))
-            .foregroundColor(textColor)
+            .foregroundStyle(textColor)
             .padding(.bottom, Const.space4)
             .padding(.trailing, Const.space8)
             .transition(.scale.combined(with: .opacity))
@@ -95,18 +97,8 @@ struct ClipCardView: View {
         model.pasteboardType.isText() ? .topLeading : .top
     }
 
-    private var contetPadding: CGFloat {
-        if model.pasteboardType.isImage()
-            || (model.type == .link && enableLinkPreview)
-            || model.pasteboardType.isText()
-        {
-            return 0.0
-        }
-        return Const.space8
-    }
-
     private var selectionColor: Color {
-        env.focusView == .history ? Color.accentColor.opacity(0.8) : Color.gray
+        env.focusView == .history ? .accentColor.opacity(0.8) : .gray
     }
 
     private var pasteButtonTitle: String {
@@ -118,58 +110,39 @@ struct ClipCardView: View {
 
     @ViewBuilder
     private var contextMenuContent: some View {
-        Button(action: pasteToCode) {
-            Label(pasteButtonTitle, systemImage: "doc.on.clipboard")
-        }
-        .keyboardShortcut(.return, modifiers: [])
+        Button(pasteButtonTitle, systemImage: "doc.on.clipboard", action: pasteToCode)
+            .keyboardShortcut(.return, modifiers: [])
 
         if model.pasteboardType.isText() {
-            Button(action: pasteAsPlainText) {
-                Label("以纯文本粘贴", systemImage: "text.alignleft")
-            }
-            .keyboardShortcut(.return, modifiers: plainTextModifiers)
+            Button("以纯文本粘贴", systemImage: "text.alignleft", action: pasteAsPlainText)
+                .keyboardShortcut(.return, modifiers: plainTextModifiers)
         }
 
-        Button(action: copyToClipboard) {
-            Label("复制", systemImage: "doc.on.doc")
-        }
-        .keyboardShortcut("c", modifiers: [.command])
+        Button("复制", systemImage: "doc.on.doc", action: copyToClipboard)
+            .keyboardShortcut("c", modifiers: [.command])
 
         Divider()
 
-        Button(action: deleteItem) {
-            Label("删除", systemImage: "trash")
-        }
-        .keyboardShortcut(.delete, modifiers: [])
+        Button("删除", systemImage: "trash", action: deleteItem)
+            .keyboardShortcut(.delete, modifiers: [])
 
         Divider()
 
-        Button(action: togglePreview) {
-            Label("预览", systemImage: "eye")
-        }
-        .keyboardShortcut(.space, modifiers: [])
+        Button("预览", systemImage: "eye", action: togglePreview)
+            .keyboardShortcut(.space, modifiers: [])
     }
 
     private var plainTextModifiers: EventModifiers {
         KeyCode.eventModifiers(from: PasteUserDefaults.plainTextModifier)
     }
 
-    // MARK: - Context Menu Actions
+    // MARK: - Actions
 
-    private func pasteToCode() {
-        env.actions.paste(model)
-    }
-
-    private func pasteAsPlainText() {
-        env.actions.paste(
-            model,
-            isAttribute: false,
-        )
-    }
-
+    private func pasteToCode() { env.actions.paste(model) }
+    private func pasteAsPlainText() { env.actions.paste(model, isAttribute: false) }
     private func copyToClipboard() { env.actions.copy(model) }
     private func deleteItem() { onRequestDelete?() }
-    private func togglePreview() { showPreview = !showPreview }
+    private func togglePreview() { showPreview.toggle() }
 }
 
 #Preview {
@@ -185,10 +158,12 @@ struct ClipCardView: View {
             searchText: "",
             length: 9,
             group: -1,
-            tag: "string",
+            tag: "string"
         ),
         isSelected: true,
         showPreview: .constant(false),
         quickPasteIndex: 1,
+        enableLinkPreview: true,
+        searchKeyword: ""
     )
 }

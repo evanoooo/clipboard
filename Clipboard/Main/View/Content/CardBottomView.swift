@@ -9,22 +9,13 @@ import AppKit
 import SwiftUI
 
 struct CardBottomView: View {
-    var model: PasteboardModel
-    @AppStorage(PrefKey.enableLinkPreview.rawValue)
-    private var enableLinkPreview: Bool = PasteUserDefaults.enableLinkPreview
+    let model: PasteboardModel
+    let enableLinkPreview: Bool
 
-    @ViewBuilder
     var body: some View {
         switch model.type {
         case .image:
-            Text(model.introString())
-                .padding(Const.space4)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .background(Color(.controlBackgroundColor).opacity(0.9))
-                .clipShape(.rect(cornerRadius: Const.radius))
-                .frame(maxHeight: Const.bottomSize, alignment: .bottom)
-                .padding(.bottom, Const.space4)
+            ImageBottomView(introString: model.introString())
         case .link:
             if enableLinkPreview {
                 EmptyView()
@@ -39,12 +30,37 @@ struct CardBottomView: View {
     }
 }
 
-struct CommonBottomView: View {
-    var model: PasteboardModel
+private struct ImageBottomView: View {
+    let introString: String
 
     var body: some View {
-        let (baseColor, textColor) = model.colors()
-        let needsMask = calculateNeedsMask()
+        Text(introString)
+            .padding(Const.space4)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .background(Color(.controlBackgroundColor).opacity(0.9))
+            .clipShape(.rect(cornerRadius: Const.radius))
+            .frame(maxHeight: Const.bottomSize, alignment: .bottom)
+            .padding(.bottom, Const.space4)
+    }
+}
+
+struct CommonBottomView: View {
+    let model: PasteboardModel
+
+    private let colors: (Color, Color)
+    private let needsMask: Bool
+    private let introString: String
+
+    init(model: PasteboardModel) {
+        self.model = model
+        self.colors = model.colors()
+        self.introString = model.introString()
+        self.needsMask = Self.calculateNeedsMask(model: model)
+    }
+
+    var body: some View {
+        let (baseColor, textColor) = colors
 
         ZStack(alignment: .bottom) {
             if needsMask {
@@ -52,18 +68,15 @@ struct CommonBottomView: View {
                     gradient: Gradient(stops: [
                         .init(color: baseColor, location: 0.0),
                         .init(color: baseColor, location: 0.6),
-                        .init(
-                            color: baseColor.opacity(0.8),
-                            location: 0.9,
-                        ),
+                        .init(color: baseColor.opacity(0.8), location: 0.9),
                         .init(color: .clear, location: 1.0),
                     ]),
                     startPoint: .bottom,
-                    endPoint: .top,
+                    endPoint: .top
                 )
             }
 
-            Text(model.introString())
+            Text(introString)
                 .font(.callout)
                 .lineLimit(2)
                 .truncationMode(.head)
@@ -71,32 +84,29 @@ struct CommonBottomView: View {
                 .foregroundStyle(textColor)
                 .padding(.horizontal, Const.space12)
                 .padding(.bottom, Const.space8)
-                .frame(
-                    width: Const.cardSize,
-                )
+                .frame(width: Const.cardSize)
         }
         .frame(maxHeight: 24.0)
     }
 
-    private func calculateNeedsMask() -> Bool {
-        guard model.pasteboardType.isText() else {
-            return false
-        }
+    private static func calculateNeedsMask(model: PasteboardModel) -> Bool {
+        guard model.pasteboardType.isText() else { return false }
 
         let contentTopPadding = Const.space8
         let contentHeightBeforeBottomOverlay = Const.cntSize - Const.bottomSize
+        let contentTextHeight = calculateContentTextHeight(model: model)
 
-        let contentTextHeight = calculateContentTextHeight()
         return (contentTopPadding + contentTextHeight)
             > contentHeightBeforeBottomOverlay
     }
 
-    /// 计算内容区文本（`CardContentView`）的实际渲染高度，用于判断是否需要底部遮罩。
-    private func calculateContentTextHeight() -> CGFloat {
+    private static func calculateContentTextHeight(model: PasteboardModel)
+        -> CGFloat
+    {
         let availableWidth = Const.cardSize - Const.space10 - Const.space8
         let constraintRect = CGSize(
             width: max(0, availableWidth),
-            height: .greatestFiniteMagnitude,
+            height: .greatestFiniteMagnitude
         )
 
         let paragraphStyle = NSMutableParagraphStyle()
@@ -107,57 +117,56 @@ struct CommonBottomView: View {
         let measuredAttributed = makeMeasuringAttributedString(
             base: model.attributeString,
             defaultFont: defaultFont,
-            paragraphStyle: paragraphStyle,
+            paragraphStyle: paragraphStyle
         )
 
         let boundingBox = measuredAttributed.boundingRect(
             with: constraintRect,
             options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil,
+            context: nil
         )
 
         return ceil(boundingBox.height)
     }
 
-    private func makeMeasuringAttributedString(
+    private static func makeMeasuringAttributedString(
         base: NSAttributedString,
         defaultFont: NSFont,
-        paragraphStyle: NSParagraphStyle,
+        paragraphStyle: NSParagraphStyle
     ) -> NSAttributedString {
         let mutable = NSMutableAttributedString(attributedString: base)
 
-        // 处理 CRLF 以及末尾换行导致高度计算偏小的问题
         if mutable.string.contains("\r\n") {
             mutable.mutableString.replaceOccurrences(
                 of: "\r\n",
                 with: "\n",
                 options: [],
-                range: NSRange(location: 0, length: mutable.length),
+                range: NSRange(location: 0, length: mutable.length)
             )
         }
         if mutable.string.hasSuffix("\n") {
             mutable.append(
                 NSAttributedString(
                     string: " ",
-                    attributes: [.font: defaultFont],
-                ),
+                    attributes: [.font: defaultFont]
+                )
             )
         }
 
         if mutable.length > 0,
-           mutable.attribute(.font, at: 0, effectiveRange: nil) == nil
+            mutable.attribute(.font, at: 0, effectiveRange: nil) == nil
         {
             mutable.addAttribute(
                 .font,
                 value: defaultFont,
-                range: NSRange(location: 0, length: mutable.length),
+                range: NSRange(location: 0, length: mutable.length)
             )
         }
 
         mutable.addAttribute(
             .paragraphStyle,
             value: paragraphStyle,
-            range: NSRange(location: 0, length: mutable.length),
+            range: NSRange(location: 0, length: mutable.length)
         )
 
         return mutable

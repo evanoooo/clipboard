@@ -20,6 +20,38 @@ struct PreviewPopoverView: View {
     @AppStorage(PrefKey.enableLinkPreview.rawValue)
     private var enableLinkPreview: Bool = PasteUserDefaults.enableLinkPreview
 
+    // MARK: - 属性
+
+    private var appIcon: NSImage? {
+        guard !model.appPath.isEmpty else { return nil }
+        return NSWorkspace.shared.icon(forFile: model.appPath)
+    }
+
+    private var cachedDataString: String? {
+        String(data: model.data, encoding: .utf8)
+    }
+
+    private var cachedDefaultBrowserName: String? {
+        guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
+              let bundle = Bundle(url: appURL)
+        else { return nil }
+        return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+    }
+
+    private var cachedDefaultAppForFile: String? {
+        guard model.type == .file,
+              model.fileSize() == 1,
+              let fileUrl = model.cachedFilePaths?.first
+        else { return nil }
+        let url = URL(fileURLWithPath: fileUrl)
+        guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
+              let bundle = Bundle(url: appURL)
+        else { return nil }
+        return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+    }
+
     var body: some View {
         FocusableContainer(onInteraction: {
             Task { @MainActor in
@@ -35,72 +67,11 @@ struct PreviewPopoverView: View {
 
     private var contentView: some View {
         VStack(alignment: .leading, spacing: Const.space12) {
-            HStack {
-                if let appIcon {
-                    Image(nsImage: appIcon)
-                        .resizable()
-                        .frame(width: 20, height: 20)
-                }
-
-                Text(model.appName)
-                    .font(.body)
-
-                Spacer()
-
-                Text(model.type.string)
-                    .font(.body)
-
-                if model.type == .file, model.fileSize() == 1,
-                   let fileUrl = model.cachedFilePaths?[0],
-                   let defaultApp = openWithDefaultApp(
-                       fileURL: URL(fileURLWithPath: fileUrl),
-                   )
-                {
-                    BorderedButton(title: "通过 \(defaultApp) 打开") {
-                        NSWorkspace.shared.open(
-                            URL(fileURLWithPath: fileUrl),
-                        )
-                    }
-                }
-            }
-
+            headerView
             previewContent
-                .cornerRadius(Const.radius)
+                .clipShape(.rect(cornerRadius: Const.radius))
                 .shadow(radius: 0.5)
-
-            HStack {
-                Text(model.introString())
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.head)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, Const.space4)
-                    .frame(
-                        maxWidth: Const.maxPreviewWidth - 128,
-                        alignment: .topLeading,
-                    )
-
-                Spacer()
-
-                if model.type == .file, model.fileSize() == 1 {
-                    BorderedButton(title: "在访达中显示") {
-                        withAnimation {
-                            openInFinder()
-                        }
-                    }
-                }
-
-                if model.type == .link,
-                   enableLinkPreview,
-                   let browserName = getDefaultBrowserName()
-                {
-                    BorderedButton(title: "使用 \(browserName) 打开") {
-                        withAnimation {
-                            openInBrowser()
-                        }
-                    }
-                }
-            }
+            footerView
         }
         .padding(Const.space12)
         .frame(
@@ -111,60 +82,83 @@ struct PreviewPopoverView: View {
         )
     }
 
+    // MARK: - 子视图
+
+    private var headerView: some View {
+        HStack {
+            if let appIcon {
+                Image(nsImage: appIcon)
+                    .resizable()
+                    .frame(width: 20, height: 20)
+            }
+
+            Text(model.appName)
+                .font(.body)
+
+            Spacer()
+
+            Text(model.type.string)
+                .font(.body)
+
+            if let fileUrl = model.cachedFilePaths?.first,
+               let defaultApp = cachedDefaultAppForFile
+            {
+                BorderedButton(title: "通过 \(defaultApp) 打开") {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: fileUrl))
+                }
+            }
+        }
+    }
+
+    private var footerView: some View {
+        HStack {
+            Text(model.introString())
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.head)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, Const.space4)
+                .frame(
+                    maxWidth: Const.maxPreviewWidth - 128,
+                    alignment: .topLeading,
+                )
+
+            Spacer()
+
+            if model.type == .file, model.fileSize() == 1 {
+                BorderedButton(title: "在访达中显示", action: openInFinder)
+            }
+
+            if model.type == .link,
+               enableLinkPreview,
+               let browserName = cachedDefaultBrowserName
+            {
+                BorderedButton(title: "使用 \(browserName) 打开", action: openInBrowser)
+            }
+        }
+    }
+
+    // MARK: - Actions
+
     private func openInFinder() {
-        if let filePath = String(data: model.data, encoding: .utf8) {
-            NSWorkspace.shared.selectFile(
-                filePath,
-                inFileViewerRootedAtPath: "",
-            )
-        }
-    }
-
-    func getDefaultBrowserName() -> String? {
-        if let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
-           let bundle = Bundle(url: appURL)
-        {
-            return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
-                as? String ?? bundle.object(
-                    forInfoDictionaryKey: "CFBundleName",
-                ) as? String
-        }
-        return nil
-    }
-
-    func openWithDefaultApp(fileURL: URL) -> String? {
-        if let appURL = NSWorkspace.shared.urlForApplication(toOpen: fileURL),
-           let bundle = Bundle(url: appURL)
-        {
-            return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
-                as? String ?? bundle.object(
-                    forInfoDictionaryKey: "CFBundleName",
-                ) as? String
-        }
-        return nil
+        guard let filePath = cachedDataString else { return }
+        NSWorkspace.shared.selectFile(filePath, inFileViewerRootedAtPath: "")
     }
 
     private func openInBrowser() {
-        if let url = model.url {
-            NSWorkspace.shared.open(url)
-        }
+        guard let url = model.url else { return }
+        NSWorkspace.shared.open(url)
     }
+
+    // MARK: - Preview Content
 
     @ViewBuilder
     private var previewContent: some View {
         switch model.type {
         case .link:
-            if enableLinkPreview {
-                if #available(macOS 26.0, *) {
-                    WebContentView(url: model.url!)
-                } else {
-                    UIWebView(url: model.url!)
-                }
-            } else {
-                textPreview
-            }
+            linkPreview
         case .color:
-            CSSPreview
+            colorPreview
         case .string:
             textPreview
         case .rich:
@@ -174,20 +168,26 @@ struct PreviewPopoverView: View {
         case .file:
             filePreview
         case .none:
-            Text("无预览内容")
-                .font(.callout)
-                .foregroundColor(.secondary)
-                .frame(
-                    width: PreviewPopoverView.defaultWidth,
-                    height: PreviewPopoverView.defaultHeight,
-                    alignment: .center,
-                )
+            emptyPreview
         }
     }
 
     @ViewBuilder
-    private var CSSPreview: some View {
-        if let hex = String(data: model.data, encoding: .utf8) {
+    private var linkPreview: some View {
+        if enableLinkPreview, let url = model.url {
+            if #available(macOS 26.0, *) {
+                WebContentView(url: url)
+            } else {
+                UIWebView(url: url)
+            }
+        } else {
+            textPreview
+        }
+    }
+
+    @ViewBuilder
+    private var colorPreview: some View {
+        if let hex = cachedDataString {
             VStack(alignment: .center) {
                 Text(hex)
                     .font(.title2)
@@ -212,18 +212,16 @@ struct PreviewPopoverView: View {
         } else {
             ZStack {
                 Color(nsColor: .controlBackgroundColor)
-                ScrollView(.vertical, showsIndicators: true) {
-                    Text(String(data: model.data, encoding: .utf8) ?? "")
+                ScrollView(.vertical) {
+                    Text(cachedDataString ?? "")
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Const.space8)
                 }
+                .scrollIndicators(.hidden)
                 .scrollContentBackground(.hidden)
             }
-            .frame(
-                maxWidth: Const.maxPreviewWidth,
-                alignment: .topLeading,
-            )
+            .frame(maxWidth: Const.maxPreviewWidth, alignment: .topLeading)
         }
     }
 
@@ -238,39 +236,35 @@ struct PreviewPopoverView: View {
         } else {
             ZStack {
                 model.backgroundColor
-                ScrollView(.vertical, showsIndicators: true) {
-                    VStack(alignment: .leading) {
-                        if model.hasBgColor {
-                            Text(
-                                AttributedString(
-                                    NSAttributedString(
-                                        with: model.data,
-                                        type: model.pasteboardType,
-                                    )!,
-                                ),
-                            )
-                            .textSelection(.enabled)
-                        } else {
-                            Text(model.attributeString.string)
-                                .foregroundStyle(.primary)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Const.space8)
+                ScrollView(.vertical) {
+                    richTextContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Const.space8)
                 }
+                .scrollIndicators(.hidden)
                 .scrollContentBackground(.hidden)
             }
-            .frame(
-                maxWidth: Const.maxPreviewWidth,
-                alignment: .topLeading,
-            )
+            .frame(maxWidth: Const.maxPreviewWidth, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder
+    private var richTextContent: some View {
+        if model.hasBgColor,
+           let attr = NSAttributedString(with: model.data, type: model.pasteboardType)
+        {
+            Text(AttributedString(attr))
+                .textSelection(.enabled)
+        } else {
+            Text(model.attributeString.string)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
         }
     }
 
     @ViewBuilder
     private var imagePreview: some View {
-        if let image = NSImage(data: model.data) {
+        if let image = model.thumbnail() {
             ZStack {
                 CheckerboardBackground()
                 Image(nsImage: image)
@@ -285,25 +279,18 @@ struct PreviewPopoverView: View {
             Image(systemName: "photo")
                 .resizable()
                 .font(.largeTitle)
-                .foregroundColor(Color.accentColor.opacity(0.8))
+                .foregroundStyle(Color.accentColor.opacity(0.8))
                 .frame(width: 144, height: 144, alignment: .center)
         }
     }
 
     @ViewBuilder
     private var filePreview: some View {
-        VStack(alignment: .leading, spacing: Const.space8) {
-            if let filePaths = String(data: model.data, encoding: .utf8) {
-                let paths = filePaths.split(separator: "\n")
-                    .map {
-                        String($0).trimmingCharacters(
-                            in: .whitespacesAndNewlines,
-                        )
-                    }
-                    .filter { !$0.isEmpty }
-                if paths.count == 1 {
+        Group {
+            if let paths = model.cachedFilePaths, !paths.isEmpty {
+                if paths.count == 1, let firstPath = paths.first {
                     QuickLookPreview(
-                        url: URL(fileURLWithPath: paths.first!),
+                        url: URL(fileURLWithPath: firstPath),
                         maxWidth: Const.maxPreviewWidth - 32,
                         maxHeight: Const.maxContentHeight,
                     )
@@ -322,9 +309,15 @@ struct PreviewPopoverView: View {
         )
     }
 
-    private var appIcon: NSImage? {
-        guard !model.appPath.isEmpty else { return nil }
-        return NSWorkspace.shared.icon(forFile: model.appPath)
+    private var emptyPreview: some View {
+        Text("无预览内容")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(
+                width: PreviewPopoverView.defaultWidth,
+                height: PreviewPopoverView.defaultHeight,
+                alignment: .center,
+            )
     }
 }
 

@@ -25,6 +25,21 @@ struct FilterButton: View {
         self.action = action
     }
 
+    init(
+        systemImage: String,
+        label: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) {
+        self.icon = AnyView(
+            Image(systemName: systemImage)
+                .foregroundStyle(isSelected ? .white : .secondary)
+        )
+        self.label = label
+        self.isSelected = isSelected
+        self.action = action
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: Const.space8) {
