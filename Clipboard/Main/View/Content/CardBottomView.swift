@@ -83,10 +83,13 @@ struct CommonBottomView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(textColor)
                 .padding(.horizontal, Const.space12)
-                .padding(.bottom, Const.space8)
+                .padding(
+                    .bottom,
+                    model.pasteboardType.isFile() ? Const.space8 : Const.space4
+                )
                 .frame(width: Const.cardSize)
         }
-        .frame(maxHeight: 24.0)
+        .frame(maxHeight: 28.0)
     }
 
     private static func calculateNeedsMask(model: PasteboardModel) -> Bool {

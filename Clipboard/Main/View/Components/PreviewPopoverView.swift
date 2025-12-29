@@ -35,7 +35,8 @@ struct PreviewPopoverView: View {
         guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
               let bundle = Bundle(url: appURL)
         else { return nil }
-        return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
+            as? String
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
     }
 
@@ -48,7 +49,8 @@ struct PreviewPopoverView: View {
         guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
               let bundle = Bundle(url: appURL)
         else { return nil }
-        return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
+            as? String
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
     }
 
@@ -118,7 +120,16 @@ struct PreviewPopoverView: View {
     }
 
     private var textStatistics: TextStatistics {
-        TextStatistics(from: model.attributeString.string)
+        let fullText: String =
+            if let attr = NSAttributedString(
+                with: model.data,
+                type: model.pasteboardType
+            ) {
+                attr.string
+            } else {
+                String(data: model.data, encoding: .utf8) ?? ""
+            }
+        return TextStatistics(from: fullText)
     }
 
     private var footerView: some View {

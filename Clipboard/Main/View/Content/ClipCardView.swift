@@ -20,11 +20,9 @@ struct ClipCardView: View {
     @EnvironmentObject private var env: AppEnvironment
     private let controller = ClipMainWindowController.shared
 
-    private var showPreview: Bool {
-        showPreviewId == model.id
-    }
-
     var body: some View {
+        let showPreview = showPreviewId == model.id
+
         cardContent
             .overlay {
                 cardOverlay
@@ -108,7 +106,7 @@ struct ClipCardView: View {
             .font(.system(size: 12, weight: .regular, design: .rounded))
             .foregroundStyle(textColor)
             .padding(.bottom, Const.space4)
-            .padding(.trailing, Const.space8)
+            .padding(.trailing, Const.space4)
             .transition(.scale.combined(with: .opacity))
     }
 
@@ -178,7 +176,7 @@ struct ClipCardView: View {
     private func copyToClipboard() { env.actions.copy(model) }
     private func deleteItem() { onRequestDelete?() }
     private func togglePreview() {
-        showPreviewId = showPreview ? nil : model.id
+        showPreviewId = showPreviewId == model.id ? nil : model.id
     }
 
     private func openEditWindow() {

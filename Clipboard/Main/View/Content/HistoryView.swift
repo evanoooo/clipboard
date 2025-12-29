@@ -149,24 +149,23 @@ struct HistoryView: View {
             env.focusView = .history
         }
 
+        let now = ProcessInfo.processInfo.systemUptime
         let isSameItem = historyVM.selectedId == item.id
+
+        if isSameItem, historyVM.shouldHandleDoubleTap(
+            for: item.id,
+            currentTime: now,
+            interval: 0.2
+        ) {
+            handleDoubleTap(on: item)
+            historyVM.resetTapState()
+            return
+        }
 
         if !isSameItem {
             historyVM.setSelection(id: item.id, index: index)
         }
-
-        let now = ProcessInfo.processInfo.systemUptime
-
-        if historyVM.shouldHandleDoubleTap(
-            for: item.id,
-            currentTime: now,
-            interval: 0.2,
-        ) {
-            handleDoubleTap(on: item)
-            historyVM.resetTapState()
-        } else {
-            historyVM.updateTapState(id: item.id, time: now)
-        }
+        historyVM.updateTapState(id: item.id, time: now)
     }
 
     private func deleteItem(for id: PasteboardModel.ID) {

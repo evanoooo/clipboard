@@ -6,16 +6,17 @@ import SwiftUI
 @Observable
 final class HistoryViewModel {
     private let pd = PasteDataStore.main
+
     var selectedId: PasteboardModel.ID?
-    var selectedIndex: Int?
+    var showPreviewId: PasteboardModel.ID?
+    var isQuickPastePressed: Bool = false
+
+    @ObservationIgnored var selectedIndex: Int?
     @ObservationIgnored var lastTapId: PasteboardModel.ID?
     @ObservationIgnored var lastTapTime: TimeInterval = 0
-    var pendingDeleteId: PasteboardModel.ID?
-
-    var showPreviewId: PasteboardModel.ID?
-    var isDel: Bool = false
-    var isQuickPastePressed: Bool = false
-    var lastLoadTriggerIndex: Int = -1
+    @ObservationIgnored var pendingDeleteId: PasteboardModel.ID?
+    @ObservationIgnored var isDel: Bool = false
+    @ObservationIgnored var lastLoadTriggerIndex: Int = -1
 
     // MARK: - Tap Handling
 

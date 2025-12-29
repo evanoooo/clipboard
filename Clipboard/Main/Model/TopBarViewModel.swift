@@ -106,17 +106,24 @@ final class TopBarViewModel {
 
     // MARK: - Private Properties
 
+    @ObservationIgnored
     private let dataStore: PasteDataStore
+
+    @ObservationIgnored
     private var searchTask: Task<Void, Never>?
 
+    @ObservationIgnored
     private var lastSearchCriteria: SearchCriteria?
 
+    @ObservationIgnored
     private var appPathCache: [String: String] = [:]
 
     // MARK: - Pause Properties
 
     private(set) var isPaused: Bool = false
     private(set) var remainingTime: TimeInterval = 0
+
+    @ObservationIgnored
     private var pauseDisplayTimer: Timer?
 
     var pauseMenuTitle: String {
@@ -499,8 +506,7 @@ final class TopBarViewModel {
         performSearch()
     }
 
-    // MARK: - Tags Management
-
+    @ObservationIgnored
     private let textTagAssociatedValue = "text"
 
     private func addTagForType(_ type: PasteModelType) {
@@ -569,6 +575,7 @@ final class TopBarViewModel {
         tags.append(tag)
     }
 
+    @ObservationIgnored
     private var isLoadingAppPathCache = false
 
     func loadAppPathCache() async {
