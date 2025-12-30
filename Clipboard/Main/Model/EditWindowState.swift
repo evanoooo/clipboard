@@ -8,7 +8,6 @@
 import AppKit
 import SwiftUI
 
-/// 文本统计信息
 struct TextStatistics: Equatable {
     let characterCount: Int
     let wordCount: Int
@@ -21,8 +20,7 @@ struct TextStatistics: Equatable {
             wordCount = 0
             lineCount = 0
         } else {
-            let words = text.split { $0.isWhitespace || $0.isNewline }
-            wordCount = words.count
+            wordCount = text.wordCount
             lineCount = text.count(where: { $0.isNewline }) + 1
         }
     }

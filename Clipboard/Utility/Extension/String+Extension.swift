@@ -40,7 +40,9 @@ extension String {
             return false
         }
 
-        let hasValidHostFormat = cleanHost.contains(".") || cleanHost.localizedStandardContains("localhost")
+        let hasValidHostFormat =
+            cleanHost.contains(".")
+            || cleanHost.localizedStandardContains("localhost")
         guard hasValidHostFormat else {
             return false
         }
@@ -62,14 +64,21 @@ extension String {
             return [url]
         }
 
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+        guard
+            let detector = try? NSDataDetector(
+                types: NSTextCheckingResult.CheckingType.link.rawValue
+            )
+        else {
             return []
         }
 
-        let matches = detector.matches(in: self, range: NSRange(startIndex..., in: self))
+        let matches = detector.matches(
+            in: self,
+            range: NSRange(startIndex..., in: self)
+        )
         return matches.compactMap { match in
             guard let range = Range(match.range, in: self),
-                  let url = match.url
+                let url = match.url
             else {
                 return nil
             }
@@ -95,6 +104,17 @@ extension String {
                 break
             }
         }
-        return String(self[startIndex ..< endIndex])
+        return String(self[startIndex..<endIndex])
+    }
+
+    var wordCount: Int {
+        var count = 0
+        self.enumerateSubstrings(
+            in: self.startIndex..<self.endIndex,
+            options: .byWords
+        ) { _, _, _, _ in
+            count += 1
+        }
+        return count
     }
 }

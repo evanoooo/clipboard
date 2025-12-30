@@ -97,7 +97,7 @@ struct ClipTopBarView: View {
         HStack(spacing: 0) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: Const.iconHdSize, weight: .regular))
-                .foregroundColor(.primary.opacity(0.6))
+                .foregroundStyle(.primary.opacity(0.8))
                 .padding(.horizontal, Const.space6)
 
             inputTagView
@@ -108,7 +108,7 @@ struct ClipTopBarView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: Const.iconHdSize, weight: .regular))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.primary.opacity(0.8))
                 }
                 .buttonStyle(.plain)
             }
@@ -188,7 +188,7 @@ struct ClipTopBarView: View {
         } label: {
             Image(systemName: "line.3.horizontal.decrease")
                 .font(.system(size: Const.iconHdSize, weight: .regular))
-                .foregroundColor(.primary.opacity(0.6))
+                .foregroundStyle(.primary.opacity(0.8))
                 .frame(width: 24, height: 32)
                 .contentShape(Rectangle())
         }
@@ -279,7 +279,6 @@ struct ClipTopBarView: View {
     private var plusIcon: some View {
         Image(systemName: "plus")
             .font(.system(size: Const.iconHdSize, weight: .regular))
-            .symbolRenderingMode(.hierarchical)
             .padding(Const.space6)
             .background(
                 RoundedRectangle(cornerRadius: Const.radius, style: .continuous)

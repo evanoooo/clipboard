@@ -105,7 +105,7 @@ extension PasteDataStore {
 
                 if pType.isText(), showData == nil {
                     if let searchText {
-                        showData = String(searchText.prefix(250)).data(
+                        showData = String(searchText.prefix(300)).data(
                             using: .utf8,
                         )
                     }
@@ -213,7 +213,7 @@ extension PasteDataStore {
     }
 }
 
-// MARK: - 数据操作 对外接口
+// MARK: - 数据操作
 
 extension PasteDataStore {
     func loadNextPage() {
@@ -308,33 +308,6 @@ extension PasteDataStore {
 
     func insertModel(_ model: PasteboardModel) {
         Task {
-            let exist: [Row]
-            await exist = sqlManager.search(
-                filter: Col.uniqueId == model.uniqueId,
-            )
-            if !exist.isEmpty {
-                if let ex = await getItems(rows: exist).first {
-                    await MainActor.run {
-                        if lastDataChangeType == .reset {
-                            if let existingModel = dataList.first(where: { $0.id == ex.id }) {
-                                existingModel.updateDate()
-                                moveItemToFirst(existingModel)
-                            } else {
-                                ex.updateDate()
-                                var list = dataList
-                                list.insert(ex, at: 0)
-                                if list.count > pageSize {
-                                    list = Array(list.prefix(pageSize))
-                                }
-                                dataList = list
-                            }
-                        }
-                    }
-                    await sqlManager.update(id: ex.id!, item: ex)
-                    return
-                }
-            }
-
             let itemId: Int64
             await itemId = sqlManager.insert(item: model)
             model.id = itemId
@@ -344,6 +317,7 @@ extension PasteDataStore {
                 return
             }
             var list = dataList
+            list.removeAll(where: { $0.uniqueId == model.uniqueId })
             list.insert(model, at: 0)
             hasMoreData = list.count >= pageSize
             list = Array(list.prefix(pageSize))
@@ -544,7 +518,7 @@ extension PasteDataStore {
         let hasRich = types.contains(.rich)
 
         if hasString || hasRich {
-            finalTypes.append(.string) // .string 代表文本类型
+            finalTypes.append(.string)
         }
 
         for type in types where type != .string && type != .rich {

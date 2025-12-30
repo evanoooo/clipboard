@@ -598,7 +598,6 @@ final class TopBarViewModel {
     private var isLoadingAppPathCache = false
 
     func loadAppPathCache() async {
-        // 避免重复加载
         guard !isLoadingAppPathCache, appPathCache.isEmpty else { return }
         isLoadingAppPathCache = true
 

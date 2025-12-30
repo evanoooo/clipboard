@@ -14,12 +14,12 @@ struct TagView: View {
     private let iconSize: CGFloat = 14.0
 
     var body: some View {
-        HStack(spacing: Const.space2) {
+        HStack(spacing: Const.space4) {
             tag.icon
                 .frame(width: iconSize, height: iconSize)
 
             Text(tag.label)
-                .font(.system(size: 10, weight: .medium, design: .default))
+                .font(.system(size: 12, weight: .regular, design:.monospaced))
                 .lineLimit(1)
 
             // Button(action: onDelete) {
@@ -30,8 +30,7 @@ struct TagView: View {
             // .buttonStyle(.plain)
         }
         .padding(.horizontal, Const.space8)
-        .padding(.vertical, Const.space4)
-        .frame(height: 24.0, alignment: .leading)
+        .frame(height: 20.0, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Const.radius * 2)
                 .fill(Color.secondary.opacity(0.2)),

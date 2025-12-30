@@ -9,6 +9,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor
 @Observable
 final class PasteboardModel: Identifiable {
     var id: Int64?
@@ -48,6 +49,7 @@ final class PasteboardModel: Identifiable {
     private var cachedForegroundColor: Color?
     var cachedFilePaths: [String]?
     private var cachedHasBackgroundColor: Bool = false
+    private var isThumbnailLoading: Bool = false
 
     var isLink: Bool {
         attributeString.string.isLink()
@@ -102,6 +104,50 @@ final class PasteboardModel: Identifiable {
                     .filter { !$0.isEmpty }
             }
         }
+
+        if pasteboardType == .png || pasteboardType == .tiff {
+            cachedImageSize = Self.computeImageSize(from: data)
+        }
+    }
+
+    // MARK: - 计算图片尺寸
+
+    private static func computeImageSize(from data: Data) -> CGSize? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard
+            let source = CGImageSourceCreateWithData(data as CFData, options),
+            let properties = CGImageSourceCopyPropertiesAtIndex(
+                source,
+                0,
+                options,
+            ) as? [CFString: Any]
+        else {
+            return nil
+        }
+
+        let width: CGFloat
+        let height: CGFloat
+
+        if let w = properties[kCGImagePropertyPixelWidth] as? Int {
+            width = CGFloat(w)
+        } else if let w = properties[kCGImagePropertyPixelWidth] as? CGFloat {
+            width = w
+        } else {
+            return nil
+        }
+
+        if let h = properties[kCGImagePropertyPixelHeight] as? Int {
+            height = CGFloat(h)
+        } else if let h = properties[kCGImagePropertyPixelHeight] as? CGFloat {
+            height = h
+        } else {
+            return nil
+        }
+
+        let dpi = properties[kCGImagePropertyDPIWidth] as? CGFloat ?? 72.0
+        let scale = dpi / 72.0
+
+        return CGSize(width: width / scale, height: height / scale)
     }
 
     convenience init?(with pasteboard: NSPasteboard) {
@@ -153,8 +199,8 @@ final class PasteboardModel: Identifiable {
             }
             length = att.length
             showAtt =
-                length > 250
-                    ? att.attributedSubstring(from: NSMakeRange(0, 250)) : att
+                length > 300
+                    ? att.attributedSubstring(from: NSMakeRange(0, 300)) : att
             showData = showAtt?.toData(with: type)
             searchText = att.string
         }
@@ -246,53 +292,26 @@ final class PasteboardModel: Identifiable {
     }
 
     func imageSize() -> CGSize? {
-        if let cachedImageSize { return cachedImageSize }
-
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard
-            let source = CGImageSourceCreateWithData(data as CFData, options),
-            let properties = CGImageSourceCopyPropertiesAtIndex(
-                source,
-                0,
-                options,
-            ) as? [CFString: Any]
-        else {
-            return nil
-        }
-
-        let width: CGFloat
-        let height: CGFloat
-
-        if let w = properties[kCGImagePropertyPixelWidth] as? Int {
-            width = CGFloat(w)
-        } else if let w = properties[kCGImagePropertyPixelWidth] as? CGFloat {
-            width = w
-        } else {
-            return nil
-        }
-
-        if let h = properties[kCGImagePropertyPixelHeight] as? Int {
-            height = CGFloat(h)
-        } else if let h = properties[kCGImagePropertyPixelHeight] as? CGFloat {
-            height = h
-        } else {
-            return nil
-        }
-
-        // 获取 DPI
-        let dpi = properties[kCGImagePropertyDPIWidth] as? CGFloat ?? 72.0
-        let scale = dpi / 72.0
-
-        let size = CGSize(width: width / scale, height: height / scale)
-        cachedImageSize = size
-        return size
+        cachedImageSize
     }
 
     func thumbnail() -> NSImage? {
-        if let cachedThumbnail { return cachedThumbnail }
+        cachedThumbnail
+    }
 
-        let image = NSImage(data: data)
+    func loadThumbnail() async -> NSImage? {
+        if let cachedThumbnail { return cachedThumbnail }
+        guard !isThumbnailLoading else { return nil }
+
+        isThumbnailLoading = true
+        let imageData = data
+
+        let image = await Task.detached(priority: .utility) {
+            NSImage(data: imageData)
+        }.value
+
         cachedThumbnail = image
+        isThumbnailLoading = false
         return image
     }
 
@@ -586,11 +605,14 @@ extension PasteboardModel {
         return NSItemProvider()
     }
 
-    private static func generateUniqueId(
+    private  static func generateUniqueId(
         for type: PasteboardType,
         data: Data,
     ) -> String {
         switch type {
+        case .png, .tiff:
+            let prefix = data.prefix(1024)
+            return "\(prefix.sha256Hex)-\(data.count)"
         case .rtf, .rtfd:
             if let attributeString = NSAttributedString(with: data, type: type),
                let textData = attributeString.string.data(using: .utf8)

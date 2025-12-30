@@ -178,9 +178,7 @@ struct ImageContentView: View {
         loadingTask = Task {
             guard !Task.isCancelled else { return }
 
-            let loadedImage = await Task.detached(priority: .userInitiated) {
-                await model.thumbnail()
-            }.value
+            let loadedImage = await model.loadThumbnail()
 
             guard !Task.isCancelled, let image = loadedImage else {
                 await MainActor.run { isLoading = false }
@@ -214,7 +212,6 @@ struct CheckerboardBackground: View {
     }
 }
 
-/// 缓存棋盘格图案，避免重复绘制
 private final class CheckerboardCache: @unchecked Sendable {
     static let shared = CheckerboardCache()
 
