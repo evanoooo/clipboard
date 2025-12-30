@@ -287,16 +287,16 @@ struct PreviewPopoverView: View {
 
     @ViewBuilder
     private var richTextContent: some View {
-        if model.hasBgColor,
-            let attr = NSAttributedString(
+        let attr =
+            NSAttributedString(
                 with: model.data,
                 type: model.pasteboardType
-            )
-        {
+            ) ?? NSAttributedString()
+        if model.hasBgColor {
             Text(AttributedString(attr))
                 .textSelection(.enabled)
         } else {
-            Text(model.attributeString.string)
+            Text(attr.string)
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
         }

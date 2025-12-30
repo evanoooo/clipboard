@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import NaturalLanguage
 
 extension String {
     static let regex =
@@ -42,7 +43,7 @@ extension String {
 
         let hasValidHostFormat =
             cleanHost.contains(".")
-            || cleanHost.localizedStandardContains("localhost")
+                || cleanHost.localizedStandardContains("localhost")
         guard hasValidHostFormat else {
             return false
         }
@@ -78,7 +79,7 @@ extension String {
         )
         return matches.compactMap { match in
             guard let range = Range(match.range, in: self),
-                let url = match.url
+                  let url = match.url
             else {
                 return nil
             }
@@ -104,17 +105,46 @@ extension String {
                 break
             }
         }
-        return String(self[startIndex..<endIndex])
+        return String(self[startIndex ..< endIndex])
     }
 
     var wordCount: Int {
         var count = 0
-        self.enumerateSubstrings(
-            in: self.startIndex..<self.endIndex,
+        enumerateSubstrings(
+            in: startIndex ..< endIndex,
             options: .byWords
         ) { _, _, _, _ in
             count += 1
         }
         return count
     }
+
+    var smartWordCount: Int {
+        var count = 0
+
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = self
+
+        tokenizer.enumerateTokens(in: startIndex ..< endIndex) {
+            range,
+                _ in
+            let token = self[range]
+
+            // CJK：逐字符
+            if token.unicodeScalars.allSatisfy({
+                CharacterSet.cjkUnifiedIdeographs.contains($0)
+            }) {
+                count += token.count
+            } else {
+                count += 1
+            }
+            return true
+        }
+        return count
+    }
+}
+
+extension CharacterSet {
+    static let cjkUnifiedIdeographs =
+        CharacterSet(charactersIn: "\u{4E00}" ... "\u{9FFF}")
 }

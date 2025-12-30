@@ -20,7 +20,7 @@ struct TextStatistics: Equatable {
             wordCount = 0
             lineCount = 0
         } else {
-            wordCount = text.wordCount
+            wordCount = text.smartWordCount
             lineCount = text.count(where: { $0.isNewline }) + 1
         }
     }
