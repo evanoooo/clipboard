@@ -14,12 +14,11 @@ class AppDelegate: NSObject {
     static var shared: AppDelegate?
 
     // Sparkle
-    let updaterController: SPUStandardUpdaterController =
-        .init(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil,
-        )
+    lazy var updaterController: SPUStandardUpdaterController = .init(
+        startingUpdater: true,
+        updaterDelegate: self,
+        userDriverDelegate: nil
+    )
 
     private var menuBarItem: NSStatusItem?
 
@@ -379,5 +378,35 @@ extension AppDelegate: NSMenuDelegate {
         }
 
         return "已暂停"
+    }
+}
+
+// MARK: - SPUUpdaterDelegate
+
+extension AppDelegate: SPUUpdaterDelegate {
+    nonisolated func updater(_: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        let version = item.displayVersionString
+        Task { @MainActor in
+            UpdateManager.shared.setUpdateAvailable(version: version)
+        }
+    }
+
+    nonisolated func updaterDidNotFindUpdate(_: SPUUpdater) {
+        Task { @MainActor in
+            UpdateManager.shared.clearUpdate()
+        }
+    }
+
+    nonisolated func updater(
+        _: SPUUpdater,
+        userDidMake choice: SPUUserUpdateChoice,
+        forUpdate _: SUAppcastItem,
+        state _: SPUUserUpdateState
+    ) {
+        if choice == .skip {
+            Task { @MainActor in
+                UpdateManager.shared.clearUpdate()
+            }
+        }
     }
 }

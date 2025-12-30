@@ -67,9 +67,9 @@ struct ClipTopBarView: View {
         } label: {
             HStack(spacing: Const.space6) {
                 Image(systemName: "pause.fill")
-                    .font(.system(size: Const.space10, weight: .bold))
+                    .font(.system(size: Const.space10, weight: .regular))
                     .foregroundStyle(.white)
-                    .frame(width: 18, height: 18)
+                    .frame(width: 18.0, height: 18.0)
                     .background(.orange, in: .circle)
                 Text(topBarVM.formattedRemainingTime)
                     .font(.system(size: 13, weight: .regular, design: .rounded))
@@ -85,7 +85,7 @@ struct ClipTopBarView: View {
             )
             .overlay(
                 Capsule()
-                    .strokeBorder(.orange.opacity(0.5), lineWidth: 1)
+                    .strokeBorder(.orange.opacity(0.2), lineWidth: 1)
             )
         }
         .padding(.leading, Const.space8)
@@ -430,26 +430,36 @@ struct SettingsMenu: View {
     @AppStorage(PrefKey.backgroundType.rawValue)
     private var backgroundTypeRaw: Int = 0
     @State private var isHovered: Bool = false
+    @State private var updateManager = UpdateManager.shared
 
     var topBarVM: TopBarViewModel
 
     var body: some View {
-        Image(systemName: "ellipsis")
-            .font(.system(size: Const.iconHdSize, weight: .regular))
-            .padding(.horizontal, Const.space6)
-            .padding(.vertical, Const.space10)
-            .background(
-                RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
-                    .fill(isHovered ? hoverColor() : Color.clear)
-            )
-            .padding(.trailing)
-            .onHover { hovering in
-                isHovered = hovering
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "ellipsis")
+                .font(.system(size: Const.iconHdSize, weight: .regular))
+                .padding(.horizontal, Const.space6)
+                .padding(.vertical, Const.space10)
+                .background(
+                    RoundedRectangle(cornerRadius: Const.radius, style: .continuous)
+                        .fill(isHovered ? hoverColor() : Color.clear)
+                )
+                .onHover { hovering in
+                    isHovered = hovering
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    showNativeMenu()
+                }
+
+            if updateManager.hasUpdate {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 6.0, height: 6.0)
+                    .offset(x: -Const.space4, y: Const.space4)
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                showNativeMenu()
-            }
+        }
+        .padding(.trailing)
     }
 
     private func hoverColor() -> Color {
@@ -470,6 +480,28 @@ struct SettingsMenu: View {
 
     private func showNativeMenu() {
         let menu = NSMenu()
+
+        if updateManager.hasUpdate {
+            let newVersionItem = NSMenuItem(
+                title: "检测到新版本 \(updateManager.availableVersion ?? "")",
+                action: #selector(MenuActions.checkForUpdates),
+                keyEquivalent: ""
+            )
+            newVersionItem.target = MenuActions.shared
+            if let image = NSImage(
+                systemSymbolName: "arrow.up.circle.dotted",
+                accessibilityDescription: nil
+            ) {
+                let config = NSImage.SymbolConfiguration(
+                    pointSize: 16.0,
+                    weight: .semibold
+                )
+                image.isTemplate = true
+                newVersionItem.image = image.withSymbolConfiguration(config)
+            }
+            menu.addItem(newVersionItem)
+            menu.addItem(NSMenuItem.separator())
+        }
 
         let settingsItem = NSMenuItem(
             title: "设置...",

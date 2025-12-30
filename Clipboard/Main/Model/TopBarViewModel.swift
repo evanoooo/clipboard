@@ -488,7 +488,12 @@ final class TopBarViewModel {
         selectedDateFilter = option
         if let dateFilter = option {
             let tag = InputTag(
-                icon: AnyView(Image(systemName: "calendar")),
+                icon: AnyView(
+                    Image(systemName: "calendar")
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(0.8)
+                ),
                 label: dateFilter.displayName,
                 type: .filterDate,
                 associatedValue: dateFilter.rawValue,
@@ -517,7 +522,12 @@ final class TopBarViewModel {
             }
             if !hasTextTag {
                 let tag = InputTag(
-                    icon: AnyView(Image(systemName: "text.document")),
+                    icon: AnyView(
+                        Image(systemName: "text.document")
+                            .resizable()
+                            .scaledToFit()
+                            .scaleEffect(0.8)
+                    ),
                     label: "文本",
                     type: .filterType,
                     associatedValue: textTagAssociatedValue,
@@ -527,7 +537,12 @@ final class TopBarViewModel {
         } else {
             let (icon, label) = type.iconAndLabel
             let tag = InputTag(
-                icon: AnyView(Image(systemName: icon)),
+                icon: AnyView(
+                    Image(systemName: icon)
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(0.8)
+                ),
                 label: label,
                 type: .filterType,
                 associatedValue: type.rawValue,
@@ -563,7 +578,11 @@ final class TopBarViewModel {
                         .scaledToFit(),
                 )
             } else {
-                AnyView(Image(systemName: "app.fill"))
+                AnyView(
+                    Image(systemName: "app.fill")
+                        .resizable()
+                        .scaledToFit()
+                )
             }
         let tag = InputTag(
             icon: appIcon,
@@ -633,7 +652,11 @@ final class TopBarViewModel {
             selectedTypes.insert(.rich)
             if needAddTag {
                 let tag = InputTag(
-                    icon: AnyView(Image(systemName: "text.document")),
+                    icon: AnyView(
+                        Image(systemName: "text.document")
+                            .resizable()
+                            .scaledToFit()
+                    ),
                     label: "文本",
                     type: .filterType,
                     associatedValue: textTagAssociatedValue,

@@ -102,37 +102,22 @@ struct AboutSettingView: View {
                     UpdaterSettingsView(updater: updater)
                 }
                 HStack(spacing: 20) {
-                    LinkButton(
-                        title: "GitHub",
-                        icon: "chevron.left.forwardslash.chevron.right",
-                    ) {
-                        if let url = URL(
-                            string:
-                            "https://github.com/Ineffable919/clipboard",
-                        ) {
-                            NSWorkspace.shared.open(url)
-                        }
+                    if let github = URL(string: "https://github.com/Ineffable919/clipboard") {
+                        Link("Github", destination: github)
                     }
-
-                    LinkButton(title: "反馈建议", icon: "envelope") {
-                        if let url = URL(
-                            string:
-                            "https://github.com/Ineffable919/clipboard/issues",
-                        ) {
-                            NSWorkspace.shared.open(url)
-                        }
+                    if let issues = URL(string: "https://github.com/Ineffable919/clipboard/issues") {
+                        Link("反馈建议", destination: issues)
                     }
                 }
-                VStack(spacing: 4) {
+                VStack(spacing: Const.space4) {
+                    Text("Made with ❤️ for macOS")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                     Text(
                         "Copyright © \(currentYear) Crown. All rights reserved.",
                     )
                     .font(.caption)
                     .foregroundColor(.secondary)
-
-                    Text("Made with ❤️ for macOS")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
                 .padding(.bottom, Const.space16)
             }

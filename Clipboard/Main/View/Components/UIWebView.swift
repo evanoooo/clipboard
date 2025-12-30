@@ -59,6 +59,12 @@ private struct WebViewRepresentable: NSViewRepresentable {
         }
     }
 
+    static func dismantleNSView(_ nsView: WKWebView, coordinator _: Coordinator) {
+        nsView.stopLoading()
+        nsView.navigationDelegate = nil
+        nsView.loadHTMLString("", baseURL: nil)
+    }
+
     final class Coordinator: NSObject, WKNavigationDelegate {
         @Binding var isLoading: Bool
 

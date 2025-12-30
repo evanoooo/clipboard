@@ -41,6 +41,9 @@ struct WebContentView: View {
                 ),
             )
         }
+        .onDisappear {
+            webPage.stopLoading()
+        }
     }
 }
 

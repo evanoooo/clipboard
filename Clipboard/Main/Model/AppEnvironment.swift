@@ -11,7 +11,7 @@ final class AppEnvironment: ObservableObject {
 
     // UI 状态
     @Published var isShowDel: Bool = false
-    @Published var draggingItemId: Int64?
+    var draggingItemId: Int64?
 
     init() {}
 }
