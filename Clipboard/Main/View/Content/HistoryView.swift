@@ -23,10 +23,10 @@ struct HistoryView: View {
 
     var body: some View {
         ZStack {
-            if pd.dataList.isEmpty {
-                emptyStateView
-            } else {
-                ScrollViewReader { proxy in
+            ScrollViewReader { proxy in
+                if pd.dataList.isEmpty {
+                    emptyStateView
+                } else {
                     ScrollView(.horizontal, showsIndicators: false) {
                         contentView()
                     }
@@ -41,16 +41,17 @@ struct HistoryView: View {
                             proxy.scrollTo(id, anchor: historyVM.scrollAnchor())
                         }
                     }
+                }
+                EmptyView()
                     .onChange(of: pd.dataList) {
                         historyVM.reset(proxy: proxy)
                     }
-                }
-                .onAppear {
-                    appear()
-                }
-                .onDisappear {
-                    disappear()
-                }
+            }
+            .onAppear {
+                appear()
+            }
+            .onDisappear {
+                disappear()
             }
         }
         .contentShape(Rectangle())

@@ -33,7 +33,7 @@ struct PreviewPopoverView: View {
 
     private var cachedDefaultBrowserName: String? {
         guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: .html),
-            let bundle = Bundle(url: appURL)
+              let bundle = Bundle(url: appURL)
         else { return nil }
         return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
             as? String
@@ -42,12 +42,12 @@ struct PreviewPopoverView: View {
 
     private var cachedDefaultAppForFile: String? {
         guard model.type == .file,
-            model.fileSize() == 1,
-            let fileUrl = model.cachedFilePaths?.first
+              model.fileSize() == 1,
+              let fileUrl = model.cachedFilePaths?.first
         else { return nil }
         let url = URL(fileURLWithPath: fileUrl)
         guard let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
-            let bundle = Bundle(url: appURL)
+              let bundle = Bundle(url: appURL)
         else { return nil }
         return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName")
             as? String
@@ -60,11 +60,11 @@ struct PreviewPopoverView: View {
                 env.focusView = .popover
             }
         }) { contentView }
-        .onDisappear {
-            if env.focusView != .search {
-                env.focusView = .history
+            .onDisappear {
+                if env.focusView != .search {
+                    env.focusView = .history
+                }
             }
-        }
     }
 
     private var contentView: some View {
@@ -103,7 +103,7 @@ struct PreviewPopoverView: View {
             }
 
             if let fileUrl = model.cachedFilePaths?.first,
-                let defaultApp = cachedDefaultAppForFile
+               let defaultApp = cachedDefaultAppForFile
             {
                 BorderedButton(title: "通过 \(defaultApp) 打开") {
                     NSWorkspace.shared.open(URL(fileURLWithPath: fileUrl))
@@ -156,8 +156,8 @@ struct PreviewPopoverView: View {
             }
 
             if model.type == .link,
-                enableLinkPreview,
-                let browserName = cachedDefaultBrowserName
+               enableLinkPreview,
+               let browserName = cachedDefaultBrowserName
             {
                 BorderedButton(
                     title: "使用 \(browserName) 打开",
@@ -210,7 +210,7 @@ struct PreviewPopoverView: View {
     @ViewBuilder
     private var linkPreview: some View {
         if enableLinkPreview, model.isLink,
-            let url = model.attributeString.string.asCompleteURL()
+           let url = model.attributeString.string.asCompleteURL()
         {
             if #available(macOS 26.0, *) {
                 WebContentView(url: url)

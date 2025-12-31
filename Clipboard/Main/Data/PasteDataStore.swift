@@ -543,7 +543,7 @@ extension PasteDataStore {
             cachedTagTypes = nil
             return
         }
-        
+
         let modelType: PasteModelType? = switch model.tag {
         case "image": .image
         case "string": .string

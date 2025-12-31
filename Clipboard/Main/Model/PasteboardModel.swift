@@ -605,7 +605,7 @@ extension PasteboardModel {
         return NSItemProvider()
     }
 
-    private  static func generateUniqueId(
+    private static func generateUniqueId(
         for type: PasteboardType,
         data: Data,
     ) -> String {
