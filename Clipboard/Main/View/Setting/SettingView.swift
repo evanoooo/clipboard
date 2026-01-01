@@ -13,6 +13,7 @@ enum SettingPage: String, CaseIterable, Identifiable {
     case privacy = "隐私"
     case keyboard = "快捷键"
     case about = "关于"
+    case ocr = "OCR"
 
     var id: String { rawValue }
 
@@ -23,6 +24,7 @@ enum SettingPage: String, CaseIterable, Identifiable {
         case .privacy: "hand.raised"
         case .keyboard: "command"
         case .about: "info.circle"
+        case .ocr: "barcode.viewfinder"
         }
     }
 }
@@ -64,6 +66,8 @@ struct SettingView: View {
                     KeyboardSettingView()
                 case .about:
                     AboutSettingView()
+                case .ocr:
+                    OCRView()
                 }
             }
             .navigationTitle(selectedPage.rawValue)
