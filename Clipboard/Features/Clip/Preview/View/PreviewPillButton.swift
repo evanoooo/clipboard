@@ -57,7 +57,7 @@ final class PreviewPillButton: NSView {
         backgroundLayer.cornerCurve = .continuous
         layer?.cornerRadius = Const.btnRadius
         layer?.cornerCurve = .continuous
-        layer?.borderWidth = 1
+        layer?.borderWidth = 0.5
         layer?.insertSublayer(backgroundLayer, at: 0)
 
         addSubview(label)
@@ -67,7 +67,7 @@ final class PreviewPillButton: NSView {
         }
 
         snp.makeConstraints { make in
-            make.height.equalTo(24)
+            make.height.equalTo(22)
         }
 
         updateAppearance(animated: false)
