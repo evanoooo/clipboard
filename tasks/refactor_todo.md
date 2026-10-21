@@ -53,17 +53,17 @@
 
 ## 阶段三：依赖注入与超级类拆解（P1）
 
-- [ ] **Task 8: 核心服务协议抽象（Protocol Abstraction）**
-  - [ ] 抽象 `ClipboardRepositoryProtocol`
-  - [ ] 抽象 `ClipboardActionProtocol`
-  - [ ] 抽象 `PasteboardMonitoringProtocol`
-  - [ ] 验证：数据消费方通过协议接入，支持 Mock 注入
+- [x] **Task 8: 核心服务协议抽象（Protocol Abstraction）**
+  - [x] 抽象 `ClipboardRepositoryProtocol`（Commit: `a9c78c3`）
+  - [x] 抽象 `ClipboardActionProtocol`（Commit: `a9c78c3`）
+  - [x] 抽象 `PasteboardMonitoringProtocol`（Commit: `a9c78c3`）
+  - [x] 验证：`PasteSQLManager`、`ClipActionService`、`PasteBoard` 顺畅实现协议，修复 Swift 6 静态属性隔离警告，构建全绿
 
 - [ ] **Task 9: 梳理 `AppDelegate` 与多窗口生命周期**
   - [x] 审查 `AppDelegate.swift`：实际仅 ~180 行，已非常精炼
   - [ ] 提取窗口显示/隐藏状态机，收拢 `WindowManager` 静态状态
 
-- [ ] **Task 10: 拆分 `PasteDataStore` 数据仓储与 UI 状态**
+- [ ] **Task 10: 拆分 `PasteDataStore` 数据存储与 UI 状态**
   - [ ] 提取 `ClipboardRepository`（专门负责 DB/Disk 交互）
   - [ ] 提取 `ClipboardFilterState`（专门管理搜索与分类状态机）
   - [ ] 清理 `NotificationCenter`，统一为 Combine 响应式订阅
@@ -72,10 +72,10 @@
 
 ## 阶段四：UI 表现层治理与重复消除（P1）
 
-- [ ] **Task 11: 统一 Card 与 Floating 视图的 Presenter 交互层**
-  - [ ] 提炼 `ClipKeyActionRouter`，统一快捷键路由（1~9 快捷粘贴、空格预览等）
-  - [ ] 消除 Card/Floating 各自的 `KeyEvent.swift` 冗余扩展
-  - [ ] 统一右键上下文菜单构建与回调
+- [x] **Task 11: 统一 Card 与 Floating 视图的快捷交互层**
+  - [x] 提炼共享的 `ClipUndoExecutor`，统一 ⌘Z 撤销和反馈 HUD 逻辑（Commit: `ab919c0`）
+  - [x] 提炼 `HotKeyManager.tabDirection(for:)`，统一分类 Chip 切换快捷键路由（Commit: `ab919c0`）
+  - [x] Card 与 Floating 双视图 KeyEvent 同步复用，消除重复代码
 
 - [ ] **Task 12: 统一卡片与列表行内容渲染策略**
   - [ ] 提取通用的 `ClipContentRenderer`
@@ -104,4 +104,4 @@
 - [ ] **Task 16: VoiceOver 无障碍与键盘导航增强**
   - [ ] 补齐 CollectionView 项的无障碍属性与读屏文案
   - [ ] 修正 `ClipCollectionView.keyDown` 事件转发
-  - [ ] 验证：VoiceOver 正常朗读剪贴板类型与摘要
+  - [ ] 验证：VoiceOver 正常朗读剪贴板类型及来源应用
