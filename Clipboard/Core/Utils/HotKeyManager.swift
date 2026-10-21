@@ -476,3 +476,39 @@ extension NSEvent.ModifierFlags {
         return flags
     }
 }
+
+// MARK: - Tab Navigation Helpers
+
+enum ClipTabDirection {
+    case previous
+    case next
+}
+
+extension HotKeyManager {
+    func tabDirection(for event: NSEvent) -> ClipTabDirection? {
+        guard let previousTabInfo = getHotKey(key: "previous_tab"),
+              let nextTabInfo = getHotKey(key: "next_tab")
+        else {
+            return nil
+        }
+
+        let relevantModifiers: NSEvent.ModifierFlags = [
+            .command, .option, .control, .shift
+        ]
+        let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
+
+        if previousTabInfo.isEnabled,
+           event.keyCode == previousTabInfo.shortcut.keyCode,
+           eventModifiers == previousTabInfo.shortcut.modifiers.intersection(relevantModifiers) {
+            return .previous
+        }
+
+        if nextTabInfo.isEnabled,
+           event.keyCode == nextTabInfo.shortcut.keyCode,
+           eventModifiers == nextTabInfo.shortcut.modifiers.intersection(relevantModifiers) {
+            return .next
+        }
+
+        return nil
+    }
+}

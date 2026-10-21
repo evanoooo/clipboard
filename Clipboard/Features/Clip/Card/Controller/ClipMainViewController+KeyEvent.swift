@@ -247,34 +247,7 @@ extension ClipMainViewController {
 
     /// ⌘Z：撤销会话内最近一次删除。文本编辑区域不拦截，交给系统文本撤销。
     private func handleUndo() -> NSEvent? {
-        guard ClipUndoStore.shared.canUndo else {
-            NSSound.beep()
-            return nil
-        }
-
-        Task { @MainActor in
-            let outcome = await PasteDataStore.main.undoLastDelete()
-            if outcome.failedCount > 0 {
-                HUDManager.shared.show(
-                    icon: NSImage(
-                        systemSymbolName: "exclamationmark.triangle",
-                        accessibilityDescription: nil
-                    ),
-                    text: String(
-                        localized: .undoDeletePartiallyFailed(
-                            outcome.restoredCount,
-                            outcome.failedCount
-                        )
-                    )
-                )
-                return
-            }
-            guard outcome.restoredCount > 0 else { return }
-            HUDManager.shared.show(
-                icon: NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil),
-                text: String(localized: .undoDeleteSucceeded(outcome.restoredCount))
-            )
-        }
+        ClipUndoExecutor.performUndo()
         return nil
     }
 
@@ -306,31 +279,17 @@ extension ClipMainViewController {
     }
 
     private func handleChipTab(_ event: NSEvent) -> Bool {
-        guard focusRegion == .collection else { return false }
+        guard focusRegion == .collection,
+              let direction = HotKeyManager.shared.tabDirection(for: event)
+        else { return false }
 
-        let relevantModifiers: NSEvent.ModifierFlags = [
-            .command, .option, .control, .shift
-        ]
-        let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
-
-        if let previousTabInfo = HotKeyManager.shared.getHotKey(key: "previous_tab"),
-           previousTabInfo.isEnabled,
-           event.keyCode == previousTabInfo.shortcut.keyCode,
-           eventModifiers == previousTabInfo.shortcut.modifiers.intersection(relevantModifiers) {
+        switch direction {
+        case .previous:
             topVM.selectPreviousChip()
-            topBarView.updateChipSelection()
-            return true
-        }
-
-        if let nextTabInfo = HotKeyManager.shared.getHotKey(key: "next_tab"),
-           nextTabInfo.isEnabled,
-           event.keyCode == nextTabInfo.shortcut.keyCode,
-           eventModifiers == nextTabInfo.shortcut.modifiers.intersection(relevantModifiers) {
+        case .next:
             topVM.selectNextChip()
-            topBarView.updateChipSelection()
-            return true
         }
-
-        return false
+        topBarView.updateChipSelection()
+        return true
     }
 }

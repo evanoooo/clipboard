@@ -215,75 +215,23 @@ extension ClipFloatingViewController {
 
     /// ⌘Z：撤销会话内最近一次删除。
     private func handleUndo() -> NSEvent? {
-        guard ClipUndoStore.shared.canUndo else {
-            NSSound.beep()
-            return nil
-        }
-
-        Task { @MainActor in
-            let outcome = await PasteDataStore.main.undoLastDelete()
-            if outcome.failedCount > 0 {
-                HUDManager.shared.show(
-                    icon: NSImage(
-                        systemSymbolName: "exclamationmark.triangle",
-                        accessibilityDescription: nil
-                    ),
-                    text: String(
-                        localized: .undoDeletePartiallyFailed(
-                            outcome.restoredCount,
-                            outcome.failedCount
-                        )
-                    )
-                )
-                return
-            }
-            guard outcome.restoredCount > 0 else { return }
-            HUDManager.shared.show(
-                icon: NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil),
-                text: String(localized: .undoDeleteSucceeded(outcome.restoredCount))
-            )
-        }
+        ClipUndoExecutor.performUndo()
         return nil
     }
 
     private func handleChipTab(_ event: NSEvent, viewModel: TopBarViewModel) -> Bool {
-        guard
-            let previousTabInfo = HotKeyManager.shared.getHotKey(
-                key: "previous_tab"
-            ),
-            let nextTabInfo = HotKeyManager.shared.getHotKey(key: "next_tab")
-        else {
+        guard let direction = HotKeyManager.shared.tabDirection(for: event) else {
             return false
         }
 
-        let relevantModifiers: NSEvent.ModifierFlags = [
-            .command, .option, .control, .shift
-        ]
-        let eventModifiers = event.modifierFlags.intersection(relevantModifiers)
-
-        if previousTabInfo.isEnabled,
-           event.keyCode == previousTabInfo.shortcut.keyCode,
-           eventModifiers
-           == previousTabInfo.shortcut.modifiers.intersection(
-               relevantModifiers
-           ) {
+        switch direction {
+        case .previous:
             viewModel.selectPreviousChip()
-            floatingContentView.headerView.updateChipSelection()
-            return true
-        }
-
-        if nextTabInfo.isEnabled,
-           event.keyCode == nextTabInfo.shortcut.keyCode,
-           eventModifiers
-           == nextTabInfo.shortcut.modifiers.intersection(
-               relevantModifiers
-           ) {
+        case .next:
             viewModel.selectNextChip()
-            floatingContentView.headerView.updateChipSelection()
-            return true
         }
-
-        return false
+        floatingContentView.headerView.updateChipSelection()
+        return true
     }
 
     // MARK: - Quick Paste
