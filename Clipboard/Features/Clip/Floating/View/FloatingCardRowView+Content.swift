@@ -8,35 +8,25 @@ import SnapKit
 
 extension FloatingCardRowView {
     func makeContentSubview(for model: PasteboardModel, keyword: String) -> NSView {
-        switch model.type {
+        switch ClipContentRenderer.resolveKind(for: model) {
+        case .empty:
+            return NSView()
         case .color:
             return FloatingColorContentView(model: model)
         case .image:
             return FloatingImageContentView(model: model, displayMode: displayMode)
         case .file:
             return FloatingFileContentView(model: model)
-        case .rich:
-            if model.hasBgColor {
-                return FloatingRichContentView(
-                    model: model, keyword: keyword, maximumLines: displayMode == .standard ? 2 : 1
-                )
-            }
+        case .richText:
+            return FloatingRichContentView(
+                model: model, keyword: keyword, maximumLines: displayMode == .standard ? 2 : 1
+            )
+        case .plainText:
             return FloatingTextContentView(
                 model: model, keyword: keyword, maximumLines: displayMode == .standard ? 0 : 1
             )
-        case .link:
-            if PasteUserDefaults.enableLinkPreview {
-                return FloatingLinkContentView(model: model, keyword: keyword, displayMode: displayMode)
-            }
-            return FloatingTextContentView(
-                model: model, keyword: keyword, maximumLines: displayMode == .standard ? 0 : 1
-            )
-        case .string:
-            return FloatingTextContentView(
-                model: model, keyword: keyword, maximumLines: displayMode == .standard ? 0 : 1
-            )
-        case .none:
-            return NSView()
+        case .linkPreview:
+            return FloatingLinkContentView(model: model, keyword: keyword, displayMode: displayMode)
         }
     }
 }
@@ -67,9 +57,7 @@ final class FloatingTextContentView: NSView {
     }
 
     func update(keyword: String, model: PasteboardModel) {
-        let text = keyword.isEmpty
-            ? model.plainTextAttributedString
-            : model.highlightedNSAttributedString(keyword: keyword)
+        let text = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false)
         if textField.maximumNumberOfLines == 1, model.pasteboardType == .string {
             let preview = NSMutableAttributedString(attributedString: text)
             preview.addAttribute(
@@ -108,7 +96,7 @@ final class FloatingRichContentView: NSView {
     }
 
     func update(keyword: String, model: PasteboardModel) {
-        textField.attributedStringValue = model.highlightedRichText(keyword: keyword)
+        textField.attributedStringValue = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true)
     }
 }
 

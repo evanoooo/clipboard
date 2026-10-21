@@ -147,28 +147,21 @@ final class CardContentView: NSView, PassthroughMouseEvents {
     }
 
     private func makeContentView(for model: PasteboardModel, keyword: String) -> NSView {
-        switch model.type {
+        switch ClipContentRenderer.resolveKind(for: model) {
+        case .empty:
+            return NSView()
         case .color:
             return CardColorContentView(model: model)
         case .image:
             return CardImageContentView(model: model, keyword: keyword)
         case .file:
             return CardFileContentView(model: model)
-        case .rich:
-            if model.hasBgColor {
-                return CardRichContentView(model: model, keyword: keyword)
-            } else {
-                return CardStringContentView(model: model, keyword: keyword)
-            }
-        case .link:
-            if PasteUserDefaults.enableLinkPreview {
-                return CardLinkPreviewContentView(model: model, keyword: keyword)
-            }
+        case .richText:
+            return CardRichContentView(model: model, keyword: keyword)
+        case .plainText:
             return CardStringContentView(model: model, keyword: keyword)
-        case .string:
-            return CardStringContentView(model: model, keyword: keyword)
-        case .none:
-            return NSView()
+        case .linkPreview:
+            return CardLinkPreviewContentView(model: model, keyword: keyword)
         }
     }
 }
@@ -192,9 +185,7 @@ final class CardStringContentView: NSView, PassthroughMouseEvents {
     }
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
-        let attributed: NSAttributedString = keyword.isEmpty
-            ? model.plainTextAttributedString
-            : model.highlightedNSAttributedString(keyword: keyword)
+        let attributed = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false)
         textView.textStorage?.setAttributedString(attributed)
         if model.pasteboardType == .string {
             textView.font = .preferredFont(forTextStyle: .body)
@@ -226,7 +217,7 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
 
         addSubview(textView)
         textView.snp.makeConstraints { $0.edges.equalToSuperview() }
-        textView.textStorage?.setAttributedString(model.highlightedRichText(keyword: keyword))
+        textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
         updateBackground()
     }
 
@@ -236,7 +227,7 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
     }
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
-        textView.textStorage?.setAttributedString(model.highlightedRichText(keyword: keyword))
+        textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
     }
 
     override func viewDidChangeEffectiveAppearance() {

@@ -90,11 +90,14 @@
   - [x] 强化版本屏障校验（`filterRevision` / `listRevision`），异步分页与搜索返回时自动丢弃过时（stale）脏数据
   - [x] 精确校准 `hasMoreData` 分页边界判定，防止页未填满或到达总数时发生无效翻页请求
   - [x] 编写 `PaginationTests.swift` 纯逻辑单测，覆盖双重去重、边界状态和版本屏障模拟
-  - [x] 验证：107/107 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过
+  - [x] 验证：107/107 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过（Commit: `db6d6df`）
 
-- [ ] **Task 12: 统一卡片与列表行渲染策略**
-  - [ ] 统一样式解析逻辑，减少冗余类型转换
-  - [ ] 确保列表模式与卡片模式富文本预览与高亮的一致性
+- [x] **Task 12: 统一卡片与列表行渲染策略**
+  - [x] 新建统一渲染中枢 `ClipContentRenderer.swift`，定义 `ClipContentKind` 与文本属性解析流水线
+  - [x] 重构 `CardContentView.swift` 与 `FloatingCardRowView+Content.swift`，消除冗余重复的类型分支判断
+  - [x] 统一富文本高亮、关键字匹配、背景色退化降级处理机制，保证网格与列表两种形态表现一致
+  - [x] 编写 `ClipContentRendererTests.swift` 纯逻辑单测，验证各内容类型的解析映射
+  - [x] 验证：115/115 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过
 
 - [ ] **Task 13: 强化错误处理与用户反馈**
   - [ ] 统一错误提示与关键失败恢复机制

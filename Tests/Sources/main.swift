@@ -34,6 +34,7 @@ struct TestRunner {
         FTSTriggerTests.run(runner: TestRunner.self)
         FilterStateTests.run(runner: TestRunner.self)
         PaginationTests.run(runner: TestRunner.self)
+        ClipContentRendererTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")
