@@ -22,7 +22,12 @@ enum PasteFilterBuilder {
                 clauses.append(Expression<Bool>(value: false))
             } else {
                 for token in tokens {
-                    clauses.append(Col.searchText.like("%\(token)%"))
+                    // 正文命中或别名命中均可；NULL 别名用空串参与比较，避免三值逻辑产出 NULL。
+                    let pattern = "%\(token)%"
+                    clauses.append(
+                        Col.searchText.like(pattern)
+                            || (Col.aliasSearch ?? "").like(pattern)
+                    )
                 }
             }
         }

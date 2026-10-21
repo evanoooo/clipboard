@@ -45,7 +45,7 @@ extension ClipMainViewController {
             focusRegion=\(focusRegion) firstResponder=\(String(describing: view.window?.firstResponder))
             """
         )
-        if focusRegion == .popover || focusRegion == .chipEditing {
+        if focusRegion == .popover || focusRegion == .chipEditing || focusRegion == .aliasEditing {
             return handleFocusedKeyEvent(event)
         }
 
@@ -77,6 +77,11 @@ extension ClipMainViewController {
     }
 
     private func handleFocusedKeyEvent(_ event: NSEvent) -> NSEvent? {
+        // 别名内联编辑：按键全部交给字段编辑器，Enter/Esc 由 CardHeadView 自己处理。
+        if focusRegion == .aliasEditing {
+            return event
+        }
+
         if focusRegion == .popover {
             if event.keyCode == KeyCode.escape {
                 closePreviewPopover()
@@ -229,6 +234,9 @@ extension ClipMainViewController {
         case KeyCode.e:
             return handleEdit()
 
+        case KeyCode.r:
+            return handleRename()
+
         default:
             return event
         }
@@ -249,6 +257,15 @@ extension ClipMainViewController {
     private func handleEdit() -> NSEvent? {
         guard let item = displayedModel(at: selectIndexPath) else { return nil }
         edit(item)
+        return nil
+    }
+
+    /// ⌘R：在卡片标题上就地重命名。
+    private func handleRename() -> NSEvent? {
+        guard displayedModel(at: selectIndexPath) != nil,
+              let itemView = collectionView.item(at: selectIndexPath) as? CollectionViewItem
+        else { return nil }
+        itemView.beginAliasEditing()
         return nil
     }
 

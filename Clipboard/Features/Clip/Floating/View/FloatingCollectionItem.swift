@@ -93,4 +93,9 @@ final class FloatingCollectionItem: NSCollectionViewItem {
         get { cardView.onCreateChip }
         set { cardView.onCreateChip = newValue }
     }
+
+    var onSetAlias: (() -> Void)? {
+        get { cardView.onSetAlias }
+        set { cardView.onSetAlias = newValue }
+    }
 }

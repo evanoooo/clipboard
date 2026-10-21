@@ -61,11 +61,14 @@ actor PasteSQLManager {
             schema.column(Col.length)
             schema.column(Col.group, defaultValue: -1)
             schema.column(Col.tag)
+            schema.column(Col.alias)
+            schema.column(Col.aliasSearch)
             schema.column(Col.hidden, defaultValue: 0)
         }
         do {
             try conn.run(statement)
             try PasteOrder.setup(on: conn)
+            try PasteAliasMigration.setup(on: conn)
         } catch {
             log.error("Create Table Error: \(error)")
         }

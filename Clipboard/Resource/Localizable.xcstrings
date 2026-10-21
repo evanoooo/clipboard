@@ -206,6 +206,24 @@
         }
       }
     },
+    "aliasHint" : {
+      "comment" : "Explain that renaming only affects search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The name is used for search and display only and does not change the content type."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称仅用于搜索与展示，不会改变内容类型。"
+          }
+        }
+      }
+    },
     "app" : {
       "comment" : "App filter section title",
       "extractionState" : "manual",

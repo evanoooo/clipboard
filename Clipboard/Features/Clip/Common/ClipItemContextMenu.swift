@@ -28,6 +28,7 @@ private final class ClipShareAction: NSObject {
     func handleClipPastePlain()
     func handleClipCopy()
     func handleClipEdit()
+    func handleClipRename()
     func handleClipDelete()
     func handleClipAssignToChip(_ sender: NSMenuItem)
     func handleClipCreateChip()
@@ -107,6 +108,14 @@ extension ClipItemMenuActionable where Self: NSObject {
                 modifiers: .command
             ))
         }
+
+        menu.addItem(makeMenuItem(
+            title: String(localized: .rename),
+            symbol: "character.cursor.ibeam",
+            action: #selector(ClipItemMenuActionable.handleClipRename),
+            keyEquivalent: "r",
+            modifiers: .command
+        ))
 
         menu.addItem(makeMenuItem(
             title: String(localized: .delete),

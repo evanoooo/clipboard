@@ -348,6 +348,22 @@ extension ClipMainViewController: CollectionViewItemDelegate {
         topBarView.startCreatingChip(pinModel: item)
     }
 
+    func setAlias(_ item: PasteboardModel, to alias: String) {
+        guard let id = item.id else { return }
+        Task {
+            await PasteDataStore.main.updateAlias(id: id, alias: alias)
+        }
+    }
+
+    func aliasEditingDidChange(_ isEditing: Bool) {
+        if isEditing {
+            guard focusRegion != .aliasEditing else { return }
+            setFocusRegion(.aliasEditing)
+        } else if focusRegion == .aliasEditing {
+            setFocusRegion(.collection)
+        }
+    }
+
     func preview(_ item: PasteboardModel) {
         if previewPopover != nil {
             closePreviewPopover()

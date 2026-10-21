@@ -22,6 +22,8 @@ protocol CollectionViewItemDelegate: NSObjectProtocol {
     func delete(_ item: PasteboardModel, indexPath: IndexPath)
     func assignToChip(_ item: PasteboardModel, chipId: Int)
     func createChip(pinning item: PasteboardModel)
+    func setAlias(_ item: PasteboardModel, to alias: String)
+    func aliasEditingDidChange(_ isEditing: Bool)
     func preview(_ item: PasteboardModel)
 }
 
@@ -160,6 +162,11 @@ final class CollectionViewItem: NSCollectionViewItem {
         updateSelectionBorder()
     }
 
+    /// 菜单「设置/修改别名」与点击标题共用同一条内联编辑入口。
+    func beginAliasEditing() {
+        headView.beginAliasEditing()
+    }
+
     private func updateInfoIconAppearance() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             guard let model = item else { return }
@@ -224,6 +231,8 @@ extension CollectionViewItem {
     }
 
     @objc private func handleDoubleClick() {
+        // 标题内联编辑中，双击不应触发粘贴。
+        guard !headView.isEditingAlias else { return }
         handleClipPaste()
     }
 
@@ -293,6 +302,14 @@ extension CollectionViewItem {
         badgeStackView.addArrangedSubview(infoIconView)
         badgeStackView.addArrangedSubview(quickPasteLabel)
         contentView.addSubview(badgeBgView)
+
+        headView.onAliasCommit = { [weak self] alias in
+            guard let self, let item else { return }
+            delegate?.setAlias(item, to: alias)
+        }
+        headView.onAliasEditingChanged = { [weak self] isEditing in
+            self?.delegate?.aliasEditingDidChange(isEditing)
+        }
 
         selectionBorderView.snp.makeConstraints { make in
             make.edges.equalToSuperview()

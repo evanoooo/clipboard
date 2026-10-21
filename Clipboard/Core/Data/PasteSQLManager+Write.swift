@@ -46,18 +46,20 @@ extension PasteSQLManager {
 
         guard let appID = try? await resolvedAppID(for: item) else { return .failed }
         let insert = await table.insert(
-            Col.uniqueId <- item.uniqueId,
-            Col.type <- item.pasteboardType.rawValue,
-            Col.data <- item.data,
-            Col.showData <- item.showData,
-            Col.timestamp <- timestamp,
-            Col.sortOrder <- Col.nextSortOrder,
-            Col.appID <- appID,
-            Col.searchText <- item.searchText,
-            Col.length <- item.length,
-            Col.group <- item.group,
-            Col.tag <- item.tag,
-            Col.hidden <- item.hidden ? 1 : 0
+            [
+                Col.uniqueId <- item.uniqueId,
+                Col.type <- item.pasteboardType.rawValue,
+                Col.data <- item.data,
+                Col.showData <- item.showData,
+                Col.timestamp <- timestamp,
+                Col.sortOrder <- Col.nextSortOrder,
+                Col.appID <- appID,
+                Col.searchText <- item.searchText,
+                Col.length <- item.length,
+                Col.group <- item.group,
+                Col.tag <- item.tag,
+                Col.hidden <- item.hidden ? 1 : 0,
+            ] + Self.aliasSetters(item.alias)
         )
         do {
             let rowId = try connection?.run(insert)
@@ -116,17 +118,19 @@ extension PasteSQLManager {
         guard let appID = try? await resolvedAppID(for: item) else { return }
         let query = table.filter(Col.id == id)
         let update = await query.update(
-            Col.uniqueId <- item.uniqueId,
-            Col.type <- item.pasteboardType.rawValue,
-            Col.data <- item.data,
-            Col.showData <- item.showData,
-            Col.timestamp <- item.timestamp,
-            Col.appID <- appID,
-            Col.searchText <- item.searchText,
-            Col.length <- item.length,
-            Col.group <- item.group,
-            Col.tag <- item.tag,
-            Col.hidden <- item.hidden ? 1 : 0
+            [
+                Col.uniqueId <- item.uniqueId,
+                Col.type <- item.pasteboardType.rawValue,
+                Col.data <- item.data,
+                Col.showData <- item.showData,
+                Col.timestamp <- item.timestamp,
+                Col.appID <- appID,
+                Col.searchText <- item.searchText,
+                Col.length <- item.length,
+                Col.group <- item.group,
+                Col.tag <- item.tag,
+                Col.hidden <- item.hidden ? 1 : 0,
+            ] + Self.aliasSetters(item.alias)
         )
         do {
             let count = try connection?.run(update)
@@ -157,6 +161,29 @@ extension PasteSQLManager {
         } catch {
             log.error("更新项目 hidden 失败：\(error)")
         }
+    }
+
+    /// 只更新别名，不触碰内容、类型与分组。
+    func updateItemAlias(id: Int64, alias: String) async -> Bool {
+        guard let database = connection else { return false }
+        do {
+            let count = try database.run(
+                table.filter(Col.id == id).update(Self.aliasSetters(alias))
+            )
+            return count > 0
+        } catch {
+            log.error("更新别名失败：\(error)，id：\(id)")
+            return false
+        }
+    }
+
+    /// 别名原文入库，归一化文本单独存一列供检索。
+    nonisolated static func aliasSetters(_ alias: String) -> [Setter] {
+        let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw: String? = trimmed.isEmpty ? nil : trimmed
+        let normalized: String? = raw.map(SearchTextNormalizer.normalize)
+            .flatMap { $0.isEmpty ? nil : $0 }
+        return [Col.alias <- raw, Col.aliasSearch <- normalized]
     }
 
     func updateItemTag(

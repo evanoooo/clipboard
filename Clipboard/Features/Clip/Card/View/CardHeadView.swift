@@ -11,6 +11,13 @@ import SnapKit
 final class CardHeadView: NSView {
     private var iconLoadTask: Task<Void, Never>?
     private var colorSubscription: AnyCancellable?
+    private weak var model: PasteboardModel?
+    private(set) var isEditingAlias = false
+
+    /// 提交别名（空串表示清除）。由外层负责持久化。
+    var onAliasCommit: ((String) -> Void)?
+    /// 进入/退出别名编辑，外层据此切换键盘焦点区域。
+    var onAliasEditingChanged: ((Bool) -> Void)?
 
     // MARK: - Subviews
 
@@ -20,16 +27,20 @@ final class CardHeadView: NSView {
         return view
     }()
 
-    private lazy var typeLabel: NSTextField = {
+    /// 标题行：有别名时显示别名，否则显示内容类型；点击进入别名编辑。
+    private lazy var titleField: NSTextField = {
         let field = NSTextField(labelWithString: "")
         field.textColor = .white
         field.font = .systemFont(ofSize: NSFont.systemFontSize + 2)
         field.lineBreakMode = .byTruncatingTail
+        field.maximumNumberOfLines = 1
+        field.focusRingType = .none
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return field
     }()
 
-    private lazy var timestampLabel: NSTextField = {
+    /// 副标题行：默认分组显示「类型 · 时间」，置顶分组显示类型。
+    private lazy var subtitleField: NSTextField = {
         let field = NSTextField(labelWithString: "")
         field.font = .systemFont(ofSize: NSFont.systemFontSize)
         field.textColor = NSColor.white.withAlphaComponent(0.85)
@@ -38,7 +49,7 @@ final class CardHeadView: NSView {
     }()
 
     private lazy var textStack: NSStackView = {
-        let stack = NSStackView(views: [typeLabel, timestampLabel])
+        let stack = NSStackView(views: [titleField, subtitleField])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 2
@@ -69,6 +80,7 @@ final class CardHeadView: NSView {
 
     func configure(with model: PasteboardModel) {
         let isDefault = model.group == -1
+        self.model = model
 
         let color = AppColorService.shared.color(for: model)
         backgroundView.layer?.backgroundColor = color.cgColor
@@ -77,13 +89,8 @@ final class CardHeadView: NSView {
             backgroundView.layer?.backgroundColor = AppColorService.shared.color(for: model).cgColor
         }
 
-        typeLabel.stringValue = model.type.string
-
-        timestampLabel.isHidden = !isDefault
-        if isDefault {
-            timestampLabel.stringValue = model.timestamp.timeAgo(
-                relativeTo: TimeManager.shared.currentTime
-            )
+        if !isEditingAlias {
+            applyDisplay(alias: model.alias)
         }
 
         iconView.isHidden = !isDefault
@@ -99,20 +106,116 @@ final class CardHeadView: NSView {
     }
 
     func reset() {
+        // 卡片复用时提交已输入的内容，避免滚动导致编辑丢失。
+        finishAliasEditing(commit: true)
         colorSubscription = nil
         iconLoadTask?.cancel()
         iconLoadTask = nil
         iconView.image = nil
-        typeLabel.stringValue = ""
-        timestampLabel.stringValue = ""
+        model = nil
+        titleField.stringValue = ""
+        subtitleField.stringValue = ""
+        subtitleField.isHidden = false
         backgroundView.layer?.backgroundColor = nil
     }
 
     func refreshTimestamp(for model: PasteboardModel) {
-        guard model.group == -1 else { return }
-        timestampLabel.stringValue = model.timestamp.timeAgo(
-            relativeTo: TimeManager.shared.currentTime
-        )
+        guard !isEditingAlias else { return }
+        applyDisplay(alias: model.alias)
+    }
+
+    // MARK: - Alias Editing
+
+    func beginAliasEditing() {
+        guard let model, !isEditingAlias else { return }
+        isEditingAlias = true
+
+        titleField.isEditable = true
+        titleField.isSelectable = true
+        titleField.cell?.isScrollable = true
+        // 首次重命名同样预填当前标题（类型名），而不是用占位符，两次行为一致。
+        titleField.stringValue = model.alias.isEmpty ? model.type.string : model.alias
+
+        onAliasEditingChanged?(true)
+
+        guard window != nil else { return }
+        // 菜单项唤起时，菜单关闭可能重置 first responder，延后一拍再聚焦。
+        Task { @MainActor [weak self] in
+            guard let self, isEditingAlias, let window else { return }
+            window.makeFirstResponder(titleField)
+            titleField.currentEditor()?.selectAll(nil)
+        }
+    }
+
+    private func finishAliasEditing(commit: Bool) {
+        guard isEditingAlias else { return }
+        isEditingAlias = false
+
+        let trimmed = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        titleField.isEditable = false
+        titleField.isSelectable = false
+        titleField.cell?.isScrollable = false
+
+        if commit {
+            applyDisplay(alias: trimmed)
+            onAliasCommit?(trimmed)
+        } else {
+            applyDisplay(alias: model?.alias ?? "")
+        }
+
+        onAliasEditingChanged?(false)
+    }
+
+    private func applyDisplay(alias: String) {
+        guard let model else { return }
+        let type = model.type.string
+        let hasAlias = !alias.isEmpty
+        let isDefault = model.group == -1
+        let time = model.timestamp.timeAgo(relativeTo: TimeManager.shared.currentTime)
+
+        titleField.stringValue = hasAlias ? alias : type
+        titleField.toolTip = hasAlias ? alias : String(localized: .rename)
+
+        switch (isDefault, hasAlias) {
+        case (true, true):
+            subtitleField.isHidden = false
+            subtitleField.stringValue = "\(type) · \(time)"
+        case (true, false):
+            subtitleField.isHidden = false
+            subtitleField.stringValue = time
+        case (false, true):
+            subtitleField.isHidden = false
+            subtitleField.stringValue = type
+        case (false, false):
+            subtitleField.isHidden = true
+            subtitleField.stringValue = ""
+        }
+    }
+}
+
+// MARK: - NSTextFieldDelegate
+
+extension CardHeadView: NSTextFieldDelegate {
+    func control(
+        _: NSControl,
+        textView _: NSTextView,
+        doCommandBy commandSelector: Selector
+    ) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.insertNewline(_:)):
+            finishAliasEditing(commit: true)
+            return true
+        case #selector(NSResponder.cancelOperation(_:)):
+            finishAliasEditing(commit: false)
+            return true
+        default:
+            return false
+        }
+    }
+
+    func controlTextDidEndEditing(_: Notification) {
+        // 点击其它区域失焦时按提交处理。
+        finishAliasEditing(commit: true)
     }
 }
 
@@ -123,6 +226,12 @@ private extension CardHeadView {
         wantsLayer = true
         layer?.masksToBounds = true
         layer?.backgroundColor = .clear
+
+        titleField.delegate = self
+
+        let click = NSClickGestureRecognizer(target: self, action: #selector(handleTitleClick))
+        click.delaysPrimaryMouseButtonEvents = false
+        textStack.addGestureRecognizer(click)
 
         addSubview(backgroundView)
         backgroundView.addSubview(textStack)
@@ -143,5 +252,9 @@ private extension CardHeadView {
             make.trailing.lessThanOrEqualTo(iconView.snp.leading).offset(-Const.space8)
             make.centerY.equalToSuperview()
         }
+    }
+
+    @objc func handleTitleClick() {
+        beginAliasEditing()
     }
 }

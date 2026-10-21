@@ -25,6 +25,10 @@ struct Col {
     nonisolated static let length = Expression<Int>("length")
     nonisolated static let group = Expression<Int>("group")
     nonisolated static let tag = Expression<String?>("tag")
+    /// 用户别名原文，仅用于展示与检索，不参与类型判定。
+    nonisolated static let alias = Expression<String?>("alias")
+    /// 别名归一化文本，检索专用（与 `search_text` 同一套归一化）。
+    nonisolated static let aliasSearch = Expression<String?>("alias_search")
     nonisolated static let hidden = Expression<Int>("hidden")
 
     private init() {}

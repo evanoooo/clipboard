@@ -228,6 +228,7 @@ extension PasteDataStore {
             var revision: Int
             var rowCount = 0
             var sqlElapsed: Duration = .zero
+            var countElapsed: Duration = .zero
             var mapElapsed: Duration = .zero
             repeat {
                 revision = orderRevision
@@ -246,19 +247,24 @@ extension PasteDataStore {
             let needsCount = rowCount == pageSize
             let total: Int
             if needsCount {
+                let countStarted = ContinuousClock.now
                 total = await sqlManager.getCount(filter: filter)
+                countElapsed = countStarted.duration(to: .now)
                 try Task.checkCancellation()
             } else {
                 total = rowCount
             }
 
             filteredCount = total
+            let dbElapsed = started.duration(to: .now)
+            let publishStarted = ContinuousClock.now
             updateData(with: result, changeType: .searchFilter)
             hasMoreData = rowCount == pageSize
 
             logSearch(criteria, filter: filter, rows: rowCount, result: result, total: total,
-                      countScan: needsCount, sqlElapsed: sqlElapsed, mapElapsed: mapElapsed,
-                      elapsed: started.duration(to: .now))
+                      countScan: needsCount, sqlElapsed: sqlElapsed, countElapsed: countElapsed,
+                      mapElapsed: mapElapsed, elapsed: dbElapsed,
+                      publishElapsed: publishStarted.duration(to: .now))
         }
     }
 
@@ -271,18 +277,22 @@ extension PasteDataStore {
         total: Int,
         countScan: Bool,
         sqlElapsed: Duration,
+        countElapsed: Duration,
         mapElapsed: Duration,
-        elapsed: Duration
+        elapsed: Duration,
+        publishElapsed: Duration
     ) {
         let tokens = SearchTextNormalizer.queryTokens(criteria.keyword).count
         let payload = result.reduce(0) { $0 + $1.data.count }
         let message = "[search] kw=\"\(criteria.keyword)\" tokens=\(tokens) "
             + "rows=\(rows) mapped=\(result.count) total=\(total) countScan=\(countScan) "
             + "filters=\(filter != nil ? 1 : 0) "
-            + "sql=\(sqlElapsed.millisecondsText) map=\(mapElapsed.millisecondsText) "
-            + "total=\(elapsed.millisecondsText) "
+            + "sql=\(sqlElapsed.millisecondsText) count=\(countElapsed.millisecondsText) "
+            + "map=\(mapElapsed.millisecondsText) publish=\(publishElapsed.millisecondsText) "
+            + "db=\(elapsed.millisecondsText) "
             + "payload=\(payload.formatted(.byteCount(style: .memory)))"
-        if elapsed.milliseconds >= 100 {
+        // 分别关注「数据库慢」与「发布/渲染慢」，两者堆到一起会掩盖真实瓶颈。
+        if elapsed.milliseconds >= 100 || publishElapsed.milliseconds >= 100 {
             log.warn(message)
         } else {
             log.info(message)
@@ -442,6 +452,41 @@ extension PasteDataStore {
         pageIndex = max(0, (list.count - 1) / pageSize)
         lastRequestedPage = pageIndex
         updateData(with: list, changeType: .moveToFirst)
+        return true
+    }
+
+    /// 更新别名。别名不参与类型判定，只影响关键词命中，因此按当前筛选结果刷新。
+    @discardableResult
+    func updateAlias(id: Int64, alias: String) async -> Bool {
+        guard await sqlManager.updateItemAlias(id: id, alias: alias) else { return false }
+
+        let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let model = dataList.value.first(where: { $0.id == id }) {
+            model.updateAlias(val: trimmed)
+        }
+
+        guard isInFilterMode, let currentFilter else {
+            updateData(with: dataList.value, changeType: .update)
+            return true
+        }
+
+        let loadedLimit = max(pageSize, dataList.value.count)
+        let rows = await sqlManager.search(filter: currentFilter, limit: loadedLimit)
+        // 复用已有实例（仅别名字段变化），命中集合不变时无需重建快照。
+        let existing = Dictionary(dataList.value.compactMap { model in
+            model.id.map { ($0, model) }
+        }, uniquingKeysWith: { first, _ in first })
+        let list = await mapRows(rows).map { model in
+            model.id.flatMap { existing[$0] } ?? model
+        }
+        filteredCount = await sqlManager.getCount(filter: currentFilter)
+        hasMoreData = list.count < filteredCount
+        pageIndex = max(0, (list.count - 1) / pageSize)
+        lastRequestedPage = pageIndex
+
+        // 命中集合变化时必须重建快照，否则被别名搜索排除的卡片会留在原地。
+        let membershipChanged = Set(dataList.value.map(\.uniqueId)) != Set(list.map(\.uniqueId))
+        updateData(with: list, changeType: membershipChanged ? .searchFilter : .update)
         return true
     }
 

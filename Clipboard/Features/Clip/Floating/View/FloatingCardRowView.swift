@@ -98,6 +98,7 @@ final class FloatingCardRowView: NSView {
     var onTogglePreview: (() -> Void)?
     var onAssignToChip: ((Int) -> Void)?
     var onCreateChip: ((PasteboardModel) -> Void)?
+    var onSetAlias: (() -> Void)?
 
     // MARK: - Init
 

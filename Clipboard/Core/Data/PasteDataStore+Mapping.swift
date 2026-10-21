@@ -28,6 +28,7 @@ extension PasteDataStore {
                 let length = try? row.get(Col.length)
                 let group = try? row.get(Col.group)
                 let tag = try? row.get(Col.tag)
+                let alias = try? row.get(Col.alias)
                 let hidden = ((try? row.get(Col.hidden)) ?? 0) != 0
 
                 let pType = PasteboardType(type)
@@ -54,6 +55,7 @@ extension PasteDataStore {
                     length: length ?? 0,
                     group: group ?? -1,
                     tag: tag ?? "",
+                    alias: alias ?? "",
                     hidden: hidden,
                     uniqueId: uniqueId,
                     appID: appID

@@ -199,6 +199,10 @@ extension ClipFloatingViewController {
         case KeyCode.e:
             historyView.openEditWindow(at: historyView.selectedIndex)
             return nil
+        case KeyCode.r:
+            guard let model = historyView.selectedModels.first else { return nil }
+            PasteAliasEditor.present(for: model)
+            return nil
         default:
             return event
         }

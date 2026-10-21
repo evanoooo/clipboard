@@ -31,6 +31,10 @@ extension CollectionViewItem: ClipItemMenuActionable {
         delegate?.edit(model)
     }
 
+    func handleClipRename() {
+        beginAliasEditing()
+    }
+
     func handleClipDelete() {
         guard let model = item, let indexPath = collectionView?.indexPath(for: self) else { return }
         delegate?.delete(model, indexPath: indexPath)

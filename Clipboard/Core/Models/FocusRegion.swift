@@ -9,6 +9,7 @@ enum FocusRegion: CustomStringConvertible {
     case collection
     case search
     case chipEditing
+    case aliasEditing
     case filter
     case popover
 
@@ -17,6 +18,7 @@ enum FocusRegion: CustomStringConvertible {
         case .collection: "collection"
         case .search: "search"
         case .chipEditing: "chipEditing"
+        case .aliasEditing: "aliasEditing"
         case .filter: "filter"
         case .popover: "popover"
         }

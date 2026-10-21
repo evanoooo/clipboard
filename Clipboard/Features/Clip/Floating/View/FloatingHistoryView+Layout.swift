@@ -127,6 +127,10 @@ extension FloatingHistoryView {
             item.onCreateChip = { [weak self] model in
                 self?.onCreateChip?(model)
             }
+            item.onSetAlias = { [weak self] in
+                guard let self, row < dataList.count else { return }
+                PasteAliasEditor.present(for: dataList[row])
+            }
             return item
         }
     }

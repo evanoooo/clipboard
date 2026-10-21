@@ -95,7 +95,7 @@ struct MCPTools {
 
         let table = Table("Clip")
         var queryExpr = table
-            .select(Col.type, Col.data, Col.searchText, Col.timestamp, Col.tag)
+            .select(Col.type, Col.data, Col.searchText, Col.timestamp, Col.tag, Col.alias)
             .filter(Col.hidden == 0)
             .order(Col.sortOrder.desc, Col.id.desc)
             .limit(limit)
@@ -108,7 +108,12 @@ struct MCPTools {
                 queryExpr = queryExpr.filter(Expression<Bool>(value: false))
             } else {
                 for token in tokens {
-                    queryExpr = queryExpr.filter(Col.searchText.like("%\(token)%"))
+                    // 正文命中或别名命中均可，与 App 侧 PasteFilterBuilder 语义一致。
+                    let pattern = "%\(token)%"
+                    queryExpr = queryExpr.filter(
+                        Col.searchText.like(pattern)
+                            || (Col.aliasSearch ?? "").like(pattern)
+                    )
                 }
             }
         }
@@ -155,7 +160,10 @@ struct MCPTools {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
             .formatted(date: .abbreviated, time: .shortened)
         let typeLabel = labelForTag(tag)
-        let header = "[\(typeLabel)] \(date)"
+        let alias = (try? row.get(Col.alias)) ?? ""
+        let header = alias.isEmpty
+            ? "[\(typeLabel)] \(date)"
+            : "[\(typeLabel)] \(alias) · \(date)"
 
         if tag == "image" {
             blocks.append(["type": "text", "text": header])

@@ -24,6 +24,10 @@ extension FloatingCardRowView: ClipItemMenuActionable {
         onEdit?()
     }
 
+    func handleClipRename() {
+        onSetAlias?()
+    }
+
     func handleClipDelete() {
         onDelete?()
     }

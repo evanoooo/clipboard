@@ -42,6 +42,8 @@ final class PasteboardModel: Identifiable, Codable {
 
     private(set) var group: Int
     let tag: String
+    /// 用户别名（原文），空串表示未设置；不影响 `tag` 的类型语义。
+    private(set) var alias: String
     private(set) var hidden: Bool
     var runtimeCache = PasteboardModelRuntimeCache()
 
@@ -68,6 +70,7 @@ final class PasteboardModel: Identifiable, Codable {
         length: Int,
         group: Int,
         tag: String,
+        alias: String = "",
         hidden: Bool = false,
         uniqueId: String? = nil,
         appID: Int64? = nil,
@@ -85,6 +88,7 @@ final class PasteboardModel: Identifiable, Codable {
         self.length = length
         self.group = group
         self.tag = tag
+        self.alias = alias
         self.hidden = hidden
 
         self.uniqueId = uniqueId ?? Self.generateUniqueId(
@@ -216,6 +220,10 @@ final class PasteboardModel: Identifiable, Codable {
         searchText = val
     }
 
+    func updateAlias(val: String) {
+        alias = val
+    }
+
     func getGroupChip() -> CategoryChip? {
         guard group != -1 else { return nil }
         return CategoryChipStore.shared.chips.first(where: { $0.id == group })
@@ -232,7 +240,7 @@ final class PasteboardModel: Identifiable, Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, uniqueId, pasteboardType, data, showData, timestamp
-        case appPath, appName, searchText, length, group, tag, hidden
+        case appPath, appName, searchText, length, group, tag, alias, hidden
     }
 
     func encode(to encoder: Encoder) throws {
@@ -249,6 +257,7 @@ final class PasteboardModel: Identifiable, Codable {
         try container.encode(length, forKey: .length)
         try container.encode(group, forKey: .group)
         try container.encode(tag, forKey: .tag)
+        try container.encodeIfPresent(alias.isEmpty ? nil : alias, forKey: .alias)
         try container.encode(hidden, forKey: .hidden)
     }
 
@@ -270,6 +279,7 @@ final class PasteboardModel: Identifiable, Codable {
             length: container.decode(Int.self, forKey: .length),
             group: container.decode(Int.self, forKey: .group),
             tag: container.decode(String.self, forKey: .tag),
+            alias: container.decodeIfPresent(String.self, forKey: .alias) ?? "",
             hidden: container.decode(Bool.self, forKey: .hidden),
             uniqueId: container.decode(String.self, forKey: .uniqueId)
         )

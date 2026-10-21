@@ -213,7 +213,9 @@ extension PasteSQLManager {
             Col.length <- row.get(Col.length),
             Col.group <- group,
             Col.hidden <- (try? row.get(Col.hidden)) ?? 0,
-            Col.tag <- try? row.get(Col.tag)
+            Col.tag <- try? row.get(Col.tag),
+            Col.alias <- try? row.get(Col.alias),
+            Col.aliasSearch <- try? row.get(Col.aliasSearch)
         )
 
         try database.run(insert)
