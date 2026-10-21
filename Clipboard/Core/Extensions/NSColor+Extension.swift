@@ -1,5 +1,5 @@
 //
-//  NScolor+Extension.swift
+//  NSColor+Extension.swift
 //  clipboard
 //
 //  Created by crown on 2025/9/12.
@@ -11,7 +11,7 @@ import Cocoa
 extension NSColor {
     convenience init(hex: String) {
         var hexString = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        hexString = hexString.replacingOccurrences(of: "#", with: "")
+        hexString = hexString.replacing("#", with: "")
 
         var rgb: UInt64 = 0
         Scanner(string: hexString).scanHexInt64(&rgb)
