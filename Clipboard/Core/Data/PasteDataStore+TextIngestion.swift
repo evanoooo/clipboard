@@ -32,7 +32,6 @@ extension PasteDataStore {
                 uniqueId: content.uniqueId,
                 sourceBundleID: bundleID
             )
-            PasteMetadataCache.shared.invalidateTagTypesCache(model)
             await insertModel(model)
         }
     }

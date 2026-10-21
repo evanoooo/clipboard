@@ -104,7 +104,6 @@ extension PasteSQLManager {
                     SourceAppCache.shared.replace(records)
                     SourceAppCache.shared.warmMissingIcons()
                     AppColorService.shared.fillMissingColors()
-                    PasteMetadataCache.shared.invalidateAllCaches()
                 }
             } catch {
                 log.error("导入后刷新应用缓存失败：\(error)")

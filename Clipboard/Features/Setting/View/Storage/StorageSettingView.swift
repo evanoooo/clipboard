@@ -170,7 +170,6 @@ struct StorageSettingView: View {
                         let count = await PasteSQLManager.manager.getTotalCount()
                         db.totalCount = count
                         totalCount = count
-                        PasteMetadataCache.shared.invalidateTagTypesCache()
                         db.notifyCategoryChipsChanged()
                     }
                 } else {

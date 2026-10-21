@@ -394,8 +394,6 @@ extension PasteDataStore {
             model.updateGroup(val: chipId)
         }
 
-        PasteMetadataCache.shared.invalidateTagTypesCache(model)
-
         let previous = ingestionTask
         ingestionTask = Task {
             await previous?.value

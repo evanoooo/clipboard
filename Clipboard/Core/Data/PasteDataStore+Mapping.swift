@@ -98,16 +98,12 @@ extension PasteDataStore {
         Task { [weak self] in
             guard let self else { return }
 
-            let updated = await sqlManager.updateItemTag(
+            _ = await sqlManager.updateItemTag(
                 id: id,
                 expectedTag: storedType.tagValue,
                 newTag: correctedTag
             )
             repairingTagIds.remove(id)
-
-            if updated {
-                PasteMetadataCache.shared.invalidateTagTypesCache()
-            }
         }
     }
 }

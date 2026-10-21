@@ -122,7 +122,6 @@ extension PasteDataStore {
 
     /// 恢复后按当前视图重查，保持筛选/搜索状态不变，并定位到被恢复的条目。
     private func reloadAfterUndo(_ restoredIds: [Int64]) async {
-        PasteMetadataCache.shared.invalidateAllCaches()
         // 保持撤销前的加载深度：被删的可能在第二页之后，只重查首页会让它“消失”。
         let loaded = max(dataList.value.count, pageSize)
         resetPagination()
@@ -189,7 +188,6 @@ extension PasteDataStore {
 
                 setHasMoreData(finalList.count >= pageSize)
                 updateData(with: finalList, changeType: .delete)
-                PasteMetadataCache.shared.invalidateAllCaches()
             }
         }
     }
@@ -212,7 +210,6 @@ extension PasteDataStore {
                 guard let self else { return }
                 totalCount = count
                 filteredCount = filtered
-                PasteMetadataCache.shared.invalidateAllCaches()
             }
         }
     }
@@ -236,7 +233,6 @@ extension PasteDataStore {
                 guard let self else { return }
                 totalCount = count
                 filteredCount = filtered
-                PasteMetadataCache.shared.invalidateAllCaches()
             }
         }
     }
@@ -288,7 +284,6 @@ extension PasteDataStore {
             guard await alert.beginSheetModal(for: window) == .alertSecondButtonReturn else { return false }
 
             try await sqlManager.deleteExpiredHistory(before: cutoff)
-            PasteMetadataCache.shared.invalidateAllCaches()
             await reloadHistory()
             return true
         } catch {
@@ -339,7 +334,6 @@ extension PasteDataStore {
                     ClipUndoStore.shared.removeAll()
                     SourceAppCache.shared.replace([])
                     AppColorService.shared.clearColors()
-                    PasteMetadataCache.shared.invalidateAllCaches()
                     CategoryChipStore.shared.clearUserCategories()
                     resetToDefault()
                     clearingHistory.send(false)
