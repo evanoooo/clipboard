@@ -59,9 +59,11 @@
   - [x] 抽象 `PasteboardMonitoringProtocol`（Commit: `a9c78c3`）
   - [x] 验证：`PasteSQLManager`、`ClipActionService`、`PasteBoard` 顺畅实现协议，修复 Swift 6 静态属性隔离警告，构建全绿
 
-- [ ] **Task 9: 梳理 `AppDelegate` 与多窗口生命周期**
-  - [x] 审查 `AppDelegate.swift`：实际仅 ~180 行，已非常精炼
-  - [ ] 提取窗口显示/隐藏状态机，收拢 `WindowManager` 静态状态
+- [x] **Task 9: 梳理 `AppDelegate` 与多窗口生命周期**
+  - [x] 审查 `AppDelegate.swift`：实际仅 ~180 行，结构精炼
+  - [x] `WindowManager` 接入 `@MainActor` 严格主线程隔离，消除跨线程调度窗口隐患（Commit: `7a665b7`）
+  - [x] `ClipPreviewPopover` 在 `cleanup` 中即时解绑全局键盘事件监听器，避免浮层关闭后事件泄露（Commit: `7a665b7`）
+  - [x] 清理 `CardBottomView` 与 `CardContentView` 不必要的 `nonisolated(unsafe)` 绕过标记（Commit: `7a665b7`）
 
 - [ ] **Task 10: 拆分 `PasteDataStore` 数据存储与 UI 状态**
   - [ ] 提取 `ClipboardRepository`（专门负责 DB/Disk 交互）
