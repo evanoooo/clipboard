@@ -9,6 +9,7 @@ import AppKit
 import Combine
 import Foundation
 
+@MainActor
 final class WindowManager {
     static let shared = WindowManager()
 

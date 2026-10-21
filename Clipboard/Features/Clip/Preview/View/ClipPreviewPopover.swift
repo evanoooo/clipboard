@@ -78,6 +78,10 @@ final class ClipPreviewPopover: NSPopover {
     }
 
     func cleanup() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
         previewVC.cleanup()
         previewVC.onContentInteraction = nil
         previewVC.onDismiss = nil

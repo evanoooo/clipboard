@@ -13,8 +13,8 @@ import SnapKit
 
 final class CardBottomView: NSView, PassthroughMouseEvents {
     private var currentView: NSView?
-    private nonisolated(unsafe) var currentModel: PasteboardModel?
-    private nonisolated(unsafe) var currentKeyword: String = ""
+    private var currentModel: PasteboardModel?
+    private var currentKeyword: String = ""
     private var linkPreviewCancellable: AnyCancellable?
 
     override init(frame: NSRect) {
