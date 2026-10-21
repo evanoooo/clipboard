@@ -56,14 +56,14 @@ final class PasteBoard {
     func startListening() {
         stopListening()
 
-        timer = Timer.scheduledTimer(
-            timeInterval: timerInterval,
-            target: self,
-            selector: #selector(checkForChangesInPasteboard),
-            userInfo: nil,
-            repeats: true
-        )
-        RunLoop.main.add(timer!, forMode: .common)
+        // block 版 Timer 避免 selector 与强制解包；.common 模式保证滚动、模态面板期间仍会轮询。
+        let timer = Timer(timeInterval: timerInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkForChangesInPasteboard()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     func stopListening() {
@@ -87,15 +87,13 @@ final class PasteBoard {
         pauseDuration = duration
 
         if let duration {
-            resumeTimer = Timer.scheduledTimer(
-                withTimeInterval: duration,
-                repeats: false
-            ) { [weak self] _ in
+            let timer = Timer(timeInterval: duration, repeats: false) { [weak self] _ in
                 Task { @MainActor in
                     self?.resume()
                 }
             }
-            RunLoop.main.add(resumeTimer!, forMode: .common)
+            RunLoop.main.add(timer, forMode: .common)
+            resumeTimer = timer
         }
     }
 
@@ -125,7 +123,7 @@ final class PasteBoard {
         isPaused && pauseDuration == nil
     }
 
-    @objc private func checkForChangesInPasteboard() {
+    private func checkForChangesInPasteboard() {
         let currentCount = pasteboard.changeCount
 
         if let owned = ownWriteChangeCount {

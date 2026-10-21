@@ -8,10 +8,6 @@
 import AppKit
 
 extension Int64 {
-    var timeAgo: String {
-        timeAgo(relativeTo: Date())
-    }
-
     func timeAgo(relativeTo currentDate: Date) -> String {
         let diffDate = NSCalendar.current.dateComponents(
             [.month, .day, .hour, .minute],
@@ -35,13 +31,5 @@ extension Int64 {
         } else {
             return String(localized: .currentTime)
         }
-    }
-
-    func date() -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(self))
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone.current
-        return formatter.string(from: date)
     }
 }

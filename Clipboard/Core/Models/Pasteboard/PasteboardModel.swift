@@ -137,12 +137,6 @@ final class PasteboardModel: Identifiable, Codable {
 
     // MARK: - 辅助
 
-    static let formatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter
-    }()
-
     func introString() -> String {
         switch type {
         case .none:
