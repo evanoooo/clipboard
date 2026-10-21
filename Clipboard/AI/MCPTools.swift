@@ -229,6 +229,8 @@ struct MCPTools {
         let uniqueId = contentData.sha256Hex
         let timestamp = Int64(Date().timeIntervalSince1970)
         let showData = String(content.prefix(300)).data(using: .utf8)
+        // 与 App 入库侧同一套归一化，否则跨标点/空白的查询永远命中不到。
+        let normalizedSearchText = SearchText.normalize(content)
 
         guard let database = try? Connection(ClipboardPaths.database) else {
             return mcpError("Cannot open clipboard database")
@@ -240,8 +242,14 @@ struct MCPTools {
 
         let existing = table.select(Col.id).filter(Col.uniqueId == uniqueId)
         if let row = try? database.pluck(existing), let existingId = try? row.get(Col.id) {
+            // 同内容重新写入时顺带修正 search_text，兼容旧版本写入的未归一化行。
             _ = try? database.run(table.filter(Col.id == existingId)
-                .update(Col.timestamp <- timestamp, Col.hidden <- 0, Col.sortOrder <- Col.nextSortOrder)
+                .update(
+                    Col.timestamp <- timestamp,
+                    Col.hidden <- 0,
+                    Col.sortOrder <- Col.nextSortOrder,
+                    Col.searchText <- normalizedSearchText
+                )
             )
             return ["content": [["type": "text", "text": "Clipboard updated"]]]
         }
@@ -259,7 +267,7 @@ struct MCPTools {
             Col.timestamp <- timestamp,
             Col.sortOrder <- Col.nextSortOrder,
             Col.appID <- appID,
-            Col.searchText <- content.trimmingCharacters(in: .whitespacesAndNewlines),
+            Col.searchText <- normalizedSearchText,
             Col.length <- content.count,
             Col.group <- -1,
             Col.tag <- tagValue(for: content),
@@ -354,6 +362,8 @@ private extension Data {
 
 // MARK: - 搜索文本归一化 (mirrors SearchTextNormalizer.swift, local to clipmcp)
 
+/// clipmcp 目标只编译固定文件清单，`Core/Shared/SearchTextNormalizer.swift` 不在其中，
+/// 因此这里保留一份实现。改动时必须同步两边，否则 App 与 MCP 的搜索口径会分叉。
 private enum SearchText {
     /// 保留字母、数字与符号，丢弃空白和标点；与 App 入库侧保持一致。
     /// 结果不会包含 LIKE 通配符 `%` / `_`，无需额外转义。
