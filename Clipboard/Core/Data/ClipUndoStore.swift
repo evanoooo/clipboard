@@ -67,7 +67,7 @@ final class ClipUndoStore {
     /// 只保留最近若干次操作，避免图片快照长期占用内存。
     /// 栈随窗口唤出清空，这里的上限只是单次唤出内的安全阀。
     private let maxEntries = 20
-    private let maxPayloadBytes = 256 * 1024 * 1024
+    private let maxPayloadBytes = 64 * 1024 * 1024
 
     private var stack: [ClipUndoAction] = []
     private var payloadBytes = 0
