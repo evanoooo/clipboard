@@ -112,7 +112,7 @@ extension PasteSQLManager {
         }
     }
 
-    /// 撤销删除：快照带着删除前的 sort_order，写回后回到原来的位置。
+    /// 撤销删除：快照带着删除前的 sort_order 与 hidden，写回后回到原来的位置与可见性。
     /// 同一事务内完成，任一条失败则整体回滚。
     func restore(_ snapshots: [ClipSnapshot]) async -> [Int64] {
         guard let connection, !snapshots.isEmpty else { return [] }
@@ -122,6 +122,7 @@ extension PasteSQLManager {
             try connection.transaction(.immediate) {
                 for snapshot in snapshots {
                     // 删后又复制了同样内容：保留现存行（包括它现在的顺序），只合并分组与别名。
+                    // 这是删除后新产生的行，不能套用快照的 hidden，否则刚复制的内容会立刻从主列表消失。
                     if let existing = try connection.pluck(
                         table.select(Col.id).filter(Col.uniqueId == snapshot.uniqueId)
                     ) {
@@ -147,7 +148,7 @@ extension PasteSQLManager {
                         Col.length <- snapshot.length,
                         Col.group <- snapshot.group,
                         Col.tag <- snapshot.tag,
-                        Col.hidden <- 0,
+                        Col.hidden <- snapshot.hidden ? 1 : 0,
                     ] + Self.aliasSetters(snapshot.alias)
 
                     // 原 id 已被其他记录占用时不指定 id，交给 SQLite 重新分配。
