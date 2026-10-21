@@ -60,7 +60,7 @@ final class ClipListPresenter {
     func startObserving(scrollView: NSScrollView) {
         dataStore.dataList
             .map { [weak self] items in (items, self?.dataStore.lastDataChangeType ?? .reset) }
-            .receive(on: DispatchQueue.main)
+            .receive(on: RunLoop.main)
             .sink { [weak self] items, change in
                 self?.handleDataChange(change, items: items)
             }
@@ -71,7 +71,7 @@ final class ClipListPresenter {
             for: NSView.boundsDidChangeNotification,
             object: scrollView.contentView
         )
-        .throttle(for: .milliseconds(200), scheduler: DispatchQueue.main, latest: true)
+        .throttle(for: .milliseconds(200), scheduler: RunLoop.main, latest: true)
         .sink { [weak self] _ in self?.checkLoadMore(scrollView: scrollView) }
         .store(in: &cancellables)
     }

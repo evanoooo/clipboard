@@ -161,7 +161,7 @@ extension ClipMainViewController {
         topBarView.searchField.$text
             .removeDuplicates()
             .dropFirst()
-            .debounce(for: .milliseconds(Const.searchDebounce), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(Const.searchDebounce), scheduler: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 topVM.handleQueryChange()
@@ -169,7 +169,7 @@ extension ClipMainViewController {
             .store(in: &cancellables)
 
         store.chipsContentDidChange
-            .receive(on: DispatchQueue.main)
+            .receive(on: RunLoop.main)
             .sink { [weak self] in
                 guard let self else { return }
                 topBarView.reloadChips()
@@ -179,7 +179,7 @@ extension ClipMainViewController {
             .store(in: &cancellables)
 
         topVM.filterDidChange
-            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
             .sink { [weak self] in
                 guard let self else { return }
                 topVM.performSearch()
@@ -187,7 +187,7 @@ extension ClipMainViewController {
             .store(in: &cancellables)
 
         PasteBoard.main.$isPaused
-            .receive(on: DispatchQueue.main)
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updatePauseState() }
             .store(in: &cancellables)
 
