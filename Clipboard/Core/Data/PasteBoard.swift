@@ -162,19 +162,43 @@ final class PasteBoard {
 
         // 检查隐私设置：忽略特定应用
         let ignoredApps = PasteUserDefaults.ignoredApps
-        if !ignoredApps.isEmpty, let sourceApp = getSourceApplication() {
+        if !ignoredApps.isEmpty {
+            let declared = declaredSource()
+            let isPathValue = declared?.hasPrefix("/") == true
+            // 声明的来源优先；没有声明时保持旧行为，用前台应用的 bundle id。
+            let sourceBundleID: String? =
+                if let declared {
+                    isPathValue ? nil : declared
+                } else {
+                    NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                }
+
+            // 路径只在能确定来源时使用：已知 bundle id 但应用未运行时，
+            // 不能拿前台应用的路径去匹配，否则会把后台写入误判成前台应用。
+            var sourcePath: String?
+            if isPathValue {
+                sourcePath = declared
+            } else if let declared {
+                sourcePath = NSRunningApplication
+                    .runningApplications(withBundleIdentifier: declared)
+                    .first?.bundleURL?.path
+            } else {
+                sourcePath = NSWorkspace.shared.frontmostApplication?.bundleURL?.path
+            }
+
             let shouldIgnore = ignoredApps.contains { app in
-                if let bundleId = app.bundleIdentifier,
-                   bundleId == sourceApp.bundleIdentifier
-                {
+                if let ignoredID = app.bundleIdentifier,
+                   let sourceBundleID,
+                   ignoredID == sourceBundleID {
                     return true
                 }
-                return app.path == sourceApp.bundleURL?.path
+                guard let sourcePath else { return false }
+                return app.path == sourcePath
             }
 
             if shouldIgnore {
                 log.info(
-                    "来自忽略应用的内容，跳过记录: \(sourceApp.localizedName ?? "Unknown")"
+                    "来自忽略应用的内容，跳过记录: \(sourceBundleID ?? sourcePath ?? "Unknown")"
                 )
                 changeCount = pasteboard.changeCount
                 return
@@ -199,7 +223,7 @@ final class PasteBoard {
             }
         #endif
 
-        PasteDataStore.main.addNewItem(pasteboard)
+        PasteDataStore.main.addNewItem(pasteboard, sourceApp: resolveSourceApp())
         changeCount = pasteboard.changeCount
 
         StatusBarController.shared.triggerPulseAnimation()
@@ -224,8 +248,32 @@ final class PasteBoard {
         return nil
     }
 
-    private func getSourceApplication() -> NSRunningApplication? {
-        NSWorkspace.shared.frontmostApplication
+    private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
+
+    /// 剪贴板自带的来源标识：约定是写入方的 bundle id，少数工具会写应用路径。
+    /// 后台应用写入时前台并不是来源，所以它比 frontmostApplication 可靠。
+    private func declaredSource() -> String? {
+        guard let raw = pasteboard.string(forType: Self.sourceType)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !raw.isEmpty
+        else { return nil }
+        return raw
+    }
+
+    /// 入库归属用：优先按声明的来源找运行中的实例，找不到再回退前台。
+    private func resolveSourceApp() -> NSRunningApplication? {
+        if let declared = declaredSource() {
+            if declared.hasPrefix("/") {
+                return NSWorkspace.shared.runningApplications.first {
+                    $0.bundleURL?.path == declared
+                }
+            }
+            if let app = NSRunningApplication
+                .runningApplications(withBundleIdentifier: declared).first {
+                return app
+            }
+        }
+        return NSWorkspace.shared.frontmostApplication
     }
 
     /// 将多个项目合并写入系统剪贴板
