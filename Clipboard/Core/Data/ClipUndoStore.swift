@@ -2,7 +2,7 @@
 //  ClipUndoStore.swift
 //  Clipboard
 //
-//  唤出内删除撤销栈：只对当前这次弹出有效，窗口重新唤出即清空。
+//  唤出内删除撤销栈：只对当前这次弹出有效，窗口隐藏即清空。
 //
 
 import AppKit

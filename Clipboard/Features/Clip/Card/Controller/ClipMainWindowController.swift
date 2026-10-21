@@ -82,6 +82,8 @@ extension ClipMainWindowController {
     func dismiss(_ completionHandler: (@MainActor () -> Void)? = nil) {
         guard targetVisible, let window, window.isVisible else { return }
         targetVisible = false
+        // 窗口一隐藏就丢弃撤销记录：下次唤出不应再能恢复上一次的删除。
+        ClipUndoStore.shared.removeAll()
         animateContent(visible: false) { [weak self] in
             self?.window?.setIsVisible(false)
             if #unavailable(macOS 15.0) {
@@ -98,8 +100,6 @@ extension ClipMainWindowController {
         let initiallyHidden = !window.isVisible
 
         if initiallyHidden {
-            // 撤销只服务本次唤出，每次重新弹出都从空栈开始。
-            ClipUndoStore.shared.removeAll()
             let screenFrame = frame ?? NSScreen.main?.frame ?? .zero
             AppEnvironment.shared.previousApp = NSWorkspace.shared.frontmostApplication
             let visibleFrame = NSRect(

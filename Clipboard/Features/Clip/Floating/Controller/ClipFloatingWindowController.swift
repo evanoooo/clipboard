@@ -237,8 +237,6 @@ final class ClipFloatingWindowController: NSWindowController {
             return
         }
 
-        // 撤销只服务本次唤出，每次重新弹出都从空栈开始。
-        ClipUndoStore.shared.removeAll()
         clipVC.env.previousApp = NSWorkspace.shared.frontmostApplication
         positionWindow()
         win.alphaValue = 0
@@ -260,6 +258,9 @@ final class ClipFloatingWindowController: NSWindowController {
             completionHandler?()
             return
         }
+
+        // 窗口一隐藏就丢弃撤销记录：下次唤出不应再能恢复上一次的删除。
+        ClipUndoStore.shared.removeAll()
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Const.hideDuration
