@@ -32,7 +32,7 @@ extension PasteSQLManager {
                 Col.id, Col.uniqueId, Col.type, Col.data, Col.timestamp,
                 Col.appID, Col.searchText,
                 Col.showData, Col.length, Col.group,
-                Col.tag, Col.alias, Col.hidden
+                Col.tag, Col.alias, Col.hidden, Col.sortOrder
             ]
         let ord = order ?? [Col.sortOrder.desc, Col.id.desc]
 
@@ -66,7 +66,11 @@ extension PasteSQLManager {
         }
     }
 
-    func reorderItems(_ ids: [Int64], before: Int64?, after: Int64?) -> [Int64]? {
+    func reorderItems(
+        _ ids: [Int64],
+        before: Int64?,
+        after: Int64?
+    ) -> [(id: Int64, order: Int64)]? {
         guard let database = connection else { return nil }
         do {
             return try PasteOrder.move(ids, before: before, after: after, on: database)
@@ -76,17 +80,18 @@ extension PasteSQLManager {
         }
     }
 
-    func orderedItemIDs() -> [Int64]? {
+    func orderedItemEntries() -> [(id: Int64, order: Int64)]? {
         guard let database = connection else { return nil }
-        return try? PasteOrder.orderedIDs(on: database)
+        return try? PasteOrder.orderedEntries(on: database)
     }
 
-    func promoteItems(_ ids: [Int64]) {
-        guard let database = connection else { return }
+    func promoteItems(_ ids: [Int64]) -> [Int64: Int64] {
+        guard let database = connection else { return [:] }
         do {
-            try PasteOrder.promote(ids, on: database)
+            return try PasteOrder.promote(ids, on: database)
         } catch {
             log.error("置顶卡片失败：\(error)")
+            return [:]
         }
     }
 

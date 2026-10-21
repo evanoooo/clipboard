@@ -53,8 +53,15 @@ final class PasteDataStore {
     private var isReloading = false
     var repairingTagIds = Set<Int64>()
     let clearingHistory = CurrentValueSubject<Bool, Never>(false)
+    /// 撤销恢复后希望定位的行；用 token 让多个窗口各自消费一次。
+    private var focusRequest: (token: Int, index: Int)?
+    private var focusToken = 0
     private var orderRevision = 0
     private var ingestionTask: Task<Void, Never>?
+    /// 撤销进行中时忽略重复 ⌘Z，避免两次恢复交叠。
+    var isUndoing = false
+    /// 串行登记尚未落库的写操作（删除/移组/隐藏），撤销前只需等待队尾。
+    private var mutationTail: Task<Void, Never>?
 
     func setup() async -> Bool {
         guard await sqlManager.setup() else { return false }
@@ -84,6 +91,52 @@ final class PasteDataStore {
 
     func setHasMoreData(_ value: Bool) {
         hasMoreData = value
+    }
+
+    /// 写操作排队执行，保证撤销时的恢复不会被尚未落库的删除/移组覆盖。
+    func enqueueMutation(_ operation: @escaping () async -> Void) {
+        let previous = mutationTail
+        mutationTail = Task {
+            await previous?.value
+            await operation()
+        }
+    }
+
+    func awaitPendingMutations() async {
+        await mutationTail?.value
+    }
+
+    /// 重新发布列表前重置分页状态，并停掉可能在飞的翻页/搜索任务。
+    func resetPagination() {
+        loadPageTask?.cancel()
+        searchTask?.cancel()
+        pageIndex = 0
+        lastRequestedPage = 0
+        isLoadingPage = false
+    }
+
+    /// 请求列表在应用完快照后聚焦到指定行；传 nil 清除未消费的请求。
+    func requestFocus(at index: Int?) {
+        guard let index else {
+            focusRequest = nil
+            return
+        }
+        focusToken &+= 1
+        focusRequest = (focusToken, index)
+    }
+
+    /// 主窗与浮窗共享同一份数据，各自持有已处理的 token，互不抢占。
+    func pendingFocus(after token: Int) -> (token: Int, index: Int)? {
+        guard let focusRequest, focusRequest.token != token else { return nil }
+        return focusRequest
+    }
+
+    func focusIndex(in list: [PasteboardModel], ids: [Int64]) -> Int? {
+        guard !ids.isEmpty else { return nil }
+        return list.firstIndex { model in
+            guard let id = model.id else { return false }
+            return ids.contains(id)
+        }
     }
 }
 
@@ -146,15 +199,17 @@ extension PasteDataStore {
         }
     }
 
-    func resetDefaultList() async {
+    func resetDefaultList(focusIds: [Int64] = [], limit: Int? = nil) async {
         pageIndex = 0
         currentFilter = nil
         isInFilterMode = false
         searchWord = ""
-        let list = await getItems(limit: pageSize, offset: pageSize * pageIndex)
+        let size = max(limit ?? pageSize, pageSize)
+        let list = await getItems(limit: size, offset: 0)
         filteredCount = totalCount
+        requestFocus(at: focusIndex(in: list, ids: focusIds))
         updateData(with: list)
-        hasMoreData = list.count == pageSize
+        hasMoreData = list.count == size
     }
 
     func resetToDefault() {
@@ -179,11 +234,11 @@ extension PasteDataStore {
         lastRequestedPage = max(0, (dataList.value.count - 1) / pageSize)
         pageIndex = lastRequestedPage
         let revision = listRevision
-        guard let order = await sqlManager.reorderItems(ids, before: before, after: after) else { return false }
+        guard let entries = await sqlManager.reorderItems(ids, before: before, after: after) else { return false }
         orderRevision &+= 1
 
         if revision == listRevision {
-            applyOrder(order)
+            applyOrder(entries)
         } else {
             // await 期间有新内容或切换筛选时，按最新数据库顺序同步，保留当前列表成员。
             await refreshOrder()
@@ -194,18 +249,23 @@ extension PasteDataStore {
     private func refreshOrder() async {
         while !Task.isCancelled {
             let revision = listRevision
-            guard let order = await sqlManager.orderedItemIDs() else { return }
+            guard let entries = await sqlManager.orderedItemEntries() else { return }
             guard revision == listRevision else { continue }
-            applyOrder(order)
+            applyOrder(entries)
             return
         }
     }
 
-    private func applyOrder(_ ids: [Int64]) {
+    private func applyOrder(_ entries: [(id: Int64, order: Int64)]) {
         let models = Dictionary(dataList.value.compactMap { model in
             model.id.map { ($0, model) }
         }, uniquingKeysWith: { first, _ in first })
-        updateData(with: ids.compactMap { models[$0] }, changeType: .reorder)
+        let sorted = entries.compactMap { entry -> PasteboardModel? in
+            guard let model = models[entry.id] else { return nil }
+            model.sortOrder = entry.order
+            return model
+        }
+        updateData(with: sorted, changeType: .reorder)
     }
 
     /// 数据搜索（关键词 + 自定义分组 + 过滤视图）
@@ -373,6 +433,7 @@ extension PasteDataStore {
         let count = await sqlManager.getTotalCount()
 
         model.id = result.id
+        model.sortOrder = result.sortOrder
         if let group = result.group {
             model.updateGroup(val: group)
         }

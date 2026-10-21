@@ -237,9 +237,30 @@ extension ClipMainViewController {
         case KeyCode.r:
             return handleRename()
 
+        case KeyCode.z:
+            return handleUndo()
+
         default:
             return event
         }
+    }
+
+    /// ⌘Z：撤销会话内最近一次删除。文本编辑区域不拦截，交给系统文本撤销。
+    private func handleUndo() -> NSEvent? {
+        guard ClipUndoStore.shared.canUndo else {
+            NSSound.beep()
+            return nil
+        }
+
+        Task { @MainActor in
+            let count = await PasteDataStore.main.undoLastDelete()
+            guard count > 0 else { return }
+            HUDManager.shared.show(
+                icon: NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil),
+                text: String(localized: .undoDeleteSucceeded(count))
+            )
+        }
+        return nil
     }
 
     private func handleCopy() -> NSEvent? {

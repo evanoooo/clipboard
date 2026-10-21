@@ -124,6 +124,11 @@ extension ClipMainViewController {
             self?.resetSelectIndex()
             self?.restoreSelection()
         }
+        presenter.focusItem = { [weak self] index in
+            guard let self, displayedItemCount > 0 else { return }
+            let clamped = min(max(index, 0), displayedItemCount - 1)
+            resetSelectIndex(IndexPath(item: clamped, section: 0))
+        }
         presenter.restoreSelection = { [weak self] in self?.restoreSelection() }
         presenter.adjustAfterDelete = { [weak self] in self?.adjustSelectionAfterDelete() }
         // 抽屉的空状态在快照完成后更新，避免与删除动画重叠。

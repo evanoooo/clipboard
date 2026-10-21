@@ -137,11 +137,15 @@ extension FloatingHistoryView {
 
     // MARK: - Data
 
-    func applySnapshot(animating: Bool = false) {
+    func applySnapshot(animating: Bool = false, completion: (() -> Void)? = nil) {
         var snapshot = NSDiffableDataSourceSnapshot<Int, PasteboardModel>()
         snapshot.appendSections([0])
         snapshot.appendItems(dataList, toSection: 0)
-        dataSource.apply(snapshot, animatingDifferences: animating)
+        dataSource.apply(
+            snapshot,
+            animatingDifferences: animating,
+            completion: completion
+        )
     }
 
     func resetToFirst() {

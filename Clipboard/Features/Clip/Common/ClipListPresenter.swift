@@ -13,6 +13,8 @@ import Combine
 final class ClipListPresenter {
     private let dataStore = PasteDataStore.main
     private var cancellables = Set<AnyCancellable>()
+    /// 已处理过的聚焦请求 token；主窗与浮窗各持一份。
+    private var handledFocusToken = 0
     private var wasEmpty = true
 
     // MARK: - Snapshot
@@ -28,6 +30,8 @@ final class ClipListPresenter {
     // MARK: - Selection
 
     var resetSelection: () -> Void = {}
+    /// 撤销恢复后定位到指定行（下标以当前快照为准）。
+    var focusItem: (_ index: Int) -> Void = { _ in }
     var restoreSelection: () -> Void = {}
     var adjustAfterDelete: () -> Void = {}
 
@@ -90,7 +94,13 @@ final class ClipListPresenter {
         case .new, .searchFilter, .moveToFirst, .reset:
             applyFull(items, false) { [weak self] in
                 guard let self else { return }
-                resetSelection()
+                // 撤销恢复后目标行已经不在顶部，优先定位到它。
+                if let request = dataStore.pendingFocus(after: handledFocusToken) {
+                    handledFocusToken = request.token
+                    focusItem(request.index)
+                } else {
+                    resetSelection()
+                }
                 // .new 时 preview 关闭后重新定位到新选中项（与 .update 行为一致）
                 if wasShowingPreview, changeType == .new {
                     reopenPreview()

@@ -123,8 +123,7 @@ final class FloatingHistoryView: NSView {
         presenter.applyFull = { [weak self] items, animating, completion in
             guard let self else { return }
             dataList = items
-            applySnapshot(animating: animating)
-            completion?()
+            applySnapshot(animating: animating, completion: completion)
         }
         setupReorder()
         presenter.appendItems = { [weak self] newItems in
@@ -140,6 +139,12 @@ final class FloatingHistoryView: NSView {
         }
         presenter.currentSnapshotItems = { [weak self] in self?.dataList ?? [] }
         presenter.resetSelection = { [weak self] in self?.resetToFirst() }
+        presenter.focusItem = { [weak self] index in
+            guard let self, !dataList.isEmpty else { return }
+            let clamped = min(max(index, 0), dataList.count - 1)
+            selectAndScrollTo(index: clamped)
+            updateSelectedItemBorder()
+        }
         presenter.restoreSelection = { [weak self] in self?.restoreSelection() }
         presenter.adjustAfterDelete = { [weak self] in self?.adjustSelectionAfterDelete() }
         presenter.updateEmptyState = { [weak self] isEmpty in

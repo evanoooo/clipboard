@@ -29,6 +29,7 @@ extension PasteDataStore {
                 let group = try? row.get(Col.group)
                 let tag = try? row.get(Col.tag)
                 let alias = try? row.get(Col.alias)
+                let sortOrder = (try? row.get(Col.sortOrder)) ?? 0
                 let hidden = ((try? row.get(Col.hidden)) ?? 0) != 0
 
                 let pType = PasteboardType(type)
@@ -61,6 +62,7 @@ extension PasteDataStore {
                     appID: appID
                 )
                 pasteModel.id = id
+                pasteModel.sortOrder = sortOrder
                 repairTagIfNeeded(pasteModel)
                 return pasteModel
             }

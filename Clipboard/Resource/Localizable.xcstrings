@@ -5964,6 +5964,24 @@
         }
       }
     },
+    "undoDeleteSucceeded" : {
+      "comment" : "HUD: undo delete succeeded, with the number of restored items",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restored %lld item(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已恢复 %lld 条"
+          }
+        }
+      }
+    },
     "unpin" : {
       "comment" : "Unpin action or tooltip",
       "extractionState" : "manual",

@@ -70,7 +70,7 @@ actor PasteReadStore {
                 Col.id, Col.uniqueId, Col.type, Col.data, Col.timestamp,
                 Col.appID, Col.searchText,
                 Col.showData, Col.length, Col.group,
-                Col.tag, Col.alias, Col.hidden
+                Col.tag, Col.alias, Col.hidden, Col.sortOrder
             ]
         let ord = order ?? [Col.sortOrder.desc, Col.id.desc]
 

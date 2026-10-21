@@ -16,6 +16,15 @@ extension PasteSQLManager {
         return try resolveApp(name: name, path: path, bundleID: bundleID)
     }
 
+    private func sortOrder(of id: Int64) -> Int64 {
+        guard let connection,
+              let row = try? connection.pluck(
+                  table.select(Col.sortOrder).filter(Col.id == id)
+              )
+        else { return 0 }
+        return row[Col.sortOrder]
+    }
+
     func insert(item: PasteboardModel, timestamp: Int64, group: Int = -1) async -> PasteInsertResult {
         let existing = await search(
             filter: Col.uniqueId == item.uniqueId,
@@ -41,7 +50,12 @@ extension PasteSQLManager {
                 log.error("更新时间戳失败：\(error)")
             }
             let effectiveGroup = group != -1 ? group : existingGroup
-            return PasteInsertResult(id: existingId, group: effectiveGroup, appID: try? row.get(Col.appID))
+            return PasteInsertResult(
+                id: existingId,
+                group: effectiveGroup,
+                appID: try? row.get(Col.appID),
+                sortOrder: sortOrder(of: existingId)
+            )
         }
 
         guard let appID = try? await resolvedAppID(for: item) else { return .failed }
@@ -64,7 +78,13 @@ extension PasteSQLManager {
         do {
             let rowId = try connection?.run(insert)
             log.debug("插入成功：\(String(describing: rowId))")
-            return PasteInsertResult(id: rowId ?? -1, group: nil, appID: appID)
+            let id = rowId ?? -1
+            return PasteInsertResult(
+                id: id,
+                group: nil,
+                appID: appID,
+                sortOrder: sortOrder(of: id)
+            )
         } catch {
             log.error("插入失败：\(error)")
         }
@@ -90,6 +110,65 @@ extension PasteSQLManager {
         } catch {
             log.error("删除失败：\(error)，id：\(id)")
         }
+    }
+
+    /// 撤销删除：快照带着删除前的 sort_order，写回后回到原来的位置。
+    /// 同一事务内完成，任一条失败则整体回滚。
+    func restore(_ snapshots: [ClipSnapshot]) async -> [Int64] {
+        guard let connection, !snapshots.isEmpty else { return [] }
+
+        var restored: [Int64] = []
+        do {
+            try connection.transaction(.immediate) {
+                for snapshot in snapshots {
+                    // 删后又复制了同样内容：保留现存行（包括它现在的顺序），只合并分组与别名。
+                    if let existing = try connection.pluck(
+                        table.select(Col.id).filter(Col.uniqueId == snapshot.uniqueId)
+                    ) {
+                        let existingId = existing[Col.id]
+                        let setters: [Setter] = [
+                            Col.group <- snapshot.group,
+                            Col.hidden <- 0,
+                        ] + Self.aliasSetters(snapshot.alias)
+                        try connection.run(table.filter(Col.id == existingId).update(setters))
+                        restored.append(existingId)
+                        continue
+                    }
+
+                    var setters: [Setter] = [
+                        Col.uniqueId <- snapshot.uniqueId,
+                        Col.type <- snapshot.type,
+                        Col.data <- snapshot.data,
+                        Col.showData <- snapshot.showData,
+                        Col.timestamp <- snapshot.timestamp,
+                        Col.sortOrder <- snapshot.sortOrder,
+                        Col.appID <- snapshot.appID ?? 0,
+                        Col.searchText <- snapshot.searchText,
+                        Col.length <- snapshot.length,
+                        Col.group <- snapshot.group,
+                        Col.tag <- snapshot.tag,
+                        Col.hidden <- 0,
+                    ] + Self.aliasSetters(snapshot.alias)
+
+                    // 原 id 已被其他记录占用时不指定 id，交给 SQLite 重新分配。
+                    let idTaken = try connection.pluck(
+                        table.select(Col.id).filter(Col.id == snapshot.id)
+                    ) != nil
+                    if !idTaken {
+                        setters.insert(Col.id <- snapshot.id, at: 0)
+                    }
+
+                    restored.append(try connection.run(table.insert(setters)))
+                }
+            }
+            log.info("恢复删除成功：\(restored.count) 条")
+        } catch {
+            log.error("恢复删除失败：\(error)")
+            return []
+        }
+
+        await refreshAppCache()
+        return restored
     }
 
     /// 无挂起点，清空和空间整理期间同一 actor 上的数据库操作排队执行。
@@ -141,25 +220,31 @@ extension PasteSQLManager {
         }
     }
 
-    func updateItemGroup(id: Int64, groupId: Int) async {
+    @discardableResult
+    func updateItemGroup(id: Int64, groupId: Int) async -> Bool {
         let query = table.filter(Col.id == id)
         let update = query.update(Col.group <- groupId)
         do {
             let count = try connection?.run(update)
             log.debug("更新项目分组成功，影响行数：\(String(describing: count))")
+            return (count ?? 0) > 0
         } catch {
             log.error("更新项目分组失败：\(error)")
+            return false
         }
     }
 
-    func updateItemHidden(id: Int64, hidden: Bool) async {
+    @discardableResult
+    func updateItemHidden(id: Int64, hidden: Bool) async -> Bool {
         let query = table.filter(Col.id == id)
         let update = query.update(Col.hidden <- hidden ? 1 : 0)
         do {
             let count = try connection?.run(update)
             log.debug("更新项目 hidden 成功，影响行数：\(String(describing: count))")
+            return (count ?? 0) > 0
         } catch {
             log.error("更新项目 hidden 失败：\(error)")
+            return false
         }
     }
 

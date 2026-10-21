@@ -23,28 +23,35 @@ enum PasteOrder {
         }
     }
 
-    nonisolated static func orderedIDs(on database: Connection) throws -> [Int64] {
-        try database.prepare(Table("Clip").select(Col.id).order(Col.sortOrder.desc, Col.id.desc))
-            .map { $0[Col.id] }
+    nonisolated static func orderedEntries(on database: Connection) throws -> [(id: Int64, order: Int64)] {
+        try database.prepare(Table("Clip").select(Col.id, Col.sortOrder).order(Col.sortOrder.desc, Col.id.desc))
+            .map { ($0[Col.id], $0[Col.sortOrder]) }
     }
 
-    nonisolated static func promote(_ ids: [Int64], on database: Connection) throws {
+    /// 返回每个条目写入后的序号，供内存模型同步，避免撤销时用到过期位置。
+    nonisolated static func promote(_ ids: [Int64], on database: Connection) throws -> [Int64: Int64] {
+        var result: [Int64: Int64] = [:]
         try database.transaction(.immediate) {
             let table = Table("Clip")
-            for id in ids.reversed() {
+            let stored = try database.scalar("SELECT COALESCE(MAX(sort_order), 0) FROM Clip")
+            let base = (stored as? Int64) ?? 0
+            for (offset, id) in ids.reversed().enumerated() {
                 try database.run(table.filter(Col.id == id).update(Col.sortOrder <- Col.nextSortOrder))
+                result[id] = base + Int64(offset) + 1
             }
         }
+        return result
     }
 
     /// before 优先；结果末尾使用 after，避免误移到尚未加载的历史记录之后。
+    /// 返回每个条目写入后的序号，供内存模型同步。
     nonisolated static func move(
         _ ids: [Int64],
         before: Int64?,
         after: Int64?,
         on database: Connection
-    ) throws -> [Int64] {
-        var result: [Int64] = []
+    ) throws -> [(id: Int64, order: Int64)] {
+        var result: [(id: Int64, order: Int64)] = []
         try database.transaction(.immediate) {
             let table = Table("Clip")
             let rows = try Array(database.prepare(
@@ -71,7 +78,8 @@ enum PasteOrder {
                     Col.sortOrder <- rows[index][Col.sortOrder]
                 ))
             }
-            result = reordered
+            // 排序结果与 rows 一一对应：未变动的位置本来就持有该序号。
+            result = reordered.indices.map { (reordered[$0], rows[$0][Col.sortOrder]) }
         }
         return result
     }

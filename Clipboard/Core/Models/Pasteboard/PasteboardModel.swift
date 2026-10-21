@@ -10,6 +10,8 @@ import UniformTypeIdentifiers
 
 final class PasteboardModel: Identifiable, Codable {
     var id: Int64?
+    /// 仅内存态缓存数据库的 sort_order，用于撤销删除后回到原位；不参与 Codable。
+    var sortOrder: Int64 = 0
     let uniqueId: String
     let pasteboardType: PasteboardType
     let data: Data

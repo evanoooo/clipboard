@@ -8,38 +8,55 @@ import Combine
 import SQLite
 
 extension PasteDataStore {
+    /// 置顶要等数据库写完再发布：内存里的 sortOrder 必须与库一致，否则撤销会用过期位置。
     func moveItemsToFirst(_ models: [PasteboardModel]) {
         guard !models.isEmpty else { return }
 
         let ids = models.compactMap(\.id)
-        Task { await sqlManager.promoteItems(ids) }
+        guard !ids.isEmpty else { return }
 
-        let movedIds = Set(models.compactMap(\.id))
-        var list = dataList.value.filter { item in
-            guard let id = item.id else { return true }
-            return !movedIds.contains(id)
+        enqueueMutation { [weak self, sqlManager] in
+            let orders = await sqlManager.promoteItems(ids)
+            guard let self else { return }
+
+            for model in models {
+                guard let id = model.id, let order = orders[id] else { continue }
+                model.sortOrder = order
+            }
+
+            let movedIds = Set(ids)
+            var list = dataList.value.filter { item in
+                guard let id = item.id else { return true }
+                return !movedIds.contains(id)
+            }
+            list.insert(contentsOf: models, at: 0)
+
+            if list.count > pageSize {
+                list = Array(list.prefix(pageSize))
+            }
+            updateData(with: list, changeType: .moveToFirst)
         }
-
-        list.insert(contentsOf: models, at: 0)
-
-        if list.count > pageSize {
-            list = Array(list.prefix(pageSize))
-        }
-        updateData(with: list, changeType: .moveToFirst)
     }
 
     func deleteItems(_ items: PasteboardModel...) {
         deleteItems(items)
     }
 
-    func deleteItems(_ items: [PasteboardModel]) {
+    /// - Parameter recordUndo: 多选删除由调用方汇总成一条记录时传 false。
+    func deleteItems(_ items: [PasteboardModel], recordUndo: Bool = true) {
         let deletedIds = Set(items.compactMap(\.id))
+        guard !deletedIds.isEmpty else { return }
+
+        if recordUndo {
+            let snapshots = items.compactMap { ClipSnapshot(model: $0) }
+            ClipUndoStore.shared.push(.deleted(snapshots))
+        }
+
         var list = dataList.value
         list.removeAll { item in
             guard let id = item.id else { return false }
             return deletedIds.contains(id)
         }
-        guard !deletedIds.isEmpty else { return }
 
         let deficit = pageSize - list.count
         if deficit > 0, hasMoreData {
@@ -54,6 +71,77 @@ extension PasteDataStore {
         }
     }
 
+    /// 撤销最近一次删除；返回实际恢复条数，0 表示失败且记录已退回栈。
+    @discardableResult
+    func undoLastDelete() async -> Int {
+        guard !isUndoing, let action = ClipUndoStore.shared.pop() else { return 0 }
+
+        isUndoing = true
+        defer { isUndoing = false }
+
+        // 先等删除/移组/隐藏/置顶落库，否则恢复后可能被排队的写操作再次覆盖。
+        await awaitPendingMutations()
+        let restoredIds = await applyUndo(action)
+
+        if !restoredIds.isEmpty {
+            await reloadAfterUndo(restoredIds)
+        } else {
+            ClipUndoStore.shared.push(action)
+            NSSound.beep()
+        }
+        return restoredIds.count
+    }
+
+    private func applyUndo(_ action: ClipUndoAction) async -> [Int64] {
+        switch action {
+        case let .batch(actions):
+            var restored: [Int64] = []
+            for sub in actions.reversed() {
+                restored += await applyUndo(sub)
+            }
+            return restored
+
+        case let .deleted(snapshots):
+            return await sqlManager.restore(snapshots)
+
+        case let .ungrouped(ids, groupId):
+            var restored: [Int64] = []
+            for id in ids where await sqlManager.updateItemGroup(id: id, groupId: groupId) {
+                restored.append(id)
+            }
+            return restored
+
+        case let .hidden(ids):
+            var restored: [Int64] = []
+            for id in ids where await sqlManager.updateItemHidden(id: id, hidden: false) {
+                restored.append(id)
+            }
+            return restored
+        }
+    }
+
+    /// 恢复后按当前视图重查，保持筛选/搜索状态不变，并定位到被恢复的条目。
+    private func reloadAfterUndo(_ restoredIds: [Int64]) async {
+        PasteMetadataCache.shared.invalidateAllCaches()
+        // 保持撤销前的加载深度：被删的可能在第二页之后，只重查首页会让它“消失”。
+        let loaded = max(dataList.value.count, pageSize)
+        resetPagination()
+
+        guard isInFilterMode, let filter = currentFilter else {
+            totalCount = await sqlManager.getTotalCount()
+            await resetDefaultList(focusIds: restoredIds, limit: loaded)
+            return
+        }
+
+        let rows = await PasteReadStore.shared.search(filter: filter, limit: loaded)
+        let list = await mapRows(rows)
+        totalCount = await sqlManager.getTotalCount()
+        filteredCount = await PasteReadStore.shared.getCount(filter: filter)
+        setHasMoreData(rows.count == loaded)
+        requestFocus(at: focusIndex(in: list, ids: restoredIds))
+        updateData(with: list, changeType: .searchFilter)
+    }
+
     private func deleteAndBackfill(
         _ deletedIds: Set<Int64>,
         deficit: Int,
@@ -62,7 +150,7 @@ extension PasteDataStore {
         let inFilter = isInFilterMode
         let activeFilter = currentFilter
 
-        Task { [weak self, sqlManager] in
+        enqueueMutation { [weak self, sqlManager] in
             guard let self else { return }
 
             await sqlManager.delete(filter: deletedIds.contains(Col.id))
@@ -110,7 +198,7 @@ extension PasteDataStore {
         let inFilter = isInFilterMode
         let activeFilter = currentFilter
 
-        Task.detached(priority: .utility) { [weak self, sqlManager] in
+        enqueueMutation { [weak self, sqlManager] in
             await sqlManager.delete(filter: deletedIds.contains(Col.id))
             let count = await sqlManager.getTotalCount()
             let filtered: Int =
@@ -133,7 +221,7 @@ extension PasteDataStore {
         let inFilter = isInFilterMode
         let activeFilter = currentFilter
 
-        Task.detached(priority: .utility) { [sqlManager] in
+        enqueueMutation { [weak self, sqlManager] in
             await sqlManager.delete(filter: filter)
             let count = await sqlManager.getTotalCount()
 
@@ -248,6 +336,7 @@ extension PasteDataStore {
             Task {
                 do {
                     let reclaimed = try await sqlManager.clearHistory()
+                    ClipUndoStore.shared.removeAll()
                     SourceAppCache.shared.replace([])
                     AppColorService.shared.clearColors()
                     PasteMetadataCache.shared.invalidateAllCaches()
@@ -292,8 +381,14 @@ extension PasteDataStore {
             model.updateHidden(val: hidden)
         }
 
-        Task {
+        enqueueMutation { [sqlManager] in
             await sqlManager.updateItemHidden(id: itemId, hidden: hidden)
+        }
+    }
+
+    func updateItemGroup(id: Int64, groupId: Int) {
+        enqueueMutation { [sqlManager] in
+            await sqlManager.updateItemGroup(id: id, groupId: groupId)
         }
     }
 
