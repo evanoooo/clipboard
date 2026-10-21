@@ -9,7 +9,7 @@ import AppKit
 import SnapKit
 import WebKit
 
-final class PreviewWebView: NSView, WKNavigationDelegate, PreviewResettable {
+final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewResettable {
     private let webView: WKWebView
     private let loadingIndicator: NSProgressIndicator
     private let errorLabel: NSTextField
@@ -18,6 +18,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, PreviewResettable {
     init(url: URL) {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         webView = WKWebView(frame: .zero, configuration: configuration)
         loadingIndicator = NSProgressIndicator()
         errorLabel = NSTextField(wrappingLabelWithString: "")
@@ -26,6 +27,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, PreviewResettable {
         wantsLayer = true
 
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.alphaValue = 0
 
         loadingIndicator.style = .spinning
@@ -64,6 +66,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, PreviewResettable {
     func stopLoading() {
         webView.stopLoading()
         webView.navigationDelegate = nil
+        webView.uiDelegate = nil
         webView.loadHTMLString("", baseURL: nil)
     }
 
@@ -81,6 +84,47 @@ final class PreviewWebView: NSView, WKNavigationDelegate, PreviewResettable {
 
     func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: Error) {
         show(error)
+    }
+
+    // MARK: - 导航边界
+
+    private static let externalSchemes: Set<String> = ["http", "https", "mailto"]
+
+    /// 与 `PreviewMarkdownView` 保持一致：只拦用户点击的链接，
+    /// 重定向与脚本跳转交给页面，避免把预览变成“什么都点不动”。
+    func webView(
+        _: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        guard navigationAction.navigationType == .linkActivated else {
+            decisionHandler(.allow)
+            return
+        }
+
+        guard let url = navigationAction.request.url,
+              Self.externalSchemes.contains(url.scheme?.lowercased() ?? "")
+        else {
+            decisionHandler(.cancel)
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+        decisionHandler(.cancel)
+    }
+
+    /// `target=_blank` / `window.open`：不开新窗口，交给系统浏览器。
+    func webView(
+        _: WKWebView,
+        createWebViewWith _: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures _: WKWindowFeatures
+    ) -> WKWebView? {
+        if let url = navigationAction.request.url,
+           Self.externalSchemes.contains(url.scheme?.lowercased() ?? "") {
+            NSWorkspace.shared.open(url)
+        }
+        return nil
     }
 
     private func show(_ error: Error) {
