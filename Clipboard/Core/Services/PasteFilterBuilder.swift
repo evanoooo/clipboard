@@ -33,8 +33,9 @@ enum PasteFilterBuilder {
         }
 
         // 分组筛选
-        if !criteria.selectedGroupIds.isEmpty {
-            clauses.append(groupFilter(for: criteria.selectedGroupIds))
+        if !criteria.selectedGroupIds.isEmpty,
+           let group = orJoined(criteria.selectedGroupIds.sorted().map { Col.group == $0 }) {
+            clauses.append(group)
         } else {
             clauses.append(Col.hidden == 0)
         }
@@ -48,21 +49,13 @@ enum PasteFilterBuilder {
                     tagValues.append(value)
                 }
             }
-            if !tagValues.isEmpty {
-                let tagCondition = tagValues.map { (Col.tag ?? "") == $0 }
-                    .reduce(Expression<Bool>(value: false)) { result, condition in
-                        result || condition
-                    }
+            if let tagCondition = orJoined(tagValues.sorted().map { (Col.tag ?? "") == $0 }) {
                 clauses.append(tagCondition)
             }
         }
 
         // 应用筛选
-        if !criteria.selectedAppIDs.isEmpty {
-            let appCondition = criteria.selectedAppIDs.map {
-                Col.appID == $0
-            }
-            .reduce(Expression<Bool>(value: false)) { $0 || $1 }
+        if let appCondition = orJoined(criteria.selectedAppIDs.sorted().map { Col.appID == $0 }) {
             clauses.append(appCondition)
         }
 
@@ -86,8 +79,11 @@ enum PasteFilterBuilder {
         }
     }
 
-    private static func groupFilter(for groupIds: Set<Int>) -> Expression<Bool> {
-        groupIds.map { Col.group == $0 }
-            .reduce(Expression<Bool>(value: false)) { $0 || $1 }
+    /// 不能用 `Expression<Bool>(value: false)` 作为 OR 起点：
+    /// 生成的 `(0 OR "group" = 3)` 会让 SQLite 放弃 idx_group_order，
+    /// 退化为按 idx_sort_order 的整表扫描（569 MB 库实测 ~900 ms）。
+    private static func orJoined(_ conditions: [Expression<Bool>]) -> Expression<Bool>? {
+        guard let first = conditions.first else { return nil }
+        return conditions.dropFirst().reduce(first) { $0 || $1 }
     }
 }
