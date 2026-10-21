@@ -19,8 +19,11 @@ enum PasteAliasEditor {
         )
 
         guard case let .submitted(text) = outcome else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 未修改类型名等于没有命名，不写入别名。
+        let effective = trimmed == model.type.string ? "" : trimmed
         Task {
-            await PasteDataStore.main.updateAlias(id: id, alias: text)
+            await PasteDataStore.main.updateAlias(id: id, alias: effective)
         }
     }
 }

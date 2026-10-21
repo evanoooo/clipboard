@@ -152,13 +152,15 @@ final class CardHeadView: NSView {
         isEditingAlias = false
 
         let trimmed = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 提交值与类型名相同（未做任何修改）时视为没有命名，不写入别名。
+        let effective = trimmed == model?.type.string ? "" : trimmed
         titleField.isEditable = false
         titleField.isSelectable = false
         titleField.cell?.isScrollable = false
 
         if commit {
-            applyDisplay(alias: trimmed)
-            onAliasCommit?(trimmed)
+            applyDisplay(alias: effective)
+            onAliasCommit?(effective)
         } else {
             applyDisplay(alias: model?.alias ?? "")
         }
