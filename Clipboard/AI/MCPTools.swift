@@ -102,7 +102,7 @@ struct MCPTools {
 
         if !query.isEmpty {
             // 与 App 入库侧同一套归一化，否则 "hello world"、"https://..." 这类输入永远匹配不到
-            let tokens = SearchText.tokens(query)
+            let tokens = SearchTextNormalizer.queryTokens(query)
             if tokens.isEmpty {
                 // 归一化后为空（纯标点/空白）：与任何入库文本都不可能匹配
                 queryExpr = queryExpr.filter(Expression<Bool>(value: false))
@@ -230,7 +230,7 @@ struct MCPTools {
         let timestamp = Int64(Date().timeIntervalSince1970)
         let showData = String(content.prefix(300)).data(using: .utf8)
         // 与 App 入库侧同一套归一化，否则跨标点/空白的查询永远命中不到。
-        let normalizedSearchText = SearchText.normalize(content)
+        let normalizedSearchText = SearchTextNormalizer.normalize(content)
 
         guard let database = try? Connection(ClipboardPaths.database) else {
             return mcpError("Cannot open clipboard database")
@@ -357,45 +357,5 @@ private struct MCPCategoryChip: Codable {
 private extension Data {
     var sha256Hex: String {
         SHA256.hash(data: self).reduce(into: "") { $0 += String(format: "%02hhx", $1) }
-    }
-}
-
-// MARK: - 搜索文本归一化 (mirrors SearchTextNormalizer.swift, local to clipmcp)
-
-/// clipmcp 目标只编译固定文件清单，`Core/Shared/SearchTextNormalizer.swift` 不在其中，
-/// 因此这里保留一份实现。改动时必须同步两边，否则 App 与 MCP 的搜索口径会分叉。
-private enum SearchText {
-    /// 保留字母、数字与符号，丢弃空白和标点；与 App 入库侧保持一致。
-    /// 结果不会包含 LIKE 通配符 `%` / `_`，无需额外转义。
-    static func normalize(_ raw: String) -> String {
-        var output = ""
-        output.reserveCapacity(raw.utf8.count)
-        for character in raw {
-            guard let scalar = character.unicodeScalars.first else { continue }
-            switch scalar.properties.generalCategory {
-            case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
-                 .decimalNumber, .letterNumber, .otherNumber,
-                 .mathSymbol, .currencySymbol, .modifierSymbol, .otherSymbol:
-                output.append(character)
-            default:
-                if (scalar.value == 0x23 || scalar.value == 0x2A),
-                   character.unicodeScalars.contains(where: { $0.value == 0x20E3 }) {
-                    output.append(character)
-                }
-            }
-        }
-        return output
-    }
-
-    /// 按空白切分并逐词归一化，用于词元 AND 匹配。
-    static func tokens(_ raw: String) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for part in raw.split(whereSeparator: \.isWhitespace) {
-            let token = normalize(String(part))
-            guard !token.isEmpty, seen.insert(token).inserted else { continue }
-            result.append(token)
-        }
-        return result
     }
 }
