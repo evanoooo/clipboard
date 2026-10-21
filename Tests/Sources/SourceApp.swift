@@ -1,0 +1,1 @@
+../../Clipboard/Core/Shared/SourceApp.swift

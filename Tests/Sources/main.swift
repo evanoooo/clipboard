@@ -29,6 +29,9 @@ struct TestRunner {
 
         testSearchTextNormalizer()
         testJSONTransformer()
+        SchemaMigrationTests.run(runner: TestRunner.self)
+        CRUDOperationTests.run(runner: TestRunner.self)
+        UndoRestoreTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")

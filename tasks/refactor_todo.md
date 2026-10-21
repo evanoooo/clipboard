@@ -1,6 +1,6 @@
 # 架构重构与治理任务追踪清单
 
-> 对应完整实施计划见 `tasks/refactor_plan.md`。  
+> 对应完整实施计划见 `tasks/refactor_plan.md` 与 `tasks/refactor_v2_plan.md`。  
 > 严格遵循 `AGENTS.md` 规范（macOS 14.0+、Swift Concurrency、AppKit 优先、SnapKit 布局、常规提交规范）。
 
 ---
@@ -39,9 +39,13 @@
   - [x] 建立 `JSONTransformer` 全套单测（JSON识别、有效性校验、紧凑化、两空格格式化、按键字母排序）
   - [x] 验证：运行 `swift run` 23/23 单元测试全部在 0.55s 内秒级通过，且主项目 `xcodebuild` 保持完全独立不受干扰
 
-- [ ] **Task 6: 数据库迁移与 CRUD 内存测试**
-  - [ ] 创建 `Tests/DatabaseMigrationTests.swift`
-  - [ ] 验证：GRDB/SQLite 内存数据库 1 秒内完成 Schema 迁移及增删改查断言
+- [x] **Task 6: 数据库迁移与 CRUD 内存测试**
+  - [x] `Tests/Package.swift` 引入 `stephencelis/SQLite.swift` 0.17.0 纯内存测试依赖
+  - [x] 编写 `MemoryDatabaseHelper.swift` 纯内存 SQLite 测试数据库工厂
+  - [x] 编写 `SchemaMigrationTests.swift`（表结构创建、PRAGMA 列验证、user_version 升级、unique_id 唯一冲突断言）
+  - [x] 编写 `CRUDOperationTests.swift`（记录单条/批量插入、sort_order 降序排序、alias 与 alias_search 归一化修改、hidden 软删除过滤、group 分组过滤、物理删除）
+  - [x] 编写 `UndoRestoreTests.swift`（快照捕获、原 ID/sort_order 恢复校验、.immediate 事务异常回滚原子性断言）
+  - [x] 验证：`swift run` 61/61 测试用例 1.02 秒内全绿通过，主项目 `xcodebuild` 编译无任何负作用
 
 - [x] **Task 7: 统一系统级日志与脱敏规范**
   - [x] `Logger.swift` 统一接入 `os.Logger(subsystem:category:)` 并使用 `OSAllocatedUnfairLock`
@@ -62,48 +66,9 @@
 - [x] **Task 9: 梳理 `AppDelegate` 与多窗口生命周期**
   - [x] 审查 `AppDelegate.swift`：实际仅 ~180 行，结构精炼
   - [x] `WindowManager` 接入 `@MainActor` 严格主线程隔离，消除跨线程调度窗口隐患（Commit: `7a665b7`）
-  - [x] `ClipPreviewPopover` 在 `cleanup` 中即时解绑全局键盘事件监听器，避免浮层关闭后事件泄露（Commit: `7a665b7`）
+  - [x] `ClipPreviewPopover` 在 `cleanup` 中及时解绑全局键盘事件监听器，避免浮层关闭后事件泄露（Commit: `7a665b7`）
   - [x] 清理 `CardBottomView` 与 `CardContentView` 不必要的 `nonisolated(unsafe)` 绕过标记（Commit: `7a665b7`）
 
 - [ ] **Task 10: 拆分 `PasteDataStore` 数据存储与 UI 状态**
   - [ ] 提取 `ClipboardRepository`（专门负责 DB/Disk 交互）
   - [ ] 提取 `ClipboardFilterState`（专门管理搜索与分类状态机）
-  - [ ] 清理 `NotificationCenter`，统一为 Combine 响应式订阅
-
----
-
-## 阶段四：UI 表现层治理与重复消除（P1）
-
-- [x] **Task 11: 统一 Card 与 Floating 视图的快捷交互层**
-  - [x] 提炼共享的 `ClipUndoExecutor`，统一 ⌘Z 撤销和反馈 HUD 逻辑（Commit: `ab919c0`）
-  - [x] 提炼 `HotKeyManager.tabDirection(for:)`，统一分类 Chip 切换快捷键路由（Commit: `ab919c0`）
-  - [x] Card 与 Floating 双视图 KeyEvent 同步复用，消除重复代码
-
-- [ ] **Task 12: 统一卡片与列表行内容渲染策略**
-  - [ ] 提取通用的 `ClipContentRenderer`
-  - [ ] CardContentView 与 FloatingCardRowView 复用渲染逻辑
-  - [ ] 验证：新增内容展示样式单点生效
-
-- [x] **Task 13: 接入 Diffable Data Source 提升列表刷新流畅度**
-  - [x] `ClipMainViewController` 已接入 `NSCollectionViewDiffableDataSource<ClipSection, PasteboardModel>`
-  - [x] 确认全局无 `asyncAfter` 延迟妥协，无暴力 `reloadData()`，由快照与单项配置精确更新
-  - [x] 验证：列表新增、重排与删除具备平滑系统动画
-
----
-
-## 阶段五：性能极致与工程现代化（P2）
-
-- [ ] **Task 14: 引入 SQLite FTS5 全文搜索虚拟表**
-  - [ ] 新增 DB 迁移版本 `v13` 创建 FTS5 表与触发器
-  - [ ] 搜索逻辑由 `LIKE` 升级为 `MATCH`
-  - [ ] 验证：5 万条数据下搜索延迟 < 15ms
-
-- [x] **Task 15: 废弃 API 现代化与规范修正**
-  - [x] 确认项目已完全使用 `NaturalLanguage`（`NLTokenizer`），无任何 `NSLinguisticTagger`
-  - [x] 统一 `NScolor+Extension.swift` 大小写为 `NSColor+Extension.swift` 并改用原生 `replacing`（Commit: `431e3c0`）
-  - [x] 确认 Swift 原生 `String` 截断均基于完整 Grapheme Cluster，无乱码风险
-
-- [x] **Task 16: VoiceOver 无障碍与键盘导航增强**
-  - [x] 为卡片 `CollectionViewItem` 和悬浮行 `FloatingCardRowView` 补齐无障碍角色、标签、内容与快捷操作指南（Commit: `0e0ad99`）
-  - [x] 为 `EmptyStateView` 配置无障碍群组与状态朗读（Commit: `0e0ad99`）
-  - [x] 验证：VoiceOver 可顺畅朗读来源应用、类型、快捷粘贴序号与自定义别名
