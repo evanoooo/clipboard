@@ -3280,6 +3280,42 @@
     "MCP" : {
       "shouldTranslate" : false
     },
+    "linkPreviewEmpty" : {
+      "comment" : "Link preview loaded but the page has no visible content",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The page has no visible content"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "页面没有可显示的内容"
+          }
+        }
+      }
+    },
+    "linkPreviewFailed" : {
+      "comment" : "Link preview failed to load, with the underlying reason",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t load the page\n%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网页加载失败\n%@"
+          }
+        }
+      }
+    },
     "mcpAddTo" : {
       "extractionState" : "manual",
       "localizations" : {
