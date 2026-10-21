@@ -76,7 +76,10 @@ extension AppDelegate: NSApplicationDelegate {
 
 extension AppDelegate {
     private func initClipboardAsync() async {
-        guard await PasteDataStore.main.setup() else { return }
+        guard await PasteDataStore.main.setup() else {
+            presentDatabaseFailure()
+            return
+        }
 
         PasteBoard.main.startListening()
 
@@ -87,6 +90,34 @@ extension AppDelegate {
         WelcomeWindowController.shared.showIfNeeded()
 
         syncLaunchAtLoginStatus()
+    }
+
+    /// 数据库不可用时明确告知用户，避免应用静默变成「不再记录剪贴板」。
+    private func presentDatabaseFailure() {
+        log.error("历史数据库初始化失败，本次运行不会记录剪贴板")
+
+        AppEnvironment.shared.suppressResignKey = true
+        defer { AppEnvironment.shared.suppressResignKey = false }
+
+        let alert = NSAlert.appAlert()
+        alert.alertStyle = .critical
+        alert.messageText = String(localized: .dbUnavailableTitle)
+        alert.informativeText = String(localized: .dbUnavailableMessage)
+        alert.addButton(withTitle: String(localized: .dbUnavailableOpenFolder))
+        alert.addButton(withTitle: String(localized: .commonConfirm))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            revealDatabaseDirectory()
+        }
+    }
+
+    /// 目录可能因创建失败而不存在，此时退到其父目录，保证按钮总有反馈。
+    private func revealDatabaseDirectory() {
+        let directory = URL(filePath: PasteSQLManager.databasePath).deletingLastPathComponent()
+        let target = FileManager.default.fileExists(atPath: directory.path)
+            ? directory
+            : directory.deletingLastPathComponent()
+        NSWorkspace.shared.open(target)
     }
 
     private func syncLaunchAtLoginStatus() {

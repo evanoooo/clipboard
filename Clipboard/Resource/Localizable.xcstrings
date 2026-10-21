@@ -904,6 +904,60 @@
         }
       }
     },
+    "dbUnavailableMessage" : {
+      "comment" : "Database unavailable alert message at launch",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The history database is unavailable, so copies made during this session will not be saved. Open the data folder to inspect it, or restart the app to try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "历史数据库当前不可用，本次运行期间的复制不会被保存。可打开数据目录查看详情，或重启应用重试。"
+          }
+        }
+      }
+    },
+    "dbUnavailableOpenFolder" : {
+      "comment" : "Button that reveals the database folder",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Data Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开数据目录"
+          }
+        }
+      }
+    },
+    "dbUnavailableTitle" : {
+      "comment" : "Database unavailable alert title at launch",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clipboard History Unavailable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剪贴板历史不可用"
+          }
+        }
+      }
+    },
     "delete" : {
       "comment" : "Delete",
       "extractionState" : "manual",
