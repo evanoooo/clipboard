@@ -98,6 +98,8 @@ extension ClipMainWindowController {
         let initiallyHidden = !window.isVisible
 
         if initiallyHidden {
+            // 撤销只服务本次唤出，每次重新弹出都从空栈开始。
+            ClipUndoStore.shared.removeAll()
             let screenFrame = frame ?? NSScreen.main?.frame ?? .zero
             AppEnvironment.shared.previousApp = NSWorkspace.shared.frontmostApplication
             let visibleFrame = NSRect(

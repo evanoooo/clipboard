@@ -2,7 +2,7 @@
 //  ClipUndoStore.swift
 //  Clipboard
 //
-//  会话内删除撤销栈：只保留最近若干次删除操作，退出应用即丢弃。
+//  唤出内删除撤销栈：只对当前这次弹出有效，窗口重新唤出即清空。
 //
 
 import AppKit
@@ -65,6 +65,7 @@ final class ClipUndoStore {
     static let shared = ClipUndoStore()
 
     /// 只保留最近若干次操作，避免图片快照长期占用内存。
+    /// 栈随窗口唤出清空，这里的上限只是单次唤出内的安全阀。
     private let maxEntries = 20
     private let maxPayloadBytes = 256 * 1024 * 1024
 

@@ -237,6 +237,8 @@ final class ClipFloatingWindowController: NSWindowController {
             return
         }
 
+        // 撤销只服务本次唤出，每次重新弹出都从空栈开始。
+        ClipUndoStore.shared.removeAll()
         clipVC.env.previousApp = NSWorkspace.shared.frontmostApplication
         positionWindow()
         win.alphaValue = 0
