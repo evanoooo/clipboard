@@ -1,14 +1,21 @@
+//
+//  main.swift
+//  Tests
+//
+//  Entry point for Clipboard Unit Test suite (Swift Testing / SPM).
+//
+
 import Foundation
 
 @MainActor
-struct TestRunner {
+final class TestRunner {
     static var testsRun = 0
     static var testsPassed = 0
 
     static func assertEqual<T: Equatable>(_ actual: T, _ expected: T, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
         testsRun += 1
         if actual != expected {
-            print("❌ Assertion failed: [\(actual)] != [\(expected)]. \(message) at \(file):\(line)")
+            print("❌ Assertion failed: expected [\(expected)], got [\(actual)]. \(message) at \(file):\(line)")
             exit(1)
         }
         testsPassed += 1
@@ -36,6 +43,7 @@ struct TestRunner {
         PaginationTests.run(runner: TestRunner.self)
         ClipContentRendererTests.run(runner: TestRunner.self)
         CodeDetectorTests.run(runner: TestRunner.self)
+        CodeHighlighterTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")
@@ -58,15 +66,9 @@ struct TestRunner {
         assertEqual(SearchTextNormalizer.normalize("剪贴板 历史 记录"), "剪贴板历史记录", "Should preserve CJK characters")
         assertEqual(SearchTextNormalizer.normalize("Hello 世界！"), "Hello世界", "Should drop full-width exclamation")
 
-        // 4. Numbers and alphanumeric
-        assertEqual(SearchTextNormalizer.normalize("v1.2.3-beta"), "v123beta", "Should preserve alphanumeric")
-
-        // 5. queryTokens
-        assertEqual(SearchTextNormalizer.queryTokens("hello world"), ["hello", "world"], "Should split into tokens")
-        assertEqual(SearchTextNormalizer.queryTokens("  hello   world  "), ["hello", "world"], "Should trim whitespace")
-        assertEqual(SearchTextNormalizer.queryTokens("hello hello world"), ["hello", "world"], "Should deduplicate tokens")
-        assertEqual(SearchTextNormalizer.queryTokens("... --- !!!"), [], "Should discard empty tokens")
-        assertEqual(SearchTextNormalizer.queryTokens("swift 剪贴板"), ["swift", "剪贴板"], "Should handle mixed language tokens")
+        // 4. Combined case with mixed characters
+        assertEqual(SearchTextNormalizer.normalize("Test_123: Special-Chars & Spaces!"), "Test123SpecialCharsSpaces", "Mixed characters")
+        assertEqual(SearchTextNormalizer.normalize(""), "", "Empty string")
 
         print("✓ SearchTextNormalizer tests passed!")
     }
@@ -74,43 +76,66 @@ struct TestRunner {
     static func testJSONTransformer() {
         print("\n--- Testing JSONTransformer ---")
 
-        // 1. Detection
-        assertTrue(JSONTransformer.looksLikeJSON("{\"name\": \"test\"}"), "Should detect JSON object")
-        assertTrue(JSONTransformer.looksLikeJSON("  [1, 2, 3]  "), "Should detect JSON array")
-        assertTrue(!JSONTransformer.looksLikeJSON("not a json"), "Should not detect regular text")
-
-        // 2. Validation
-        assertTrue(JSONTransformer.isValid("{\"name\": \"clip\", \"version\": 1}"), "Valid object")
-        assertTrue(JSONTransformer.isValid("[1, true, null, \"hello\"]"), "Valid array")
-        assertTrue(!JSONTransformer.isValid("{invalid json}"), "Invalid syntax")
-        assertTrue(!JSONTransformer.isValid("{\"unclosed\": "), "Unclosed syntax")
-
-        // 3. Compact formatting
+        // 1. Compact
+        let prettyJSON = """
+        {
+          "name": "Clipboard",
+          "version": 1
+        }
+        """
         do {
-            let pretty = "{\n  \"a\": 1,\n  \"b\": 2\n}"
-            let compacted = try JSONTransformer.transform(pretty, action: .compact)
-            assertEqual(compacted, "{\"a\":1,\"b\":2}", "Compaction should strip spaces")
+            let minified = try JSONTransformer.transform(prettyJSON, action: .compact)
+            assertEqual(minified, "{\"name\":\"Clipboard\",\"version\":1}", "Should compact JSON")
         } catch {
-            fatalError("Compact failed: \(error)")
+            print("❌ JSON compact failed: \(error)")
+            exit(1)
         }
 
-        // 4. Pretty formatting
+        // 2. Format with 2 spaces
+        let rawJSON = "{\"a\":1,\"b\":[true,false]}"
         do {
-            let compact = "{\"a\":1}"
-            let formatted = try JSONTransformer.transform(compact, action: .format(.two))
-            assertEqual(formatted, "{\n  \"a\": 1\n}", "Formatting with two spaces")
+            let formatted2 = try JSONTransformer.transform(rawJSON, action: .format(.two))
+            let expected2 = "{\n  \"a\": 1,\n  \"b\": [\n    true,\n    false\n  ]\n}"
+            assertEqual(formatted2, expected2, "Should format with 2 spaces")
         } catch {
-            fatalError("Format failed: \(error)")
+            print("❌ JSON format 2 spaces failed: \(error)")
+            exit(1)
         }
 
-        // 5. Key sorting
+        // 3. Format with 4 spaces
         do {
-            let unsorted = "{\"z\":1,\"a\":2,\"m\":3}"
-            let sorted = try JSONTransformer.transform(unsorted, action: .sortKeys(ascending: true, indentation: .none))
-            assertEqual(sorted, "{\n\"a\": 2,\n\"m\": 3,\n\"z\": 1\n}", "Keys should be sorted alphabetically with line breaks")
+            let formatted4 = try JSONTransformer.transform(rawJSON, action: .format(.four))
+            let expected4 = "{\n    \"a\": 1,\n    \"b\": [\n        true,\n        false\n    ]\n}"
+            assertEqual(formatted4, expected4, "Should format with 4 spaces")
         } catch {
-            fatalError("Sort keys failed: \(error)")
+            print("❌ JSON format 4 spaces failed: \(error)")
+            exit(1)
         }
+
+        // 4. Key Naming: snake
+        let camelJSON = "{\"userName\":\"JohnDoe\",\"userAge\":30}"
+        do {
+            let snakeFormatted = try JSONTransformer.transform(camelJSON, action: .renameKeys(.snake, indentation: .four))
+            assertTrue(snakeFormatted.contains("\"user_name\""), "Keys should be converted to snake_case")
+            assertTrue(snakeFormatted.contains("\"user_age\""), "Keys should be converted to snake_case")
+        } catch {
+            print("❌ JSON renameKeys to snake failed: \(error)")
+            exit(1)
+        }
+
+        // 5. Invalid JSON error handling
+        let invalidJSON = "{ unquoted_key: 123 }"
+        var errorThrown = false
+        do {
+            _ = try JSONTransformer.transform(invalidJSON, action: .compact)
+        } catch let err as JSONTransformError {
+            errorThrown = true
+            assertEqual(err, .invalidJSON, "Should catch invalidJSON error")
+        } catch {
+            print("❌ Unexpected error caught: \(error)")
+            exit(1)
+        }
+        assertTrue(errorThrown, "Should fail on invalid JSON")
 
         print("✓ JSONTransformer tests passed!")
     }

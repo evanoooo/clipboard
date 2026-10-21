@@ -110,9 +110,14 @@
   - [x] 编写 `CodeDetectorTests.swift` 单测，覆盖 Nginx、Swift、Python、SQL、JSON、散文过滤
   - [x] 验证：125/125 单元测试全绿通过；主工程与 clipmcp 构建成功
 
-- [ ] **Code Phase 2: 原生 TextKit 词法着色器与动态主题构建**
-  - [ ] 实现 `CodeHighlighter` 与 `CodeTheme`，基于系统语义色实现自适应深浅外观
-  - [ ] 确保搜索词黄色高亮与语法高亮无冲突合并
+- [x] **Code Phase 2: 原生 TextKit 词法着色器与动态主题构建**
+  - [x] 实现 `CodeTheme`，基于系统语义色实现自适应深浅外观（免监听、免重启）
+  - [x] 实现 `CodeHighlighter` 纯 Swift 状态机分词器（注释、字符串、Nginx 变量 `$host`、指令、数字及带单位处理）
+  - [x] 融合搜索关键词黄色高亮机制，前景色与背景色完美叠加互不冲突
+  - [x] 编写 `CodeHighlighterTests.swift` 单测，覆盖 Nginx 高亮、变量、注释、搜索词高亮叠加、大文本安全边界（140/140 单元测试全绿）
+  - [x] 验证：主工程与 clipmcp 构建成功
+
+- [ ] **Code Phase 4: 完整单元测试套件与性能基线保障**
 
 - [ ] **Code Phase 3: 挂载 ClipContentRenderer 与双端视图增强**
   - [ ] `PasteboardModel` 接入 `detectedLanguage` 懒加载与缓存
