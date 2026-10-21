@@ -5,8 +5,8 @@ import SQLite
 // MARK: - 数据导入导出
 
 extension PasteSQLManager {
-    private static let metaTable = "clip_meta"
-    private static let metaChipsKey = "user_chips"
+    nonisolated private static let metaTable = "clip_meta"
+    nonisolated private static let metaChipsKey = "user_chips"
 
     nonisolated func exportDatabase(to destinationURL: URL, userChipsData: Data?) async -> ImportExportResult {
         let sourcePath = Self.databasePath
@@ -207,7 +207,7 @@ extension PasteSQLManager {
         // 别名与归一化检索列由 alias 原文推导，保证导入后别名搜索可用。
         setters += Self.aliasSetters((try? row.get(Col.alias)) ?? "")
 
-        let insert = try destTable.insert(setters)
+        let insert = destTable.insert(setters)
         try database.run(insert)
         return true
     }

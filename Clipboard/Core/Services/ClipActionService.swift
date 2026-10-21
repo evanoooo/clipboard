@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 @MainActor
-final class ClipActionService {
+final class ClipActionService: ClipboardActionProtocol {
     static let shared = ClipActionService()
 
     private let pasteBoard = PasteBoard.main

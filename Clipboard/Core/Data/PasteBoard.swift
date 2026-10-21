@@ -9,7 +9,7 @@ import AppKit
 import Combine
 import Foundation
 
-final class PasteBoard {
+final class PasteBoard: PasteboardMonitoringProtocol {
     static let main = PasteBoard()
 
     private let pasteboard = NSPasteboard.general

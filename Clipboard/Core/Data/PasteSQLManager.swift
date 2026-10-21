@@ -11,14 +11,14 @@ import SQLite
 
 // Col is defined in Clipboard/Shared/ClipboardSchema.swift (shared with clipmcp target)
 
-actor PasteSQLManager {
+actor PasteSQLManager: ClipboardRepositoryProtocol {
     static let manager = PasteSQLManager()
 
-    private static var databaseDirectory: URL {
+    nonisolated private static var databaseDirectory: URL {
         URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "Clip")
     }
 
-    static var databasePath: String {
+    nonisolated static var databasePath: String {
         databaseDirectory.appending(path: "Clip.sqlite3").path
     }
 

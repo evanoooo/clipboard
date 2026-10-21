@@ -5,7 +5,7 @@ import SQLite
 // MARK: - unique_id 重算与去重迁移
 
 extension PasteSQLManager {
-    private static let uniqueIdMigrationVersion = 1
+    nonisolated private static let uniqueIdMigrationVersion = 1
 
     private func databaseUserVersion() -> Int {
         guard let connection else { return 0 }
