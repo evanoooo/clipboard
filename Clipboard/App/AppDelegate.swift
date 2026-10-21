@@ -90,6 +90,16 @@ extension AppDelegate {
         WelcomeWindowController.shared.showIfNeeded()
 
         syncLaunchAtLoginStatus()
+
+        cleanupTempDirectories()
+    }
+
+    private func cleanupTempDirectories() {
+        Task.detached(priority: .utility) {
+            let tempDir = FileManager.default.temporaryDirectory
+            try? FileManager.default.removeItem(at: tempDir.appending(path: "ClipboardDrag"))
+            try? FileManager.default.removeItem(at: tempDir.appending(path: "ClipboardPaste"))
+        }
     }
 
     /// 数据库不可用时明确告知用户，避免应用静默变成「不再记录剪贴板」。
