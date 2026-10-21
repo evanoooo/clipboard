@@ -18,6 +18,8 @@ extension PasteSQLManager {
         }
     }
 
+    /// 写连接上的查询：`insert` 用它按 `unique_id` 查重，需要读到自己刚写入的数据，
+    /// 不能替换成 `PasteReadStore`。其余读路径请走只读通道。
     func search(
         filter: Expression<Bool>? = nil,
         select: [Expressible]? = nil,
@@ -131,36 +133,6 @@ extension PasteSQLManager {
         } catch {
             log.error("获取 tag 列表失败：\(error)")
             return []
-        }
-    }
-
-    func getCountByGroup(groupId: Int) async -> Int {
-        do {
-            let query = table.filter(Col.group == groupId)
-            return try connection?.scalar(query.count) ?? 0
-        } catch {
-            log.error("获取分组统计失败：\(error)")
-            return 0
-        }
-    }
-
-    func getCount(filter: Expression<Bool>?) async -> Int {
-        let started = ContinuousClock.now
-        do {
-            let total: Int
-            if let filter {
-                total = try connection?.scalar(table.filter(filter).count) ?? 0
-            } else {
-                total = try connection?.scalar(table.count) ?? 0
-            }
-            log.debug(
-                "[search.count] total=\(total) filtered=\(filter != nil) "
-                    + "elapsed=\(started.duration(to: .now).millisecondsText)"
-            )
-            return total
-        } catch {
-            log.error("获取筛选数量失败：\(error)")
-            return 0
         }
     }
 }
