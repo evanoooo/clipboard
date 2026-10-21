@@ -15,7 +15,9 @@ final class PasteBoard {
     private let pasteboard = NSPasteboard.general
     private let timerInterval = 0.5
     private var changeCount: Int
-    private var pasteModel: PasteboardModel?
+    /// 自己写入剪贴板后记录的 changeCount。只有当前值仍等于它时才跳过入库，
+    /// 避免把写入失败或用户紧接着的复制一起吞掉。
+    private var ownWriteChangeCount: Int?
     private var timer: Timer?
 
     // MARK: - 暂停功能
@@ -122,13 +124,18 @@ final class PasteBoard {
     }
 
     @objc private func checkForChangesInPasteboard() {
-        guard pasteboard.changeCount != changeCount else {
-            return
+        let currentCount = pasteboard.changeCount
+
+        if let owned = ownWriteChangeCount {
+            ownWriteChangeCount = nil
+            if currentCount == owned {
+                changeCount = currentCount
+                return
+            }
+            // 期间又发生了新的外部复制，继续按正常流程入库。
         }
 
-        if pasteModel != nil {
-            changeCount = pasteboard.changeCount
-            pasteModel = nil
+        guard currentCount != changeCount else {
             return
         }
 
@@ -236,11 +243,12 @@ final class PasteBoard {
             }
         }
 
-        pasteModel = items[0]
         NSPasteboard.general.clearContents()
 
         let success = writeMultipleToPasteboard(items, isAttribute: isAttribute)
         guard success else { return }
+        // 写入成功后才记录，失败时不留标记，下一次外部复制照常入库。
+        ownWriteChangeCount = pasteboard.changeCount
 
         PasteDataStore.main.moveItemsToFirst(items)
         SoundManager.shared.play(.paste)
