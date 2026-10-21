@@ -122,10 +122,7 @@ private actor LoggerState {
         #if DEBUG
             return nil
         #else
-            guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-                return nil
-            }
-            let logsDir = appSupport.appending(path: "com.crown.clipboard/logs")
+            let logsDir = URL.applicationSupportDirectory.appending(path: "com.crown.clipboard/logs")
             try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
             return logsDir
         #endif
@@ -133,6 +130,22 @@ private actor LoggerState {
 
     private var cachedLogFileURL: URL?
     private var cachedDayBoundary: TimeInterval = 0
+
+    private func purgeOldLogs(before days: Int = 7) {
+        guard let logsDirectory else { return }
+        let cutoff = Date().addingTimeInterval(-Double(days * 86400))
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: logsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return }
+        for file in files where file.pathExtension == "log" {
+            if let values = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+               let date = values.contentModificationDate,
+               date < cutoff {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
 
     private func currentLogFileURL() -> URL? {
         guard let logsDirectory else { return nil }
@@ -145,12 +158,14 @@ private actor LoggerState {
         let url = logsDirectory.appending(path: "clip-\(now.formatted(Self.fileDateFormat)).log")
         cachedLogFileURL = url
         cachedDayBoundary = nextDay.timeIntervalSinceReferenceDate
+        purgeOldLogs()
         return url
     }
 
     func setMinimumLogLevel(_ level: LogLevel) {
         minimumLogLevel = level
     }
+
     func write(_ message: String, level: LogLevel, timestamp: String) {
         guard let logFileURL = currentLogFileURL() else { return }
         let logEntry = "[\(timestamp)] [\(level.rawValue)] \(message)\n"
