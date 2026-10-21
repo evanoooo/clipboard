@@ -108,6 +108,8 @@ final class PasteBoard {
         isPaused = false
         pausedAt = nil
         pauseDuration = nil
+        // 暂停期间复制的内容不应在恢复时补记，否则「暂停」就失去了意义。
+        changeCount = pasteboard.changeCount
         startListening()
     }
 
