@@ -130,7 +130,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
     private func show(_ error: Error) {
         let nsError = error as NSError
         log.error(
-            "[linkPreview] 加载失败 url=\(url.absoluteString) "
+            "[linkPreview] 加载失败 host=\(url.host() ?? "-") "
                 + "domain=\(nsError.domain) code=\(nsError.code) desc=\(nsError.localizedDescription)"
         )
         loadingIndicator.stopAnimation(nil)
@@ -161,7 +161,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
             let mediaCount = (payload?["media"] as? NSNumber)?.intValue ?? 0
 
             log.info(
-                "[linkPreview] 加载完成 url=\(url.absoluteString) title=\(title) "
+                "[linkPreview] 加载完成 host=\(url.host() ?? "-") titleLen=\(title.count) "
                     + "textLen=\(textLength) media=\(mediaCount)"
             )
 

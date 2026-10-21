@@ -351,7 +351,7 @@ extension PasteDataStore {
         let maxToken = lengths.max() ?? 0
         let ftsEligible = !lengths.isEmpty && minToken >= 3
         let payload = result.reduce(0) { $0 + $1.data.count }
-        let message = "[search] kw=\"\(criteria.keyword)\" tokens=\(tokenList.count) "
+        let message = "[search] kwLen=\(criteria.keyword.count) tokens=\(tokenList.count) "
             + "rows=\(rows) mapped=\(result.count) total=\(total) countScan=\(countScan) "
             + "filters=\(filter != nil ? 1 : 0) "
             + "sql=\(sqlElapsed.millisecondsText) count=\(countElapsed.millisecondsText) "
