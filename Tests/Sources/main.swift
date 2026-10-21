@@ -35,6 +35,7 @@ struct TestRunner {
         FilterStateTests.run(runner: TestRunner.self)
         PaginationTests.run(runner: TestRunner.self)
         ClipContentRendererTests.run(runner: TestRunner.self)
+        CodeDetectorTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")

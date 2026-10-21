@@ -97,7 +97,26 @@
   - [x] 重构 `CardContentView.swift` 与 `FloatingCardRowView+Content.swift`，消除冗余重复的类型分支判断
   - [x] 统一富文本高亮、关键字匹配、背景色退化降级处理机制，保证网格与列表两种形态表现一致
   - [x] 编写 `ClipContentRendererTests.swift` 纯逻辑单测，验证各内容类型的解析映射
-  - [x] 验证：115/115 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过
+  - [x] 验证：115/115 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过（Commit: `92a8590`）
+
+---
+
+## 演进专项：原生语法高亮与代码语义支持（P2）
+
+- [x] **Code Phase 1: 代码嗅探器恢复与 Nginx 规则扩展**
+  - [x] 恢复 `CodeLanguage.swift`、`CodeLanguageDetector.swift`、`CodeLanguageRules.swift`
+  - [x] 增加 `CodeLanguage.nginx` 枚举与 `displayName` 映射
+  - [x] 增加 Nginx 配置指令、块作用域、`$` 变量等加权特征与词法规则
+  - [x] 编写 `CodeDetectorTests.swift` 单测，覆盖 Nginx、Swift、Python、SQL、JSON、散文过滤
+  - [x] 验证：125/125 单元测试全绿通过；主工程与 clipmcp 构建成功
+
+- [ ] **Code Phase 2: 原生 TextKit 词法着色器与动态主题构建**
+  - [ ] 实现 `CodeHighlighter` 与 `CodeTheme`，基于系统语义色实现自适应深浅外观
+  - [ ] 确保搜索词黄色高亮与语法高亮无冲突合并
+
+- [ ] **Code Phase 3: 挂载 ClipContentRenderer 与双端视图增强**
+  - [ ] `PasteboardModel` 接入 `detectedLanguage` 懒加载与缓存
+  - [ ] 卡片与悬浮行接入等宽字体排版与右上角语言徽章
 
 - [ ] **Task 13: 强化错误处理与用户反馈**
   - [ ] 统一错误提示与关键失败恢复机制

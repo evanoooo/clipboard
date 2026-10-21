@@ -1,0 +1,1 @@
+../../Clipboard/Core/Code/CodeLanguageRules.swift
