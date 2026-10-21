@@ -8,19 +8,6 @@ extension PasteSQLManager {
     private static let metaTable = "clip_meta"
     private static let metaChipsKey = "user_chips"
 
-    private nonisolated static func localize(
-        _ key: String,
-        _ arguments: CVarArg...
-    ) -> String {
-        let format = Bundle.main.localizedString(
-            forKey: key,
-            value: key,
-            table: "Localizable"
-        )
-        guard !arguments.isEmpty else { return format }
-        return String(format: format, locale: .current, arguments: arguments)
-    }
-
     nonisolated func exportDatabase(to destinationURL: URL, userChipsData: Data?) async -> ImportExportResult {
         let sourcePath = Self.databasePath
 
@@ -28,7 +15,7 @@ extension PasteSQLManager {
             guard FileManager.default.fileExists(atPath: sourcePath) else {
                 return ImportExportResult(
                     success: false,
-                    message: Self.localize("noSourceDb")
+                    message: String(localized: .noSourceDb)
                 )
             }
 
@@ -55,12 +42,12 @@ extension PasteSQLManager {
 
                 return ImportExportResult(
                     success: true,
-                    message: Self.localize("exportSuccess")
+                    message: String(localized: .exportSuccess)
                 )
             } catch {
                 return ImportExportResult(
                     success: false,
-                    message: Self.localize("exportFail", error.localizedDescription)
+                    message: String(localized: .exportFail(error.localizedDescription))
                 )
             }
         }.value
@@ -89,7 +76,7 @@ extension PasteSQLManager {
             } catch {
                 return ImportExportResult(
                     success: false,
-                    message: Self.localize("importFailDetail", error.localizedDescription)
+                    message: String(localized: .importFailDetail(error.localizedDescription))
                 )
             }
         }.value
@@ -138,7 +125,7 @@ extension PasteSQLManager {
                 for row in rows {
                     guard !Task.isCancelled else {
                         throw NSError(domain: "ImportCancelled", code: -1,
-                            userInfo: [NSLocalizedDescriptionKey: Self.localize("importCancelled")]
+                            userInfo: [NSLocalizedDescriptionKey: String(localized: .importCancelled)]
                         )
                     }
 
@@ -166,7 +153,7 @@ extension PasteSQLManager {
         } catch {
             return ImportExportResult(
                 success: false,
-                message: Self.localize("importFailDetail", error.localizedDescription)
+                message: String(localized: .importFailDetail(error.localizedDescription))
             )
         }
     }
@@ -174,10 +161,10 @@ extension PasteSQLManager {
     private nonisolated static func importResult(
         imported: Int, skipped: Int, chipsData: Data?
     ) -> ImportExportResult {
-        let skippedText = skipped > 0 ? Self.localize("importSkip", skipped) : ""
+        let skippedText = skipped > 0 ? String(localized: .importSkip(skipped)) : ""
         return ImportExportResult(
             success: true,
-            message: Self.localize("importResult", imported, skippedText),
+            message: String(localized: .importResult(imported, skippedText)),
             importedChipsData: chipsData
         )
     }
@@ -244,7 +231,7 @@ extension PasteSQLManager {
             guard FileManager.default.fileExists(atPath: url.path) else {
                 return ImportExportResult(
                     success: false,
-                    message: Self.localize("noFile")
+                    message: String(localized: .noFile)
                 )
             }
 
@@ -258,7 +245,7 @@ extension PasteSQLManager {
                 guard tableExists > 0 else {
                     return ImportExportResult(
                         success: false,
-                        message: Self.localize("backupInvalid", Self.localize("missingTable"))
+                        message: String(localized: .backupInvalid(String(localized: .missingTable)))
                     )
                 }
 
@@ -274,9 +261,10 @@ extension PasteSQLManager {
                     guard existingColumns.contains(column) else {
                         return ImportExportResult(
                             success: false,
-                            message: Self.localize(
-                                "backupInvalid",
-                                Self.localize("missingColumn", column)
+                            message: String(
+                                localized: .backupInvalid(
+                                    String(localized: .missingColumn(column))
+                                )
                             )
                         )
                     }
@@ -287,13 +275,13 @@ extension PasteSQLManager {
                     _ = try sourceDb.prepare("SELECT id, bundle_id, app_name, app_path, icon_data FROM App LIMIT 0")
                 } else if !existingColumns.isSuperset(of: ["app_name", "app_path"]) {
                     return ImportExportResult(success: false,
-                        message: Self.localize("backupInvalid", Self.localize("missingColumn", "app_id")))
+                        message: String(localized: .backupInvalid(String(localized: .missingColumn("app_id")))))
                 }
-                return ImportExportResult(success: true, message: Self.localize("backupValid"))
+                return ImportExportResult(success: true, message: String(localized: .backupValid))
             } catch {
                 return ImportExportResult(
                     success: false,
-                    message: Self.localize("backupInvalid", Self.localize("backupReadFail"))
+                    message: String(localized: .backupInvalid(String(localized: .backupReadFail)))
                 )
             }
         }.value
