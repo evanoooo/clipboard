@@ -32,7 +32,7 @@ extension PasteSQLManager {
                 Col.id, Col.uniqueId, Col.type, Col.data, Col.timestamp,
                 Col.appID, Col.searchText,
                 Col.showData, Col.length, Col.group,
-                Col.tag, Col.hidden
+                Col.tag, Col.alias, Col.hidden
             ]
         let ord = order ?? [Col.sortOrder.desc, Col.id.desc]
 
@@ -50,10 +50,15 @@ extension PasteSQLManager {
                 return []
             }
             let rows = Array(result)
-            log.debug(
-                "[search.sql] rows=\(rows.count) limit=\(limit ?? -1) offset=\(offset ?? 0) "
-                    + "elapsed=\(started.duration(to: .now).millisecondsText)"
-            )
+            let elapsed = started.duration(to: .now)
+            let message = "[search.sql] rows=\(rows.count) limit=\(limit ?? -1) offset=\(offset ?? 0) "
+                + "elapsed=\(elapsed.millisecondsText)"
+            // 慢查询落盘，便于区分「SQL 本身慢」与「等待 actor/主线程」。
+            if elapsed.milliseconds >= 50 {
+                log.warn(message)
+            } else {
+                log.debug(message)
+            }
             return rows
         } catch {
             log.error("查询失败：\(error)")

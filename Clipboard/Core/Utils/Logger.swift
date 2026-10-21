@@ -44,6 +44,16 @@ final class AppLogger: Sendable {
 
     private let osLogger = os.Logger(subsystem: "com.crown.clipboard", category: "AppLogger")
     private let _state: LoggerState
+    /// 非隔离的级别快照：低于级别的日志不再派发 Task，避免热路径上白白入队。
+    private let minimumLevel = OSAllocatedUnfairLock(initialState: AppLogger.defaultLevel)
+
+    private nonisolated static var defaultLevel: LogLevel {
+        #if DEBUG
+            .debug
+        #else
+            .info
+        #endif
+    }
 
     private nonisolated init() {
         _state = LoggerState()
@@ -68,12 +78,14 @@ final class AppLogger: Sendable {
     }
 
     nonisolated func setMinimumLogLevel(_ level: LogLevel) {
-        Task { await _state.setMinimumLogLevel(level) }
+        minimumLevel.withLock { $0 = level }
     }
 
     // MARK: - Private
 
     private nonisolated func emit(_ message: String, level: LogLevel, file: String, function: String, line: Int) {
+        guard level >= minimumLevel.withLock({ $0 }) else { return }
+
         let fileName = URL(fileURLWithPath: file).lastPathComponent
         let timestamp = Date().formatted(LoggerState.timestampFormat)
         #if DEBUG
@@ -106,7 +118,6 @@ private actor LoggerState {
     #else
         private var minimumLogLevel: LogLevel = .info
     #endif
-
     private let logsDirectory: URL? = {
         #if DEBUG
             return nil
@@ -140,9 +151,8 @@ private actor LoggerState {
     func setMinimumLogLevel(_ level: LogLevel) {
         minimumLogLevel = level
     }
-
     func write(_ message: String, level: LogLevel, timestamp: String) {
-        guard level >= minimumLogLevel, let logFileURL = currentLogFileURL() else { return }
+        guard let logFileURL = currentLogFileURL() else { return }
         let logEntry = "[\(timestamp)] [\(level.rawValue)] \(message)\n"
         guard let data = logEntry.data(using: .utf8) else { return }
         if FileManager.default.fileExists(atPath: logFileURL.path) {
