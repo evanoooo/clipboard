@@ -15,12 +15,11 @@ actor PasteSQLManager {
     static let manager = PasteSQLManager()
 
     private static var databaseDirectory: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return appSupport.appendingPathComponent(Bundle.main.bundleIdentifier ?? "Clip")
+        URL.applicationSupportDirectory.appending(path: Bundle.main.bundleIdentifier ?? "Clip")
     }
 
     static var databasePath: String {
-        databaseDirectory.appendingPathComponent("Clip.sqlite3").path
+        databaseDirectory.appending(path: "Clip.sqlite3").path
     }
 
     var connection: Connection?

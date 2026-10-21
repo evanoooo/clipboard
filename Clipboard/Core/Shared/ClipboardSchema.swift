@@ -40,9 +40,7 @@ enum ClipboardPaths {
     static let appBundleId = "com.crown.clipboard"
 
     private static var appSupportDir: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: appBundleId)
+        URL.applicationSupportDirectory.appending(path: appBundleId)
     }
 
     /// ~/Library/Application Support/com.crown.clipboard/Clip.sqlite3
