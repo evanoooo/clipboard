@@ -128,6 +128,12 @@ enum PasteUserDefaults {
     /// 生成链接预览
     @UserDefaultsWrapper(.enableLinkPreview, defaultValue: true)
     static var enableLinkPreview
+    /// Markdown 预览是否加载远程/本地图片。
+    /// 渲染发生在非隔离上下文，所以直接读 UserDefaults；key 缺省即为 false。
+    /// 剪贴板内容不可信，默认不发起任何图片请求。
+    nonisolated static var enableRemoteImages: Bool {
+        UserDefaults.standard.bool(forKey: PrefKey.enableRemoteImages.rawValue)
+    }
     /// 忽略机密内容
     @UserDefaultsWrapper(.ignoreSensitiveContent, defaultValue: true)
     static var ignoreSensitiveContent

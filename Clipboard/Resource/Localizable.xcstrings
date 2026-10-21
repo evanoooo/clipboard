@@ -4884,6 +4884,42 @@
         }
       }
     },
+    "privacyRemoteImages" : {
+      "comment" : "Privacy toggle title: load remote images in previews",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading remote images"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载远程图片"
+          }
+        }
+      }
+    },
+    "privacyRemoteImagesDesc" : {
+      "comment" : "Privacy toggle subtitle: load remote images in previews",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markdown previews request image addresses, which can reveal to the author that you viewed the item. When off, only embedded images are shown."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markdown 预览会请求图片地址，可能向内容作者暴露你正在查看该条目。关闭时只显示内嵌图片。"
+          }
+        }
+      }
+    },
     "privacySensitive" : {
       "comment" : "Privacy toggle title: ignore sensitive content",
       "extractionState" : "manual",

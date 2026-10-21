@@ -8,11 +8,18 @@
 import Foundation
 
 nonisolated enum MarkdownHTMLRenderer {
-    private static let contentSecurityPolicy = """
-    default-src 'none'; img-src data: file: http: https:; media-src data: file: http: https:; \
-    style-src 'unsafe-inline'; font-src data:; script-src 'none'; frame-src 'none'; object-src 'none'; \
-    connect-src 'none'; base-uri 'none'; form-action 'none'
-    """
+    /// 关闭时只允许内嵌 data: 图片；远程与本地文件都不加载。
+    /// 预览内容来自剪贴板，属于不可信输入，不应主动发起请求。
+    private static var contentSecurityPolicy: String {
+        let mediaSources = PasteUserDefaults.enableRemoteImages
+            ? "data: file: http: https:"
+            : "data:"
+        return """
+        default-src 'none'; img-src \(mediaSources); media-src \(mediaSources); \
+        style-src 'unsafe-inline'; font-src data:; script-src 'none'; frame-src 'none'; object-src 'none'; \
+        connect-src 'none'; base-uri 'none'; form-action 'none'
+        """
+    }
 
     static func htmlDocument(for markdown: String) -> String {
         let body = MarkdownDocumentRenderer.render(markdown)

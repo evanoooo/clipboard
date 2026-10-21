@@ -19,6 +19,9 @@ struct PrivacySettingView: View {
     @AppStorage(PrefKey.enableLinkPreview.rawValue)
     private var enableLinkPreview = true
 
+    @AppStorage(PrefKey.enableRemoteImages.rawValue)
+    private var enableRemoteImages = false
+
     @AppStorage(PrefKey.ignoreSensitiveContent.rawValue)
     private var ignoreSensitiveContent = true
 
@@ -52,6 +55,12 @@ struct PrivacySettingView: View {
                             title: String(localized: .privacyLinkPreview),
                             subtitle: String(localized: .privacyLinkPreviewDesc),
                             isOn: $enableLinkPreview
+                        )
+                        Divider()
+                        PrivacyToggleRow(
+                            title: String(localized: .privacyRemoteImages),
+                            subtitle: String(localized: .privacyRemoteImagesDesc),
+                            isOn: $enableRemoteImages
                         )
                         Divider()
                         PrivacyToggleRow(

@@ -35,6 +35,8 @@ enum PrefKey: String, CaseIterable {
     case showDuringScreenShare
     /// 生成链接预览
     case enableLinkPreview
+    /// Markdown 预览加载远程/本地图片
+    case enableRemoteImages
     /// 忽略机密内容
     case ignoreSensitiveContent
     /// 忽略瞬时内容
