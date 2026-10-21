@@ -9,9 +9,8 @@ import AppKit
 
 extension PasteboardModel {
     convenience init?(with pasteboard: NSPasteboard, sourceApp: NSRunningApplication? = nil) {
-        guard let items = pasteboard.pasteboardItems, !items.isEmpty
+        guard let items = pasteboard.pasteboardItems, let item = items.first
         else { return nil }
-        let item = items[0]
 
         let type: PasteboardType
         if let paths = Self.extractFilePaths(from: pasteboard, item: item),
