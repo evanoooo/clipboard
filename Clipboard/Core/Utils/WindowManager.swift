@@ -20,7 +20,7 @@ final class WindowManager {
     private init() {
         UserDefaults.standard.publisher(for: \.displayMode)
             .removeDuplicates()
-            .receive(on: DispatchQueue.main)
+            .receive(on: RunLoop.main)
             .sink { [weak self] newRaw in
                 self?.handleDisplayModeChange(to: newRaw)
             }

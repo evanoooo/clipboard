@@ -74,7 +74,7 @@ final class FloatingFooterView: NSView {
     func configure(topVM: TopBarViewModel) {
         self.topVM = topVM
         PasteBoard.main.$isPaused
-            .receive(on: DispatchQueue.main)
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updatePauseState() }
             .store(in: &cancellables)
         updateCount()

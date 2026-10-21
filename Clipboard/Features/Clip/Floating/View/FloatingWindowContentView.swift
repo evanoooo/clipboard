@@ -103,7 +103,7 @@ final class FloatingWindowContentView: NSView {
         }
 
         PasteDataStore.main.dataList
-            .receive(on: DispatchQueue.main)
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.footerView.updateCount()
             }
@@ -112,7 +112,7 @@ final class FloatingWindowContentView: NSView {
         headerView.searchField.$text
             .removeDuplicates()
             .dropFirst()
-            .debounce(for: .milliseconds(Const.searchDebounce), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(Const.searchDebounce), scheduler: RunLoop.main)
             .sink { [weak self] text in
                 guard let self else { return }
                 topVM.setQuery(text: text)
@@ -121,7 +121,7 @@ final class FloatingWindowContentView: NSView {
             .store(in: &cancellables)
 
         topVM.filterDidChange
-            .receive(on: DispatchQueue.main)
+            .receive(on: RunLoop.main)
             .sink { [weak self] in
                 guard let self else { return }
                 topVM.performSearch()
