@@ -9,7 +9,6 @@ import AppKit
 import Combine
 import CoreFoundation
 import SnapKit
-import Sparkle
 
 final class ClipMainViewController: NSViewController {
     let topVM = TopBarViewModel()

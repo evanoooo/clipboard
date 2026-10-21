@@ -15,7 +15,6 @@ final class StatusBarController: NSObject {
     private var menuBarItem: NSStatusItem?
     private var menuBarIconObserver: NSObjectProtocol?
 
-    private var onCheckUpdateClick: (() -> Void)?
     private var menu: NSMenu?
 
     override private init() {
@@ -30,10 +29,7 @@ final class StatusBarController: NSObject {
         )
     }
 
-    func setup(
-        onCheckUpdateClick: @escaping () -> Void
-    ) {
-        self.onCheckUpdateClick = onCheckUpdateClick
+    func setup() {
         menu = createMenu()
 
         initializeStatusItem()
@@ -160,10 +156,6 @@ final class StatusBarController: NSObject {
         SettingWindowController.shared.toggleWindow()
     }
 
-    @objc private func checkUpdateAction() {
-        onCheckUpdateClick?()
-    }
-
     @objc private func newTextItemAction() {
         EditWindowController.shared.openNewWindow()
     }
@@ -254,14 +246,6 @@ extension StatusBarController {
             symbol: "gearshape", key: ","
         )
         menu.addItem(item1)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let item2 = makeItem(
-            title: String(localized: .checkUpdates), action: #selector(checkUpdateAction),
-            symbol: "arrow.clockwise"
-        )
-        menu.addItem(item2)
 
         menu.addItem(NSMenuItem.separator())
 

@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		B1222F9E2FCF03D700FF7C3D /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = B1222F9D2FCF03D700FF7C3D /* SQLite */; };
-		B166C0812ECB2A330068A689 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B166C0802ECB2A330068A689 /* Sparkle */; settings = {ATTRIBUTES = (Required, ); }; };
 		B1A59D1A2F876C7E00AFCF52 /* SnapKit in Frameworks */ = {isa = PBXBuildFile; productRef = B1A59D192F876C7E00AFCF52 /* SnapKit */; };
 		B1B4ECAF2F2AFBAD00AFE657 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = B1B4ECAE2F2AFBAD00AFE657 /* SQLite */; };
 		B1D0000000000000000000A3 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = B1D0000000000000000000A2 /* Markdown */; };
@@ -85,7 +84,6 @@
 				B1A59D1A2F876C7E00AFCF52 /* SnapKit in Frameworks */,
 				B1D0000000000000000000A3 /* Markdown in Frameworks */,
 				B1B4ECAF2F2AFBAD00AFE657 /* SQLite in Frameworks */,
-				B166C0812ECB2A330068A689 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,7 +155,6 @@
 			);
 			name = Clipboard;
 			packageProductDependencies = (
-				B166C0802ECB2A330068A689 /* Sparkle */,
 				B1B4ECAE2F2AFBAD00AFE657 /* SQLite */,
 				B1A59D192F876C7E00AFCF52 /* SnapKit */,
 				B1D0000000000000000000A2 /* Markdown */,
@@ -194,7 +191,6 @@
 			mainGroup = B1FADD372E7E92B3005CEFCF;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				B166C07F2ECB2A330068A689 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				B1B4ECAD2F2AFBAD00AFE657 /* XCRemoteSwiftPackageReference "SQLite" */,
 				B1A59D182F876C7E00AFCF52 /* XCRemoteSwiftPackageReference "SnapKit" */,
 				B1D0000000000000000000A1 /* XCRemoteSwiftPackageReference "swift-markdown" */,
@@ -525,14 +521,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		B166C07F2ECB2A330068A689 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.8.1;
-			};
-		};
 		B1A59D182F876C7E00AFCF52 /* XCRemoteSwiftPackageReference "SnapKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SnapKit/SnapKit.git";
@@ -564,11 +552,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B1B4ECAD2F2AFBAD00AFE657 /* XCRemoteSwiftPackageReference "SQLite" */;
 			productName = SQLite;
-		};
-		B166C0802ECB2A330068A689 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B166C07F2ECB2A330068A689 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
 		};
 		B1A59D192F876C7E00AFCF52 /* SnapKit */ = {
 			isa = XCSwiftPackageProductDependency;

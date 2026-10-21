@@ -6,7 +6,6 @@
 //
 
 import AppKit
-import Sparkle
 
 struct TopBarMenuBuilder {
     weak var target: AnyObject?
@@ -21,7 +20,6 @@ struct TopBarMenuBuilder {
     @MainActor
     func buildSettingsMenu() -> NSMenu {
         let menu = NSMenu()
-        addUpdateNotice(to: menu)
 
         let aboutItem = makeItem(
             title: String(localized: .aboutApp(Self.appName)), action: #selector(TopBarMenuActions.openAboutAction),
@@ -45,12 +43,6 @@ struct TopBarMenuBuilder {
         menu.addItem(settingsItem)
 
         menu.addItem(.separator())
-
-        let updateItem = makeItem(
-            title: String(localized: .checkUpdates), action: #selector(TopBarMenuActions.checkForUpdatesAction),
-            symbol: "arrow.clockwise"
-        )
-        menu.addItem(updateItem)
 
         let helpItem = makeItem(
             title: String(localized: .menuHelp), action: #selector(TopBarMenuActions.invokeHelpAction),
@@ -87,38 +79,6 @@ struct TopBarMenuBuilder {
             keyEquivalent: "q"
         )
         menu.addItem(quitItem)
-    }
-
-    @MainActor
-    private func addUpdateNotice(to menu: NSMenu) {
-        let updateManager = UpdateManager.shared
-
-        if updateManager.hasUpdate {
-            let newVersionItem = NSMenuItem(
-                title: String(
-                    localized: .updateAvailable(
-                        updateManager.availableVersion ?? ""
-                    )
-                ),
-                action: #selector(TopBarMenuActions.checkForUpdatesAction),
-                keyEquivalent: ""
-            )
-            newVersionItem.target = target
-            if #available(macOS 26.0, *),
-               let image = NSImage(
-                   systemSymbolName: "arrow.up.circle.dotted",
-                   accessibilityDescription: nil
-               ) {
-                let config = NSImage.SymbolConfiguration(
-                    pointSize: 16.0,
-                    weight: .semibold
-                )
-                image.isTemplate = true
-                newVersionItem.image = image.withSymbolConfiguration(config)
-            }
-            menu.addItem(newVersionItem)
-            menu.addItem(.separator())
-        }
     }
 
     // MARK: - Private

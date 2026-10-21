@@ -9,7 +9,6 @@ import AppKit
 import Combine
 import SnapKit
 import SwiftUI
-import Sparkle
 
 final class FloatingHeaderView: NSView {
     // MARK: - Subviews
@@ -342,18 +341,6 @@ final class FloatingHeaderView: NSView {
             make.trailing.equalToSuperview().offset(-Const.space12)
             make.centerY.equalTo(chipScrollView)
         }
-
-        observeUpdateBadge()
-    }
-
-    private func observeUpdateBadge() {
-        withObservationTracking {
-            settingsBtn.showBadge = UpdateManager.shared.hasUpdate
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.observeUpdateBadge()
-            }
-        }
     }
 
     // MARK: - Background
@@ -422,10 +409,6 @@ final class FloatingHeaderView: NSView {
 extension FloatingHeaderView: TopBarMenuActions {
     func openSettingsAction() {
         SettingWindowController.shared.toggleWindow()
-    }
-
-    func checkForUpdatesAction() {
-        AppDelegate.shared?.updaterController.checkForUpdates(nil)
     }
 
     func invokeHelpAction() {

@@ -77,7 +77,7 @@ If the Xcode MCP is configured, prefer its tools over generic alternatives when 
 Distribute local builds with **ad-hoc signing only**; never require a Developer ID for local packaging.
 
 - Always build Release with hardened runtime disabled:
-  `ENABLE_HARDENED_RUNTIME=NO`. Ad-hoc signed apps cannot load the ad-hoc signed, embedded `Sparkle.framework` under hardened runtime (dyld rejects it with a Team ID mismatch), so the app aborts at launch with `Library not loaded: @rpath/Sparkle.framework/...`.
+  `ENABLE_HARDENED_RUNTIME=NO`. Local ad-hoc distribution uses this flag so the packaged bundle matches the verified local setup.
 - Verify the signature has ad-hoc flags without the `runtime` flag before installing:
   `codesign -dv --verbose=4 <app>/Contents/MacOS/Clipboard` should print `flags=0x2(adhoc)`.
 - Install by replacing the bundle atomically: quit the running app, `ditto` the built `.app` to `/Applications/Clipboard.app`, then relaunch.

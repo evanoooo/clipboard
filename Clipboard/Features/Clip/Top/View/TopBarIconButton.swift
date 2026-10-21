@@ -14,18 +14,10 @@ final class TopBarIconButton: NSView {
 
     private let backgroundLayer = CALayer()
     private let imageView = NSImageView()
-    private let badgeDot = NSView()
     private var isHovering = false
 
     var isActive: Bool = false {
         didSet { updateAppearance(animated: false) }
-    }
-
-    var showBadge: Bool = false {
-        didSet {
-            guard showBadge != oldValue else { return }
-            badgeDot.isHidden = !showBadge
-        }
     }
 
     var action: (() -> Void)?
@@ -67,17 +59,6 @@ final class TopBarIconButton: NSView {
         }
         snp.makeConstraints { make in
             make.width.height.equalTo(30)
-        }
-
-        badgeDot.wantsLayer = true
-        badgeDot.layer?.cornerRadius = 3.5
-        badgeDot.layer?.backgroundColor = NSColor.systemRed.cgColor
-        badgeDot.isHidden = true
-        addSubview(badgeDot)
-        badgeDot.snp.makeConstraints { make in
-            make.width.height.equalTo(7)
-            make.top.equalToSuperview().offset(-2)
-            make.trailing.equalToSuperview().offset(2)
         }
 
         let area = NSTrackingArea(

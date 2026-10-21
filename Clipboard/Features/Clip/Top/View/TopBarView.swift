@@ -128,7 +128,6 @@ final class TopBarView: NSView {
         layoutRows()
         updateChipWidths()
         applyMode()
-        observeUpdateBadge()
     }
 
     private func setupDefaultRow() {
@@ -230,18 +229,6 @@ final class TopBarView: NSView {
         let result = super.hitTest(point)
         if result === settingBtn || result?.isDescendant(of: settingBtn) == true { return result }
         return modeHitTest(point, fallback: result)
-    }
-
-    // MARK: - Update Badge
-
-    private func observeUpdateBadge() {
-        withObservationTracking {
-            settingBtn.showBadge = UpdateManager.shared.hasUpdate
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.observeUpdateBadge()
-            }
-        }
     }
 
     // MARK: - Settings Menu

@@ -5,7 +5,6 @@
 //  Created by crown on 2025/11/11.
 //
 
-import Sparkle
 import SwiftUI
 
 struct AboutSettingView: View {
@@ -28,7 +27,6 @@ struct AboutSettingView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack {
             VStack(spacing: 8) {
                 if let appIcon = NSImage(named: "AppIcon") {
                     Image(nsImage: appIcon)
@@ -59,45 +57,10 @@ struct AboutSettingView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.top, Const.space16)
-
-            Button(
-                action: {
-                    checkForUpdates()
-                },
-                label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 14))
-                    Text(.aboutCheckForUpdates)
-                        .font(.system(size: 14, weight: .regular))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .padding(.horizontal, Const.space16)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: Const.radius)
-                        .fill(Color.accentColor)
-                )
-                .foregroundStyle(.white)
-                }
-            )
-            .buttonStyle(.plain)
-            .shadow(
-                color: Color.accentColor.opacity(0.3),
-                radius: Const.radius,
-                x: 0,
-                y: 4
-            )
-            .padding(Const.space32)
-            }
             .frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: Const.space12) {
-                if let updater = AppDelegate.shared?.updaterController.updater {
-                    UpdaterSettingsView(updater: updater)
-                }
                 HStack(spacing: 20) {
                     if let github = URL(string: "https://github.com/Ineffable919/clipboard") {
                         Link(String(localized: .aboutGithub), destination: github)
@@ -129,11 +92,6 @@ struct AboutSettingView: View {
         }
         .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// 检查更新
-    private func checkForUpdates() {
-        AppDelegate.shared?.updaterController.checkForUpdates(nil)
     }
 }
 

@@ -8,17 +8,9 @@
 import AppKit
 import Combine
 import QuartzCore
-import Sparkle
 
 class AppDelegate: NSObject {
     static var shared: AppDelegate?
-
-    /// Sparkle
-    lazy var updaterController: SPUStandardUpdaterController = .init(
-        startingUpdater: true,
-        updaterDelegate: self,
-        userDriverDelegate: self
-    )
 
     private var monitorToken: Any?
 }
@@ -26,8 +18,6 @@ class AppDelegate: NSObject {
 extension AppDelegate: NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
         Self.shared = self
-
-        _ = updaterController
 
         setupStatusBar()
 
@@ -80,11 +70,7 @@ extension AppDelegate: NSApplicationDelegate {
     }
 
     private func setupStatusBar() {
-        StatusBarController.shared.setup(
-            onCheckUpdateClick: { [weak self] in
-                self?.updaterController.checkForUpdates(nil)
-            }
-        )
+        StatusBarController.shared.setup()
     }
 }
 
@@ -133,65 +119,6 @@ extension AppDelegate {
             }
             return event
         }
-    }
-}
-
-// MARK: - SPUUpdaterDelegate
-
-extension AppDelegate: SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
-    nonisolated func updater(_: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
-        let version = item.displayVersionString
-        Task { @MainActor in
-            UpdateManager.shared.setUpdateAvailable(version: version)
-        }
-    }
-
-    nonisolated func updaterDidNotFindUpdate(_: SPUUpdater) {
-        Task { @MainActor in
-            UpdateManager.shared.clearUpdate()
-        }
-    }
-
-    nonisolated func updater(
-        _: SPUUpdater,
-        userDidMake choice: SPUUserUpdateChoice,
-        forUpdate _: SUAppcastItem,
-        state _: SPUUserUpdateState
-    ) {
-        if choice == .skip {
-            Task { @MainActor in
-                UpdateManager.shared.clearUpdate()
-            }
-        }
-    }
-
-    var supportsGentleScheduledUpdateReminders: Bool {
-        true
-    }
-
-    func standardUserDriverShouldHandleShowingScheduledUpdate(
-        _: SUAppcastItem,
-        andInImmediateFocus immediateFocus: Bool
-    ) -> Bool {
-        immediateFocus
-    }
-
-    func standardUserDriverWillHandleShowingUpdate(
-        _ willHandle: Bool,
-        forUpdate update: SUAppcastItem,
-        state _: SPUUserUpdateState
-    ) {
-        guard !willHandle else { return }
-        log.info("发现更新：\(update.displayVersionString)")
-        UpdateManager.shared.setUpdateAvailable(version: update.displayVersionString)
-    }
-
-    func standardUserDriverDidReceiveUserAttention(forUpdate _: SUAppcastItem) {
-        updaterController.checkForUpdates(nil)
-    }
-
-    func standardUserDriverWillFinishUpdateSession() {
-        UpdateManager.shared.clearUpdate()
     }
 }
 

@@ -44,60 +44,6 @@
         }
       }
     },
-    "aboutAutoCheckUpdates" : {
-      "comment" : "Toggle label: automatically check for updates",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check automatically"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动检查更新"
-          }
-        }
-      }
-    },
-    "aboutAutoDownloadUpdates" : {
-      "comment" : "Toggle label: automatically download updates",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Download automatically"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动下载更新"
-          }
-        }
-      }
-    },
-    "aboutCheckForUpdates" : {
-      "comment" : "Button title: check for updates",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check for Updates"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检查更新"
-          }
-        }
-      }
-    },
     "aboutCopyrightFormat" : {
       "comment" : "Copyright text in About settings, with year placeholder",
       "extractionState" : "manual",
@@ -561,24 +507,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消"
-          }
-        }
-      }
-    },
-    "checkUpdates" : {
-      "comment" : "Menu item: check for updates",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check for Updates"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检查更新"
           }
         }
       }
@@ -6014,24 +5942,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未命名"
-          }
-        }
-      }
-    },
-    "updateAvailable" : {
-      "comment" : "Menu title showing an available version",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New version available: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检测到新版本 %@"
           }
         }
       }
