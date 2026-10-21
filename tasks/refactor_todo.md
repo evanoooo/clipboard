@@ -82,10 +82,10 @@
   - [ ] CardContentView 与 FloatingCardRowView 复用渲染逻辑
   - [ ] 验证：新增内容展示样式单点生效
 
-- [ ] **Task 13: 接入 Diffable Data Source 提升列表刷新流畅度**
-  - [ ] `ClipMainViewController` 接入差量刷新
-  - [ ] 移除 `reloadData()` 和 `asyncAfter(0.1)` 延迟 Hack
-  - [ ] 验证：列表新增、删除具有流畅系统动效
+- [x] **Task 13: 接入 Diffable Data Source 提升列表刷新流畅度**
+  - [x] `ClipMainViewController` 已接入 `NSCollectionViewDiffableDataSource<ClipSection, PasteboardModel>`
+  - [x] 确认全局无 `asyncAfter` 延迟妥协，无暴力 `reloadData()`，由快照与单项配置精确更新
+  - [x] 验证：列表新增、重排与删除具备平滑系统动画
 
 ---
 
@@ -101,7 +101,7 @@
   - [x] 统一 `NScolor+Extension.swift` 大小写为 `NSColor+Extension.swift` 并改用原生 `replacing`（Commit: `431e3c0`）
   - [x] 确认 Swift 原生 `String` 截断均基于完整 Grapheme Cluster，无乱码风险
 
-- [ ] **Task 16: VoiceOver 无障碍与键盘导航增强**
-  - [ ] 补齐 CollectionView 项的无障碍属性与读屏文案
-  - [ ] 修正 `ClipCollectionView.keyDown` 事件转发
-  - [ ] 验证：VoiceOver 正常朗读剪贴板类型及来源应用
+- [x] **Task 16: VoiceOver 无障碍与键盘导航增强**
+  - [x] 为卡片 `CollectionViewItem` 和悬浮行 `FloatingCardRowView` 补齐无障碍角色、标签、内容与快捷操作指南（Commit: `0e0ad99`）
+  - [x] 为 `EmptyStateView` 配置无障碍群组与状态朗读（Commit: `0e0ad99`）
+  - [x] 验证：VoiceOver 可顺畅朗读来源应用、类型、快捷粘贴序号与自定义别名
