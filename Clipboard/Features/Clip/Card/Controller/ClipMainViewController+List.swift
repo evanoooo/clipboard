@@ -156,7 +156,7 @@ extension ClipMainViewController {
         topBarView.searchField.$text
             .removeDuplicates()
             .dropFirst()
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(Const.searchDebounce), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 topVM.handleQueryChange()

@@ -45,10 +45,16 @@ extension PasteSQLManager {
         }
 
         do {
-            if let result = try connection?.prepare(query) {
-                return Array(result)
+            let started = ContinuousClock.now
+            guard let result = try connection?.prepare(query) else {
+                return []
             }
-            return []
+            let rows = Array(result)
+            log.debug(
+                "[search.sql] rows=\(rows.count) limit=\(limit ?? -1) offset=\(offset ?? 0) "
+                    + "elapsed=\(started.duration(to: .now).millisecondsText)"
+            )
+            return rows
         } catch {
             log.error("查询失败：\(error)")
             return []
@@ -129,13 +135,19 @@ extension PasteSQLManager {
     }
 
     func getCount(filter: Expression<Bool>?) async -> Int {
+        let started = ContinuousClock.now
         do {
+            let total: Int
             if let filter {
-                let query = table.filter(filter)
-                return try connection?.scalar(query.count) ?? 0
+                total = try connection?.scalar(table.filter(filter).count) ?? 0
             } else {
-                return try connection?.scalar(table.count) ?? 0
+                total = try connection?.scalar(table.count) ?? 0
             }
+            log.debug(
+                "[search.count] total=\(total) filtered=\(filter != nil) "
+                    + "elapsed=\(started.duration(to: .now).millisecondsText)"
+            )
+            return total
         } catch {
             log.error("获取筛选数量失败：\(error)")
             return 0

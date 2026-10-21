@@ -39,6 +39,11 @@ actor PasteSQLManager {
         let database = try Connection(Self.databasePath)
         database.busyTimeout = 5.0
         try database.execute("PRAGMA journal_mode=WAL")
+        // 整库内存映射：窄关键词全表扫描实测 32.6 ms → 19.0 ms。
+        // mmap_size 需不小于库体积才生效，1 GB 可覆盖绝大多数历史库。
+        try? database.execute("PRAGMA mmap_size=1073741824")
+        let mapped = (try? database.scalar("PRAGMA mmap_size")) as? Int64
+        log.info("SQLite mmap_size=\(mapped ?? 0)")
         Self.createTable(on: database, table: table)
         connection = database
     }

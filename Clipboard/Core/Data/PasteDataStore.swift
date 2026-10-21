@@ -215,6 +215,7 @@ extension PasteDataStore {
         listRevision &+= 1
 
         searchTask = Task {
+            let started = ContinuousClock.now
             let filter = PasteFilterBuilder.buildFilter(from: criteria)
 
             searchWord = criteria.keyword
@@ -223,21 +224,68 @@ extension PasteDataStore {
             pageIndex = 0
             lastRequestedPage = 0
 
-            let count = await sqlManager.getCount(filter: filter)
-            try Task.checkCancellation()
-
             var result: [PasteboardModel]
             var revision: Int
+            var rowCount = 0
+            var sqlElapsed: Duration = .zero
+            var mapElapsed: Duration = .zero
             repeat {
                 revision = orderRevision
+                let sqlStarted = ContinuousClock.now
                 let rows = await sqlManager.search(filter: filter, limit: pageSize)
+                sqlElapsed = sqlStarted.duration(to: .now)
+                rowCount = rows.count
                 try Task.checkCancellation()
+                let mapStarted = ContinuousClock.now
                 result = await mapRows(rows)
+                mapElapsed = mapStarted.duration(to: .now)
             } while revision != orderRevision
 
-            filteredCount = count
+            // 页未满时命中数就是总数，省掉一次全表扫描；页满才需要精确计数。
+            // 以 SQL 返回行数为准，避免 mapRows 丢行导致总数偏小。
+            let needsCount = rowCount == pageSize
+            let total: Int
+            if needsCount {
+                total = await sqlManager.getCount(filter: filter)
+                try Task.checkCancellation()
+            } else {
+                total = rowCount
+            }
+
+            filteredCount = total
             updateData(with: result, changeType: .searchFilter)
-            hasMoreData = result.count == pageSize
+            hasMoreData = rowCount == pageSize
+
+            logSearch(criteria, filter: filter, rows: rowCount, result: result, total: total,
+                      countScan: needsCount, sqlElapsed: sqlElapsed, mapElapsed: mapElapsed,
+                      elapsed: started.duration(to: .now))
+        }
+    }
+
+    /// 搜索性能日志：固定前缀与字段顺序，便于横向对比不同实现的耗时。
+    private func logSearch(
+        _ criteria: SearchCriteria,
+        filter: Expression<Bool>?,
+        rows: Int,
+        result: [PasteboardModel],
+        total: Int,
+        countScan: Bool,
+        sqlElapsed: Duration,
+        mapElapsed: Duration,
+        elapsed: Duration
+    ) {
+        let tokens = SearchTextNormalizer.queryTokens(criteria.keyword).count
+        let payload = result.reduce(0) { $0 + $1.data.count }
+        let message = "[search] kw=\"\(criteria.keyword)\" tokens=\(tokens) "
+            + "rows=\(rows) mapped=\(result.count) total=\(total) countScan=\(countScan) "
+            + "filters=\(filter != nil ? 1 : 0) "
+            + "sql=\(sqlElapsed.millisecondsText) map=\(mapElapsed.millisecondsText) "
+            + "total=\(elapsed.millisecondsText) "
+            + "payload=\(payload.formatted(.byteCount(style: .memory)))"
+        if elapsed.milliseconds >= 100 {
+            log.warn(message)
+        } else {
+            log.info(message)
         }
     }
 

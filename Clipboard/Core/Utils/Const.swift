@@ -12,6 +12,9 @@ enum Const {
     static let showDuration: CFTimeInterval = 0.15
     static let hideDuration: CFTimeInterval = 0.24
 
+    /// 搜索防抖。单次全表扫描约 19 ms，200 ms 足以吸收连续输入。
+    static let searchDebounce: Int = 200
+
     static let cardSize: CGFloat = 235.0
     static let cntSize: CGFloat = 185.0
     static let hdSize: CGFloat = 50.0

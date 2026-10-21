@@ -112,7 +112,7 @@ final class FloatingWindowContentView: NSView {
         headerView.searchField.$text
             .removeDuplicates()
             .dropFirst()
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(Const.searchDebounce), scheduler: DispatchQueue.main)
             .sink { [weak self] text in
                 guard let self else { return }
                 topVM.setQuery(text: text)
