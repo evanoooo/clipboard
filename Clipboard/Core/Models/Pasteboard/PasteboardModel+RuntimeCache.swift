@@ -7,6 +7,12 @@
 
 import AppKit
 
+enum CodeDetectionState: Sendable, Equatable {
+    case uncomputed
+    case detected(CodeLanguage)
+    case none
+}
+
 struct PasteboardModelRuntimeCache {
     var thumbnail: NSImage?
     var imageSize: CGSize?
@@ -22,6 +28,7 @@ struct PasteboardModelRuntimeCache {
     var thumbnailLoadTask: Task<NSImage?, Never>?
     var linkMetadata: LinkPreviewMetadata?
     var isMarkdown: Bool?
+    var codeDetectionState: CodeDetectionState = .uncomputed
 }
 
 extension PasteboardModel {
@@ -93,5 +100,27 @@ extension PasteboardModel {
     var cachedIsMarkdown: Bool? {
         get { runtimeCache.isMarkdown }
         set { runtimeCache.isMarkdown = newValue }
+    }
+
+    /// 嗅探并缓存纯文本代码语言（如 Nginx、Swift、JSON 等）
+    var detectedCodeLanguage: CodeLanguage? {
+        switch runtimeCache.codeDetectionState {
+        case .detected(let lang):
+            return lang
+        case .none:
+            return nil
+        case .uncomputed:
+            guard type == .string, length >= 10, length <= 20_000 else {
+                runtimeCache.codeDetectionState = .none
+                return nil
+            }
+            if let lang = CodeLanguageDetector.detect(attributeString.string) {
+                runtimeCache.codeDetectionState = .detected(lang)
+                return lang
+            } else {
+                runtimeCache.codeDetectionState = .none
+                return nil
+            }
+        }
     }
 }

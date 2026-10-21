@@ -158,7 +158,7 @@ final class CardContentView: NSView, PassthroughMouseEvents {
             return CardFileContentView(model: model)
         case .richText:
             return CardRichContentView(model: model, keyword: keyword)
-        case .plainText:
+        case .code, .plainText:
             return CardStringContentView(model: model, keyword: keyword)
         case .linkPreview:
             return CardLinkPreviewContentView(model: model, keyword: keyword)
@@ -187,7 +187,7 @@ final class CardStringContentView: NSView, PassthroughMouseEvents {
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
         let attributed = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false)
         textView.textStorage?.setAttributedString(attributed)
-        if model.pasteboardType == .string {
+        if model.pasteboardType == .string, model.detectedCodeLanguage == nil {
             textView.font = .preferredFont(forTextStyle: .body)
         }
     }

@@ -119,9 +119,12 @@
 
 - [ ] **Code Phase 4: 完整单元测试套件与性能基线保障**
 
-- [ ] **Code Phase 3: 挂载 ClipContentRenderer 与双端视图增强**
-  - [ ] `PasteboardModel` 接入 `detectedLanguage` 懒加载与缓存
-  - [ ] 卡片与悬浮行接入等宽字体排版与右上角语言徽章
+- [x] **Code Phase 3: 挂载 ClipContentRenderer 与双端视图增强**
+  - [x] `PasteboardModel` 接入 `detectedCodeLanguage` 懒加载与缓存（通过 `PasteboardModelRuntimeCache`）
+  - [x] `ClipContentRenderer` 接入 `.code(language:)` 语义类型与 `CodeHighlighter` 自动调度
+  - [x] 卡片视图（`CardStringContentView`）与悬浮行（`FloatingTextContentView`）接入等宽排版保护与回退
+  - [x] 卡片头部（`CardHeadView`）实现代码语言（如 Nginx、Swift）徽章与副标题动态呈现
+  - [x] 验证：144/144 单元测试全绿；主工程与 clipmcp 构建成功
 
 - [ ] **Task 13: 强化错误处理与用户反馈**
   - [ ] 统一错误提示与关键失败恢复机制

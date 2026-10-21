@@ -14,6 +14,7 @@ enum ClipContentKind: Equatable {
     case file
     case richText(hasBackground: Bool)
     case plainText
+    case code(language: CodeLanguage)
     case linkPreview
 }
 
@@ -34,6 +35,9 @@ enum ClipContentRenderer {
         case .link:
             return PasteUserDefaults.enableLinkPreview ? .linkPreview : .plainText
         case .string:
+            if let language = model.detectedCodeLanguage {
+                return .code(language: language)
+            }
             return .plainText
         }
     }
@@ -47,6 +51,14 @@ enum ClipContentRenderer {
         if isRich {
             return model.highlightedRichText(keyword: keyword)
         } else {
+            if let language = model.detectedCodeLanguage {
+                let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+                return CodeHighlighter.highlight(
+                    model.attributeString.string,
+                    language: language,
+                    keyword: trimmedKeyword.isEmpty ? nil : trimmedKeyword
+                )
+            }
             return keyword.isEmpty
                 ? model.plainTextAttributedString
                 : model.highlightedNSAttributedString(keyword: keyword)

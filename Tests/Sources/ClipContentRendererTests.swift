@@ -5,6 +5,7 @@
 //  Unit tests for ClipContentRenderer strategy resolution.
 //
 
+import AppKit
 import Foundation
 
 @MainActor
@@ -16,6 +17,7 @@ enum ClipContentRendererTests {
         case file
         case richText(hasBackground: Bool)
         case plainText
+        case code(language: CodeLanguage)
         case linkPreview
     }
 
@@ -23,6 +25,7 @@ enum ClipContentRendererTests {
         var type: PasteModelType
         var hasBgColor: Bool
         var enableLinkPreview: Bool
+        var detectedLanguage: CodeLanguage? = nil
 
         func resolveKind() -> MockContentKind {
             switch type {
@@ -39,6 +42,9 @@ enum ClipContentRendererTests {
             case .link:
                 return enableLinkPreview ? .linkPreview : .plainText
             case .string:
+                if let detectedLanguage {
+                    return .code(language: detectedLanguage)
+                }
                 return .plainText
             }
         }
@@ -74,9 +80,26 @@ enum ClipContentRendererTests {
         let linkDisabled = MockPasteModel(type: .link, hasBgColor: false, enableLinkPreview: false)
         runner.assertEqual(linkDisabled.resolveKind(), .plainText, "Link resolves to plainText when preview disabled")
 
-        // 7. Plain string
+        // 7. Plain string (non-code)
         let stringModel = MockPasteModel(type: .string, hasBgColor: false, enableLinkPreview: false)
         runner.assertEqual(stringModel.resolveKind(), .plainText, "String type resolves to .plainText")
+
+        // 8. Code string (Nginx configuration)
+        let nginxModel = MockPasteModel(type: .string, hasBgColor: false, enableLinkPreview: false, detectedLanguage: .nginx)
+        runner.assertEqual(nginxModel.resolveKind(), .code(language: .nginx), "Nginx configuration resolves to .code(.nginx)")
+
+        // 9. Code string (Swift code)
+        let swiftModel = MockPasteModel(type: .string, hasBgColor: false, enableLinkPreview: false, detectedLanguage: .swift)
+        runner.assertEqual(swiftModel.resolveKind(), .code(language: .swift), "Swift code resolves to .code(.swift)")
+
+        // 10. Code rendering pipeline with search keyword
+        let nginxSample = "server { listen 80; proxy_pass http://localhost; }"
+        let rendered = CodeHighlighter.highlight(nginxSample, language: .nginx, keyword: "proxy")
+        let renderedString = rendered.string as NSString
+        let proxyRange = renderedString.range(of: "proxy")
+        runner.assertTrue(proxyRange.location != NSNotFound, "Should find proxy in rendered output")
+        let bg = rendered.attribute(.backgroundColor, at: proxyRange.location, effectiveRange: nil) as? NSColor
+        runner.assertTrue(bg != nil, "Rendered code should have search highlight background")
 
         print("✓ ClipContentRenderer strategy resolution tests passed!")
     }

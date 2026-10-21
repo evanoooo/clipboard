@@ -170,7 +170,7 @@ final class CardHeadView: NSView {
 
     private func applyDisplay(alias: String) {
         guard let model else { return }
-        let type = model.type.string
+        let type = model.detectedCodeLanguage?.displayName ?? model.type.string
         let hasAlias = !alias.isEmpty
         let isDefault = model.group == -1
         let time = model.timestamp.timeAgo(relativeTo: TimeManager.shared.currentTime)

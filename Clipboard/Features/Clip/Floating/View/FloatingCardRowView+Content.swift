@@ -21,7 +21,7 @@ extension FloatingCardRowView {
             return FloatingRichContentView(
                 model: model, keyword: keyword, maximumLines: displayMode == .standard ? 2 : 1
             )
-        case .plainText:
+        case .code, .plainText:
             return FloatingTextContentView(
                 model: model, keyword: keyword, maximumLines: displayMode == .standard ? 0 : 1
             )
@@ -60,8 +60,11 @@ final class FloatingTextContentView: NSView {
         let text = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false)
         if textField.maximumNumberOfLines == 1, model.pasteboardType == .string {
             let preview = NSMutableAttributedString(attributedString: text)
+            let font: NSFont = model.detectedCodeLanguage != nil
+                ? .monospacedSystemFont(ofSize: 12, weight: .regular)
+                : .systemFont(ofSize: 12)
             preview.addAttribute(
-                .font, value: NSFont.systemFont(ofSize: 12), range: NSRange(location: 0, length: preview.length)
+                .font, value: font, range: NSRange(location: 0, length: preview.length)
             )
             textField.attributedStringValue = preview
         } else {
