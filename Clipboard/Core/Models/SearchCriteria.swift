@@ -18,11 +18,11 @@ enum DateFilterOption: String, CaseIterable, Equatable {
 
     var displayName: String {
         switch self {
-        case .today: String(localized: .today)
-        case .yesterday: String(localized: .yesterday)
-        case .thisWeek: String(localized: .thisWeek)
-        case .lastWeek: String(localized: .lastWeek)
-        case .thisMonth: String(localized: .thisMonth)
+        case .today: String(localized: "Today")
+        case .yesterday: String(localized: "Yesterday")
+        case .thisWeek: String(localized: "This week")
+        case .lastWeek: String(localized: "Last week")
+        case .thisMonth: String(localized: "This month")
         }
     }
 

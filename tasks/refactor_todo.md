@@ -45,7 +45,7 @@
   - [x] 编写 `SchemaMigrationTests.swift`（表结构创建、PRAGMA 列验证、user_version 升级、unique_id 唯一冲突断言）
   - [x] 编写 `CRUDOperationTests.swift`（记录单条/批量插入、sort_order 降序排序、alias 与 alias_search 归一化修改、hidden 软删除过滤、group 分组过滤、物理删除）
   - [x] 编写 `UndoRestoreTests.swift`（快照捕获、原 ID/sort_order 恢复校验、.immediate 事务异常回滚原子性断言）
-  - [x] 验证：`swift run` 61/61 测试用例 1.02 秒内全绿通过，主项目 `xcodebuild` 编译无任何负作用（Commit: `e476c71`）
+  - [x] 验证：`swift run` 61/61 测试用例 1.02 秒内全绿通过，主项目 `xcodebuild` 编译无任何副作用（Commit: `e476c71`）
 
 - [x] **Task 14: 引入 SQLite FTS5 全文搜索虚拟表（P0 - 性能极致）**
   - [x] 创建 `PasteFTSMigration.swift`：定义 `clip_fts` 外部内容虚表（`content='Clip'`, `content_rowid='id'`, `tokenize='trigram case_sensitive 0'`）
@@ -54,7 +54,7 @@
   - [x] 升级 `PasteFilterBuilder.swift`：对 >=3 字符检索走 FTS5 倒排索引；对 <3 字符短词优雅降级为 LIKE，杜绝漏搜与语法报错
   - [x] 同步升级 `MCPTools.swift`：使 AI 工具检索同样享受毫秒级倒排索引加速
   - [x] 编写 `FTSTriggerTests.swift` 全套用例（增删改同步断言、中英文/代码子串匹配、跨列匹配、DSL子查询过滤）
-  - [x] 验证：测试用例 75/75 耗时 0.26s 全绿通过；主工程 `Clipboard` 与 `clipmcp` 编译全部成功
+  - [x] 验证：测试用例 75/75 耗时 0.26s 全绿通过；主工程 `Clipboard` 与 `clipmcp` 编译全部成功（Commit: `7510a5d`）
 
 - [x] **Task 7: 统一系统级日志与脱敏规范**
   - [x] `Logger.swift` 统一接入 `os.Logger(subsystem:category:)` 并使用 `OSAllocatedUnfairLock`
@@ -78,6 +78,20 @@
   - [x] `ClipPreviewPopover` 在 `cleanup` 中及时解绑全局键盘事件监听器，避免浮层关闭后事件泄露（Commit: `7a665b7`）
   - [x] 清理 `CardBottomView` 与 `CardContentView` 不必要的 `nonisolated(unsafe)` 绕过标记（Commit: `7a665b7`）
 
-- [ ] **Task 10: 拆分 `PasteDataStore` 数据存储与 UI 状态**
-  - [ ] 提取 `ClipboardRepository`（专门负责 DB/Disk 交互）
-  - [ ] 提取 `ClipboardFilterState`（专门管理搜索与分类状态机）
+- [x] **Task 10: 拆分 `PasteDataStore` 数据存储与 UI 过滤状态机**
+  - [x] 独立出 `ClipboardFilterState`（专门管理搜索条件 `criteria`、已编译 SQL 表达式 `currentFilter`、过滤计数及状态版本 `revision`）
+  - [x] 重构 `PasteDataStore` 持有 `filterState`，将原散乱修改 `currentFilter` / `searchWord` 的逻辑收敛为单向状态机流转
+  - [x] 解耦 `PasteModelType` 与大型 UI 模型 `PasteboardModel`，消灭循环依赖，实现轻量级跨平台复用
+  - [x] 编写 `FilterStateTests.swift` 纯逻辑单测，覆盖空检索、FTS倒排触发、短词LIKE降级、多重复合条件、重置与手动重写
+  - [x] 验证：98/98 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过
+
+- [ ] **Task 11: 数据同步与分页机制优化**
+  - [ ] 强化 `PasteDataStore` 的分页增量追加防重复机制
+  - [ ] 梳理后台通知刷新与主线程 UI 渲染的数据流水线
+
+- [ ] **Task 12: 统一卡片与列表行渲染策略**
+  - [ ] 统一样式解析逻辑，减少冗余类型转换
+  - [ ] 确保列表模式与卡片模式富文本预览与高亮的一致性
+
+- [ ] **Task 13: 强化错误处理与用户反馈**
+  - [ ] 统一错误提示与关键失败恢复机制

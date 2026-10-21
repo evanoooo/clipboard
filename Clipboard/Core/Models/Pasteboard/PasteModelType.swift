@@ -7,7 +7,7 @@
 
 import AppKit
 
-enum PasteModelType: String {
+enum PasteModelType: String, CaseIterable, Sendable {
     case none
     case image
     case string
@@ -16,40 +16,13 @@ enum PasteModelType: String {
     case link
     case color
 
-    init(with type: PasteboardType, model: PasteboardModel) {
-        switch type {
-        case .rtf, .rtfd:
-            if model.isCSS {
-                self = .color
-            } else if model.isLink {
-                self = .link
-            } else {
-                self = .rich
-            }
-        case .string:
-            if model.isCSS {
-                self = .color
-            } else if model.isLink {
-                self = .link
-            } else {
-                self = .string
-            }
-        case .png, .tiff:
-            self = .image
-        case .fileURL:
-            self = .file
-        default:
-            self = .none
-        }
-    }
-
     var string: String {
         switch self {
-        case .image: String(localized: .image)
-        case .string, .rich: String(localized: .text)
-        case .color: String(localized: .color)
-        case .link: String(localized: .link)
-        case .file: String(localized: .file)
+        case .image: String(localized: "Image")
+        case .string, .rich: String(localized: "Text")
+        case .color: String(localized: "Color")
+        case .link: String(localized: "Link")
+        case .file: String(localized: "File")
         default: ""
         }
     }
@@ -69,15 +42,15 @@ enum PasteModelType: String {
     var iconAndLabel: (icon: String, label: String) {
         switch self {
         case .image:
-            ("photo", String(localized: .image))
+            ("photo", String(localized: "Image"))
         case .string, .rich:
-            ("text.document", String(localized: .text))
+            ("text.document", String(localized: "Text"))
         case .file:
-            ("folder", String(localized: .file))
+            ("folder", String(localized: "File"))
         case .link:
-            ("link", String(localized: .link))
+            ("link", String(localized: "Link"))
         case .color:
-            ("paintpalette", String(localized: .color))
+            ("paintpalette", String(localized: "Color"))
         case .none:
             ("", "")
         }

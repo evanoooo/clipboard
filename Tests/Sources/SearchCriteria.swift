@@ -1,0 +1,1 @@
+../../Clipboard/Core/Models/SearchCriteria.swift

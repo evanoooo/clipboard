@@ -9,10 +9,12 @@ import Foundation
 import SQLite
 
 enum PasteFilterBuilder {
+    private typealias Expression = SQLite.Expression
+
     static func buildFilter(
         from criteria: SearchCriteria
-    ) -> Expression<Bool>? {
-        var clauses: [Expression<Bool>] = []
+    ) -> SQLite.Expression<Bool>? {
+        var clauses: [SQLite.Expression<Bool>] = []
 
         // 关键词搜索：优先使用 SQLite FTS5 trigram 倒排索引（>=3 字符）；
         // 当 token 长度 < 3 字符时自动优雅降级为 LIKE 模式，保证 100% 检索准确度与秒级响应。
@@ -96,7 +98,7 @@ enum PasteFilterBuilder {
     /// 不能用 `Expression<Bool>(value: false)` 作为 OR 起点：
     /// 生成的 `(0 OR "group" = 3)` 会让 SQLite 放弃 idx_group_order，
     /// 退化为按 idx_sort_order 的整表扫描（569 MB 库实测 ~900 ms）。
-    private static func orJoined(_ conditions: [Expression<Bool>]) -> Expression<Bool>? {
+    private static func orJoined(_ conditions: [SQLite.Expression<Bool>]) -> SQLite.Expression<Bool>? {
         guard let first = conditions.first else { return nil }
         return conditions.dropFirst().reduce(first) { $0 || $1 }
     }

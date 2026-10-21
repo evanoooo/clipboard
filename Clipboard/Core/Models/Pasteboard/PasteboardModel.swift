@@ -297,3 +297,34 @@ extension PasteboardModel: Hashable {
         hasher.combine(uniqueId)
     }
 }
+
+// MARK: - PasteModelType Mapping
+
+extension PasteModelType {
+    init(with type: PasteboardType, model: PasteboardModel) {
+        switch type {
+        case .rtf, .rtfd:
+            if model.isCSS {
+                self = .color
+            } else if model.isLink {
+                self = .link
+            } else {
+                self = .rich
+            }
+        case .string:
+            if model.isCSS {
+                self = .color
+            } else if model.isLink {
+                self = .link
+            } else {
+                self = .string
+            }
+        case .png, .tiff:
+            self = .image
+        case .fileURL:
+            self = .file
+        default:
+            self = .none
+        }
+    }
+}

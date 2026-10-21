@@ -18,7 +18,10 @@ final class PasteDataStore {
 
     private(set) var dataList = CurrentValueSubject<[PasteboardModel], Never>([])
 
-    private(set) var searchWord: String = ""
+    /// UI 筛选与检索状态机
+    let filterState = ClipboardFilterState.shared
+
+    var searchWord: String { filterState.criteria.keyword }
     private(set) var chipsVersion: Int = 0
 
     var totalCount: Int = 0
@@ -26,9 +29,19 @@ final class PasteDataStore {
     private(set) var isLoadingPage = false
     private(set) var hasMoreData = false
     private(set) var listRevision = 0
-    private(set) var filterRevision = 0
     private(set) var isReordering = false
-    var filteredCount: Int = 0
+
+    /// 兼容委托至 filterState
+    var currentFilter: Expression<Bool>? {
+        get { filterState.currentFilter }
+        set { filterState.setFilter(newValue) }
+    }
+    var isInFilterMode: Bool { filterState.isInFilterMode }
+    var filteredCount: Int {
+        get { filterState.filteredCount }
+        set { filterState.filteredCount = newValue }
+    }
+    var filterRevision: Int { filterState.revision }
 
     enum DataChangeType {
         case loadMore
@@ -42,9 +55,6 @@ final class PasteDataStore {
     }
 
     private(set) var lastDataChangeType: DataChangeType = .reset
-
-    private(set) var currentFilter: Expression<Bool>?
-    private(set) var isInFilterMode: Bool = false
     private var lastRequestedPage = 0
 
     let sqlManager = PasteSQLManager.manager
@@ -58,7 +68,7 @@ final class PasteDataStore {
     private var focusToken = 0
     private var orderRevision = 0
     private var ingestionTask: Task<Void, Never>?
-    /// 撤销进行中时忽略重复 ⌘Z，避免两次恢复交叠。
+    /// 撤销进行中时忽略重复 ⌘Z，避免两次恢复交叉。
     var isUndoing = false
     /// 串行登记尚未落库的写操作（删除/移组/隐藏），撤销前只需等待队尾。
     private var mutationTail: Task<Void, Never>?
@@ -71,7 +81,7 @@ final class PasteDataStore {
         await resetDefaultList()
         let count = await sqlManager.getTotalCount()
         totalCount = count
-        filteredCount = count
+        filterState.filteredCount = count
         SourceAppCache.shared.warmMissingIcons()
         return true
     }
@@ -201,19 +211,17 @@ extension PasteDataStore {
 
     func resetDefaultList(focusIds: [Int64] = [], limit: Int? = nil) async {
         pageIndex = 0
-        currentFilter = nil
-        isInFilterMode = false
-        searchWord = ""
+        filterState.reset()
         let size = max(limit ?? pageSize, pageSize)
         let list = await getItems(limit: size, offset: 0)
-        filteredCount = totalCount
+        filterState.filteredCount = totalCount
         requestFocus(at: focusIndex(in: list, ids: focusIds))
         updateData(with: list)
         hasMoreData = list.count == size
     }
 
     func resetToDefault() {
-        filterRevision &+= 1
+        filterState.reset()
         listRevision &+= 1
         searchTask?.cancel()
         loadPageTask?.cancel()
@@ -268,9 +276,9 @@ extension PasteDataStore {
         updateData(with: sorted, changeType: .reorder)
     }
 
-    /// 数据搜索（关键词 + 自定义分组 + 过滤视图）
+    /// 数据搜索（关键字 + 自定义分组 + 过滤视图）
     func searchData(_ criteria: SearchCriteria) {
-        filterRevision &+= 1
+        let filter = filterState.update(criteria: criteria)
         searchTask?.cancel()
         loadPageTask?.cancel()
         isLoadingPage = false
@@ -278,11 +286,6 @@ extension PasteDataStore {
 
         searchTask = Task {
             let started = ContinuousClock.now
-            let filter = PasteFilterBuilder.buildFilter(from: criteria)
-
-            searchWord = criteria.keyword
-            currentFilter = filter
-            isInFilterMode = (filter != nil)
             pageIndex = 0
             lastRequestedPage = 0
 
@@ -317,7 +320,7 @@ extension PasteDataStore {
                 total = rowCount
             }
 
-            filteredCount = total
+            filterState.filteredCount = total
             let dbElapsed = started.duration(to: .now)
             let publishStarted = ContinuousClock.now
             updateData(with: result, changeType: .searchFilter)
@@ -360,7 +363,7 @@ extension PasteDataStore {
             + "tokenMin=\(minToken) tokenMax=\(maxToken) fts=\(ftsEligible ? 1 : 0) "
             + "corpus=\(totalCount) kinds=\(Self.filterKinds(criteria)) "
             + "payload=\(payload.formatted(.byteCount(style: .memory)))"
-        // 分别关注「数据库慢」与「发布/渲染慢」，两者堆到一起会掩盖真实瓶颈。
+        // 分别关注「数据库慢」与「发布/渲染慢」，两者堆在一起会掩盖真实瓶颈。
         if elapsed.milliseconds >= 100 || publishElapsed.milliseconds >= 100 {
             log.warn(message)
         } else {
@@ -456,12 +459,12 @@ extension PasteDataStore {
         totalCount = count
 
         if isInFilterMode, let filter = currentFilter {
-            filteredCount = await PasteReadStore.shared.getCount(filter: filter)
+            filterState.filteredCount = await PasteReadStore.shared.getCount(filter: filter)
             guard let id = model.id,
                   await PasteReadStore.shared.getCount(filter: filter && Col.id == id) > 0
             else { return }
         } else {
-            filteredCount = count
+            filterState.filteredCount = count
         }
 
         var list = dataList.value
@@ -522,9 +525,9 @@ extension PasteDataStore {
 
         totalCount = await sqlManager.getTotalCount()
         if isInFilterMode, let currentFilter {
-            filteredCount = await PasteReadStore.shared.getCount(filter: currentFilter)
+            filterState.filteredCount = await PasteReadStore.shared.getCount(filter: currentFilter)
         } else {
-            filteredCount = totalCount
+            filterState.filteredCount = totalCount
         }
         let effectiveTotal = isInFilterMode ? filteredCount : totalCount
         hasMoreData = list.count < effectiveTotal
@@ -558,7 +561,7 @@ extension PasteDataStore {
         let list = await mapRows(rows).map { model in
             model.id.flatMap { existing[$0] } ?? model
         }
-        filteredCount = await PasteReadStore.shared.getCount(filter: currentFilter)
+        filterState.filteredCount = await PasteReadStore.shared.getCount(filter: currentFilter)
         hasMoreData = list.count < filteredCount
         pageIndex = max(0, (list.count - 1) / pageSize)
         lastRequestedPage = pageIndex
@@ -568,5 +571,4 @@ extension PasteDataStore {
         updateData(with: list, changeType: membershipChanged ? .searchFilter : .update)
         return true
     }
-
 }
