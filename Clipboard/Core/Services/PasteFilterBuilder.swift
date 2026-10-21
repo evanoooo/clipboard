@@ -13,9 +13,18 @@ enum PasteFilterBuilder {
     ) -> Expression<Bool>? {
         var clauses: [Expression<Bool>] = []
 
-        // 关键词搜索
+        // 关键词搜索：与入库侧同一套归一化，再按词 AND
+        // （入库文本丢弃了空白与标点，查询不归一化会永远匹配不到）
         if !criteria.keyword.isEmpty {
-            clauses.append(Col.searchText.like("%\(criteria.keyword)%"))
+            let tokens = SearchTextNormalizer.queryTokens(criteria.keyword)
+            if tokens.isEmpty {
+                // 关键词归一化后为空（纯标点/空白）：与任何入库文本都不可能匹配
+                clauses.append(Expression<Bool>(value: false))
+            } else {
+                for token in tokens {
+                    clauses.append(Col.searchText.like("%\(token)%"))
+                }
+            }
         }
 
         // 分组筛选
