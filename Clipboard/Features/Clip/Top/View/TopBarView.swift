@@ -120,7 +120,6 @@ final class TopBarView: NSView {
 
     private func setup() {
         wantsLayer = true
-        translatesAutoresizingMaskIntoConstraints = false
 
         setupDefaultRow()
         setupSearchRow()

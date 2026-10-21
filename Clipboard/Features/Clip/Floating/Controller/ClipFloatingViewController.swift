@@ -55,7 +55,6 @@ final class ClipFloatingViewController: NSViewController {
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.clear.cgColor
 
-        floatingContentView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(floatingContentView)
         floatingContentView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
