@@ -1,5 +1,4 @@
 import AppKit
-import CryptoKit
 import Foundation
 import SQLite
 
@@ -350,12 +349,4 @@ private extension MCPTools {
 private struct MCPCategoryChip: Codable {
     let id: Int
     let name: String
-}
-
-// MARK: - SHA-256 (mirrors Data+Extension.swift, local to clipmcp)
-
-private extension Data {
-    var sha256Hex: String {
-        SHA256.hash(data: self).reduce(into: "") { $0 += String(format: "%02hhx", $1) }
-    }
 }

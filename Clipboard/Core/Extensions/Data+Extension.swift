@@ -6,7 +6,7 @@
 //
 
 import CryptoKit
-import SwiftUI
+import Foundation
 
 extension Data {
     nonisolated var sha256Hex: String {
@@ -14,9 +14,5 @@ extension Data {
         return digest.reduce(into: "") { result, byte in
             result += String(format: "%02hhx", byte)
         }
-    }
-
-    var sha256Data: Data {
-        Data(SHA256.hash(data: self))
     }
 }
