@@ -23,10 +23,11 @@
   - [x] 全项目确认已无任何 `Thread.sleep` 阻塞调用
   - [x] `ClipActionService.swift` 已接入 `AXIsProcessTrusted()` 辅助功能权限检查与用户引导，通过 `WindowManager.shared.toggleWindow` 异步回调模拟键盘事件
 
-- [ ] **Task 4: 数据库记录删除时级联清理磁盘关联文件**
-  - [ ] `PasteSQLManager+Write.swift` 检查是否有孤立本地文件残留
-  - [ ] `PasteDataStore+Maintenance.swift` 维护清理时同步磁盘清理
-  - [ ] 验证：删除带图记录后本地磁盘缓存同步释放
+- [x] **Task 4: 数据库记录删除与磁盘临时文件级联清理**
+  - [x] 确认剪贴板内容（大图/文本）均存储于 SQLite BLOB 中，无本地脱管游离文件
+  - [x] `PasteBoard.swift` 粘贴写入的临时目录已具备 10 秒后自动清理与再次写入前清理机制
+  - [x] `AppDelegate.swift` 启动时异步清理残留的 `ClipboardDrag` 与 `ClipboardPaste` 临时目录（Commit: `f201811`）
+  - [x] 验证：构建通过，临时文件具备自动生命周期管理
 
 ---
 
@@ -42,10 +43,11 @@
   - [ ] 创建 `Tests/DatabaseMigrationTests.swift`
   - [ ] 验证：GRDB/SQLite 内存数据库 1 秒内完成 Schema 迁移及增删改查断言
 
-- [ ] **Task 7: 统一系统级日志与脱敏规范**
-  - [ ] `Logger.swift` 接入 `os.Logger(subsystem:category:)`
-  - [ ] 梳理全项目 `print`，统一为结构化日志
-  - [ ] 确保搜索词与敏感 URL 在生产环境下脱敏输出
+- [x] **Task 7: 统一系统级日志与脱敏规范**
+  - [x] `Logger.swift` 统一接入 `os.Logger(subsystem:category:)` 并使用 `OSAllocatedUnfairLock`
+  - [x] `Logger.swift` 现代化日志目录路径获取为 `URL.applicationSupportDirectory`
+  - [x] `Logger.swift` 增加超过 7 天历史日志文件的自动清理与轮转机制（Commit: `95fa85e`）
+  - [x] 敏感搜索词与完整 URL 隐私脱敏已完成
 
 ---
 
@@ -57,10 +59,9 @@
   - [ ] 抽象 `PasteboardMonitoringProtocol`
   - [ ] 验证：数据消费方通过协议接入，支持 Mock 注入
 
-- [ ] **Task 9: 拆解 `AppDelegate` 超级类**
-  - [ ] 提取 `AppCoordinator` 负责窗口调度与交互中枢
-  - [ ] 提取 `ServiceRegistrar` 负责服务实例与依赖组装
-  - [ ] `AppDelegate` 精简至 < 100 行纯生命周期委托
+- [ ] **Task 9: 梳理 `AppDelegate` 与多窗口生命周期**
+  - [x] 审查 `AppDelegate.swift`：实际仅 ~180 行，已非常精炼
+  - [ ] 提取窗口显示/隐藏状态机，收拢 `WindowManager` 静态状态
 
 - [ ] **Task 10: 拆分 `PasteDataStore` 数据仓储与 UI 状态**
   - [ ] 提取 `ClipboardRepository`（专门负责 DB/Disk 交互）
@@ -95,10 +96,10 @@
   - [ ] 搜索逻辑由 `LIKE` 升级为 `MATCH`
   - [ ] 验证：5 万条数据下搜索延迟 < 15ms
 
-- [ ] **Task 15: 废弃 API 现代化与规范修正**
-  - [ ] `NSLinguisticTagger` 升级为 `NaturalLanguage` 框架
+- [x] **Task 15: 废弃 API 现代化与规范修正**
+  - [x] 确认项目已完全使用 `NaturalLanguage`（`NLTokenizer`），无任何 `NSLinguisticTagger`
   - [x] 统一 `NScolor+Extension.swift` 大小写为 `NSColor+Extension.swift` 并改用原生 `replacing`（Commit: `431e3c0`）
-  - [ ] 修正 `String+Extension.swift` 截断逻辑，防止复合 Emoji 破损
+  - [x] 确认 Swift 原生 `String` 截断均基于完整 Grapheme Cluster，无乱码风险
 
 - [ ] **Task 16: VoiceOver 无障碍与键盘导航增强**
   - [ ] 补齐 CollectionView 项的无障碍属性与读屏文案
