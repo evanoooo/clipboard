@@ -33,6 +33,7 @@ struct TestRunner {
         UndoRestoreTests.run(runner: TestRunner.self)
         FTSTriggerTests.run(runner: TestRunner.self)
         FilterStateTests.run(runner: TestRunner.self)
+        PaginationTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")

@@ -169,6 +169,8 @@ extension PasteDataStore {
 
         let currentOffset = dataList.value.count
         let filter = isInFilterMode ? currentFilter : nil
+        let capturedFilterRevision = filterRevision
+        let capturedListRevision = listRevision
 
         log.debug(
             "loadNextPage \(pageIndex) (filterMode: \(isInFilterMode))"
@@ -192,20 +194,35 @@ extension PasteDataStore {
                 )
             }
 
-            guard !Task.isCancelled else { return }
-
-            guard !newItems.isEmpty else {
-                hasMoreData = false
-                isLoadingPage = false
+            guard !Task.isCancelled,
+                  self.filterRevision == capturedFilterRevision,
+                  self.listRevision == capturedListRevision else {
+                self.isLoadingPage = false
                 return
             }
 
-            var list = dataList.value
-            list += newItems
+            guard !newItems.isEmpty else {
+                self.hasMoreData = false
+                self.isLoadingPage = false
+                return
+            }
 
-            updateData(with: list, changeType: .loadMore)
-            hasMoreData = (newItems.count == pageSize)
-            isLoadingPage = false
+            var list = self.dataList.value
+            let existingUniqueIds = Set(list.map(\.uniqueId))
+            let existingDbIds = Set(list.compactMap(\.id))
+            let deduplicated = newItems.filter { item in
+                if existingUniqueIds.contains(item.uniqueId) { return false }
+                if let id = item.id, existingDbIds.contains(id) { return false }
+                return true
+            }
+
+            if !deduplicated.isEmpty {
+                list.append(contentsOf: deduplicated)
+                self.updateData(with: list, changeType: .loadMore)
+            }
+
+            self.hasMoreData = (newItems.count == pageSize && list.count < effectiveTotal)
+            self.isLoadingPage = false
         }
     }
 
@@ -279,10 +296,12 @@ extension PasteDataStore {
     /// 数据搜索（关键字 + 自定义分组 + 过滤视图）
     func searchData(_ criteria: SearchCriteria) {
         let filter = filterState.update(criteria: criteria)
+        let capturedFilterRev = filterState.revision
         searchTask?.cancel()
         loadPageTask?.cancel()
         isLoadingPage = false
         listRevision &+= 1
+        let capturedListRev = listRevision
 
         searchTask = Task {
             let started = ContinuousClock.now
@@ -307,6 +326,9 @@ extension PasteDataStore {
                 mapElapsed = mapStarted.duration(to: .now)
             } while revision != orderRevision
 
+            try Task.checkCancellation()
+            guard self.filterState.revision == capturedFilterRev, self.listRevision == capturedListRev else { return }
+
             // 页未满时命中数就是总数，省掉一次全表扫描；页满才需要精确计数。
             // 以 SQL 返回行数为准，避免 mapRows 丢行导致总数偏小。
             let needsCount = rowCount == pageSize
@@ -316,15 +338,16 @@ extension PasteDataStore {
                 total = await PasteReadStore.shared.getCount(filter: filter)
                 countElapsed = countStarted.duration(to: .now)
                 try Task.checkCancellation()
+                guard self.filterState.revision == capturedFilterRev, self.listRevision == capturedListRev else { return }
             } else {
                 total = rowCount
             }
 
-            filterState.filteredCount = total
+            self.filterState.filteredCount = total
             let dbElapsed = started.duration(to: .now)
             let publishStarted = ContinuousClock.now
-            updateData(with: result, changeType: .searchFilter)
-            hasMoreData = rowCount == pageSize
+            self.updateData(with: result, changeType: .searchFilter)
+            self.hasMoreData = rowCount == pageSize
 
             logSearch(criteria, filter: filter, rows: rowCount, result: result, total: total,
                       countScan: needsCount, sqlElapsed: sqlElapsed, countElapsed: countElapsed,

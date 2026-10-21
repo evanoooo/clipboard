@@ -19,6 +19,15 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     /// 避免把写入失败或用户紧接着的复制一起吞掉。
     private var ownWriteChangeCount: Int?
     private var timer: Timer?
+    /// 等待中的延迟读取任务。
+    private var syncTask: Task<Void, Never>?
+
+    /// 检测到变化后、真正读取剪贴板前的等待时长。
+    ///
+    /// Office、浏览器等复制时会分多次写入剪贴板（每次写入都让 changeCount 递增），
+    /// 在第一次变化处立即读取只会拿到第一个表示，导致入库内容残缺。
+    /// 等一个短窗口让写入方收尾；超过 300ms 会让条目出现明显变慢，不宜再放大。
+    private static let syncDebounce: Duration = .milliseconds(150)
 
     // MARK: - 暂停功能
 
@@ -69,6 +78,8 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     func stopListening() {
         timer?.invalidate()
         timer = nil
+        syncTask?.cancel()
+        syncTask = nil
     }
 
     // MARK: - 暂停/恢复
@@ -138,6 +149,28 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         guard currentCount != changeCount else {
             return
         }
+
+        // 只负责发现变化；读取延后到 syncPasteboard，见 scheduleSync。
+        scheduleSync(expectedCount: currentCount)
+    }
+
+    /// 调度一次延迟读取；等待期间再次发现变化会取消并重新计时。
+    private func scheduleSync(expectedCount: Int) {
+        syncTask?.cancel()
+        syncTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.syncDebounce)
+            guard !Task.isCancelled, let self else { return }
+            self.syncPasteboard(expectedCount: expectedCount)
+        }
+    }
+
+    /// 读取剪贴板并入库。
+    ///
+    /// - Parameter expectedCount: 调度时记录的 changeCount。执行时若计数已变
+    ///   （写入方仍在继续写，或本应用刚回写剪贴板），放弃本次读取，
+    ///   由下一次轮询按最新内容重新调度。
+    private func syncPasteboard(expectedCount: Int) {
+        guard pasteboard.changeCount == expectedCount else { return }
 
         let types = pasteboard.types ?? []
 

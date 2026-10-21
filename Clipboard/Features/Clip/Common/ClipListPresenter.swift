@@ -127,8 +127,14 @@ final class ClipListPresenter {
     }
 
     private func appendNewItems(_ items: [PasteboardModel]) {
-        let existingIds = Set(currentSnapshotItems().map(\.uniqueId))
-        let newItems = items.filter { !existingIds.contains($0.uniqueId) }
+        let snapshot = currentSnapshotItems()
+        let existingUniqueIds = Set(snapshot.map(\.uniqueId))
+        let existingDbIds = Set(snapshot.compactMap(\.id))
+        let newItems = items.filter { item in
+            if existingUniqueIds.contains(item.uniqueId) { return false }
+            if let id = item.id, existingDbIds.contains(id) { return false }
+            return true
+        }
         if !newItems.isEmpty {
             appendItems(newItems)
         }

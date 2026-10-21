@@ -83,11 +83,14 @@
   - [x] 重构 `PasteDataStore` 持有 `filterState`，将原散乱修改 `currentFilter` / `searchWord` 的逻辑收敛为单向状态机流转
   - [x] 解耦 `PasteModelType` 与大型 UI 模型 `PasteboardModel`，消灭循环依赖，实现轻量级跨平台复用
   - [x] 编写 `FilterStateTests.swift` 纯逻辑单测，覆盖空检索、FTS倒排触发、短词LIKE降级、多重复合条件、重置与手动重写
-  - [x] 验证：98/98 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过
+  - [x] 验证：98/98 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过（Commit: `1225d46`）
 
-- [ ] **Task 11: 数据同步与分页机制优化**
-  - [ ] 强化 `PasteDataStore` 的分页增量追加防重复机制
-  - [ ] 梳理后台通知刷新与主线程 UI 渲染的数据流水线
+- [x] **Task 11: 数据同步与分页机制优化**
+  - [x] 强化 `PasteDataStore.loadNextPage()` 与 `ClipListPresenter.appendNewItems()` 的 `uniqueId` + `id` 双重去重机制，杜绝数据倾斜造成的列表条目重复
+  - [x] 强化版本屏障校验（`filterRevision` / `listRevision`），异步分页与搜索返回时自动丢弃过时（stale）脏数据
+  - [x] 精确校准 `hasMoreData` 分页边界判定，防止页未填满或到达总数时发生无效翻页请求
+  - [x] 编写 `PaginationTests.swift` 纯逻辑单测，覆盖双重去重、边界状态和版本屏障模拟
+  - [x] 验证：107/107 单元测试秒级全绿通过；`Clipboard` 与 `clipmcp` 主工程构建全部通过
 
 - [ ] **Task 12: 统一卡片与列表行渲染策略**
   - [ ] 统一样式解析逻辑，减少冗余类型转换
