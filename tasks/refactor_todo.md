@@ -117,7 +117,14 @@
   - [x] 编写 `CodeHighlighterTests.swift` 单测，覆盖 Nginx 高亮、变量、注释、搜索词高亮叠加、大文本安全边界（140/140 单元测试全绿）
   - [x] 验证：主工程与 clipmcp 构建成功
 
-- [ ] **Code Phase 4: 完整单元测试套件与性能基线保障**
+- [x] **Code Phase 4: 完整单元测试套件与性能基线保障（P1）**
+  - [x] 编写 `CodePerformanceTests.swift` 全套端到端套件与基准测试
+  - [x] 覆盖复杂真实嵌套 Nginx 配置（多 upstream、ssl、proxy_pass、`$` 变量、开关与搜索词合成）
+  - [x] 覆盖异常未闭合定界符（未闭合字符串、未闭合注释、未闭合花括号、纯空白）安全边界
+  - [x] 覆盖中英文与多字节 Emoji（如 🚀、张三、你好世界）UTF-16 索引严格对齐无越界
+  - [x] 覆盖多语言（JSON、Swift、SQL、Nginx）词法高亮断言
+  - [x] 建立 10,000 字符性能基准：实测平均 6.16ms/次，远低于 60fps 单帧阈值 16.6ms
+  - [x] 验证：170/170 单元测试全绿；主工程与 clipmcp 构建成功
 
 - [x] **Code Phase 3: 挂载 ClipContentRenderer 与双端视图增强**
   - [x] `PasteboardModel` 接入 `detectedCodeLanguage` 懒加载与缓存（通过 `PasteboardModelRuntimeCache`）

@@ -44,6 +44,7 @@ final class TestRunner {
         ClipContentRendererTests.run(runner: TestRunner.self)
         CodeDetectorTests.run(runner: TestRunner.self)
         CodeHighlighterTests.run(runner: TestRunner.self)
+        CodePerformanceTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")
