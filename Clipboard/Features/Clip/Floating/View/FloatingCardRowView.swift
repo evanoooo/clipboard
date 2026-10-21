@@ -172,6 +172,29 @@ final class FloatingCardRowView: NSView {
         self.quickPasteIndex = quickPasteIndex
 
         updateSelection(isSelected: isSelected, isFocused: isFocused)
+        updateAccessibility(with: model, quickPasteIndex: quickPasteIndex)
+    }
+
+    private func updateAccessibility(with model: PasteboardModel, quickPasteIndex: Int?) {
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+
+        var labels: [String] = []
+        if let index = quickPasteIndex {
+            labels.append("第 \(index) 项")
+        }
+        if !model.appName.isEmpty {
+            labels.append(model.appName)
+        }
+        labels.append(model.type.string)
+        if !model.alias.isEmpty {
+            labels.append("别名: \(model.alias)")
+        }
+        setAccessibilityLabel(labels.joined(separator: "，"))
+
+        let content = model.searchText.isEmpty ? model.plainText : model.searchText
+        setAccessibilityValue(content)
+        setAccessibilityHelp("连按两次粘贴，按空格键预览，按 Delete 键删除")
     }
 
     func updateSelection(isSelected: Bool, isFocused: Bool) {

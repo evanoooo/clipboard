@@ -87,6 +87,10 @@ class EmptyStateView: NSView {
                 .init(pointSize: iconSize, weight: .regular)
             )
         }
+
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("\(titleLabel.stringValue)，\(hintLabel.stringValue)")
     }
 
     private func setupConstraints() {

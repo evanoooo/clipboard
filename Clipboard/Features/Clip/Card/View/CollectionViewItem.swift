@@ -155,6 +155,7 @@ final class CollectionViewItem: NSCollectionViewItem {
                 guard let self, let model = item else { return }
                 headView.refreshTimestamp(for: model)
             }
+        updateAccessibility(with: model)
     }
 
     func setFocused(_ focused: Bool) {
@@ -200,6 +201,31 @@ final class CollectionViewItem: NSCollectionViewItem {
             quickPasteLabel.isHidden = true
         }
         updateBadgeVisibility()
+        if let model = item {
+            updateAccessibility(with: model)
+        }
+    }
+
+    private func updateAccessibility(with model: PasteboardModel) {
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.group)
+
+        var labels: [String] = []
+        if let index = quickPasteIndex {
+            labels.append("第 \(index) 项")
+        }
+        if !model.appName.isEmpty {
+            labels.append(model.appName)
+        }
+        labels.append(model.type.string)
+        if !model.alias.isEmpty {
+            labels.append("别名: \(model.alias)")
+        }
+        view.setAccessibilityLabel(labels.joined(separator: "，"))
+
+        let content = model.searchText.isEmpty ? model.plainText : model.searchText
+        view.setAccessibilityValue(content)
+        view.setAccessibilityHelp("连按两次粘贴，按空格键预览，按 Delete 键删除")
     }
 
     private func updateBadgeVisibility() {
