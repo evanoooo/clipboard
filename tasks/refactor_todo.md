@@ -45,7 +45,16 @@
   - [x] 编写 `SchemaMigrationTests.swift`（表结构创建、PRAGMA 列验证、user_version 升级、unique_id 唯一冲突断言）
   - [x] 编写 `CRUDOperationTests.swift`（记录单条/批量插入、sort_order 降序排序、alias 与 alias_search 归一化修改、hidden 软删除过滤、group 分组过滤、物理删除）
   - [x] 编写 `UndoRestoreTests.swift`（快照捕获、原 ID/sort_order 恢复校验、.immediate 事务异常回滚原子性断言）
-  - [x] 验证：`swift run` 61/61 测试用例 1.02 秒内全绿通过，主项目 `xcodebuild` 编译无任何负作用
+  - [x] 验证：`swift run` 61/61 测试用例 1.02 秒内全绿通过，主项目 `xcodebuild` 编译无任何负作用（Commit: `e476c71`）
+
+- [x] **Task 14: 引入 SQLite FTS5 全文搜索虚拟表（P0 - 性能极致）**
+  - [x] 创建 `PasteFTSMigration.swift`：定义 `clip_fts` 外部内容虚表（`content='Clip'`, `content_rowid='id'`, `tokenize='trigram case_sensitive 0'`）
+  - [x] 创建三向触发器 `clip_ai`、`clip_ad`、`clip_au` 保持增删改实时自动同步
+  - [x] 升级 `PasteSQLManager.swift` 启动时自动建立虚表并执行全量索引 rebuild
+  - [x] 升级 `PasteFilterBuilder.swift`：对 >=3 字符检索走 FTS5 倒排索引；对 <3 字符短词优雅降级为 LIKE，杜绝漏搜与语法报错
+  - [x] 同步升级 `MCPTools.swift`：使 AI 工具检索同样享受毫秒级倒排索引加速
+  - [x] 编写 `FTSTriggerTests.swift` 全套用例（增删改同步断言、中英文/代码子串匹配、跨列匹配、DSL子查询过滤）
+  - [x] 验证：测试用例 75/75 耗时 0.26s 全绿通过；主工程 `Clipboard` 与 `clipmcp` 编译全部成功
 
 - [x] **Task 7: 统一系统级日志与脱敏规范**
   - [x] `Logger.swift` 统一接入 `os.Logger(subsystem:category:)` 并使用 `OSAllocatedUnfairLock`

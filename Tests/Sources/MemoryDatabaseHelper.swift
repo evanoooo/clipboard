@@ -37,6 +37,7 @@ enum MemoryDatabaseHelper {
         // Run migrations
         try PasteOrder.setup(on: db)
         try PasteAliasMigration.setup(on: db)
+        try PasteFTSMigration.setup(on: db)
         try SourceAppSQL.create(on: db)
 
         // Create core indexes

@@ -68,6 +68,7 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
             try conn.run(statement)
             try PasteOrder.setup(on: conn)
             try PasteAliasMigration.setup(on: conn)
+            try PasteFTSMigration.setup(on: conn)
         } catch {
             log.error("Create Table Error: \(error)")
         }
@@ -145,6 +146,7 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         await migrateUniqueIdIfNeeded()
 
         guard let connection else { return false }
+        try? PasteFTSMigration.setup(on: connection)
         Self.createIndexes(on: connection)
         return true
     }

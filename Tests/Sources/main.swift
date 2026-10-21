@@ -1,6 +1,5 @@
 import Foundation
 
-@main
 @MainActor
 struct TestRunner {
     static var testsRun = 0
@@ -32,6 +31,7 @@ struct TestRunner {
         SchemaMigrationTests.run(runner: TestRunner.self)
         CRUDOperationTests.run(runner: TestRunner.self)
         UndoRestoreTests.run(runner: TestRunner.self)
+        FTSTriggerTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")
@@ -111,3 +111,5 @@ struct TestRunner {
         print("✓ JSONTransformer tests passed!")
     }
 }
+
+TestRunner.main()

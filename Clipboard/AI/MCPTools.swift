@@ -49,7 +49,11 @@ struct MCPTools {
 
     private static let allDefinitions: [[String: Any]] = MCPToolDefinition.all.compactMap { def in
         guard let schema = inputSchemas[def.name] else { return nil }
-        return ["name": def.name, "description": def.description, "inputSchema": schema]
+        return [
+            "name": def.name,
+            "description": def.description,
+            "inputSchema": schema
+        ]
     }
 
     // MARK: - Dispatch
@@ -79,14 +83,10 @@ struct MCPTools {
     // MARK: - search_clipboard
 
     private func searchClipboard(_ args: [String: Any]) -> [String: Any] {
-        let query = args["query"] as? String ?? ""
+        let query = (args["query"] as? String) ?? ""
         let typeFilter = args["type"] as? String
         let tagName = args["tag"] as? String
-        let limit = min(args["limit"] as? Int ?? 20, 50)
-
-        guard !query.isEmpty || typeFilter != nil || tagName != nil else {
-            return mcpError("Provide at least one of: query, type, or tag")
-        }
+        let limit = min(max((args["limit"] as? Int) ?? 20, 1), 50)
 
         guard let database = try? Connection(ClipboardPaths.database, readonly: true) else {
             return mcpError("Cannot open clipboard database")
@@ -106,13 +106,26 @@ struct MCPTools {
                 // 归一化后为空（纯标点/空白）：与任何入库文本都不可能匹配
                 queryExpr = queryExpr.filter(Expression<Bool>(value: false))
             } else {
-                for token in tokens {
-                    // 正文命中或别名命中均可，与 App 侧 PasteFilterBuilder 语义一致。
-                    let pattern = "%\(token)%"
-                    queryExpr = queryExpr.filter(
-                        Col.searchText.like(pattern)
-                            || (Col.aliasSearch ?? "").like(pattern)
-                    )
+                let canUseFTS = tokens.allSatisfy { $0.count >= 3 }
+                if canUseFTS {
+                    let matchClauses = tokens.map { token in
+                        let escaped = token.replacingOccurrences(of: "\"", with: "\"\"")
+                        return "\"\(escaped)\""
+                    }
+                    let matchString = matchClauses.joined(separator: " AND ")
+                    queryExpr = queryExpr.filter(Expression<Bool>(
+                        "id IN (SELECT rowid FROM clip_fts WHERE clip_fts MATCH ?)",
+                        [matchString]
+                    ))
+                } else {
+                    for token in tokens {
+                        // 正文命中或别名命中均可，与 App 侧 PasteFilterBuilder 语义一致。
+                        let pattern = "%\(token)%"
+                        queryExpr = queryExpr.filter(
+                            Col.searchText.like(pattern)
+                                || (Col.aliasSearch ?? "").like(pattern)
+                        )
+                    }
                 }
             }
         }
@@ -279,6 +292,12 @@ struct MCPTools {
         return mcpError("Failed to write to database")
     }
 
+    private func mcpError(_ message: String) -> [String: Any] {
+        [
+            "content": [["type": "text", "text": "Error: \(message)"]],
+            "isError": true
+        ]
+    }
 }
 
 // MARK: - Helpers
@@ -337,10 +356,6 @@ private extension MCPTools {
             return "link"
         }
         return "string"
-    }
-
-    private func mcpError(_ message: String) -> [String: Any] {
-        ["content": [["type": "text", "text": message]], "isError": true]
     }
 }
 
