@@ -99,6 +99,8 @@ extension PasteSQLManager {
                 try await loadApps()
                 let records = await getDistinctAppInfo()
                 await MainActor.run {
+                    // 导入后 id 会被复用，旧撤销记录已失效。
+                    ClipUndoStore.shared.removeAll()
                     SourceAppCache.shared.replace(records)
                     SourceAppCache.shared.warmMissingIcons()
                     AppColorService.shared.fillMissingColors()
@@ -201,23 +203,25 @@ extension PasteSQLManager {
             literal: "(SELECT COALESCE(MIN(sort_order), 0) - 1 FROM Clip)"
         )
 
-        let insert = try destTable.insert(
+        // 旧备份可能没有 show_data / alias 列，或 alias_search 已过期，均按缺失处理。
+        var setters: [Setter] = [
             Col.uniqueId <- uniqueId,
             Col.type <- typeRaw,
             Col.data <- data,
-            Col.showData <- row.get(Col.showData),
-            Col.timestamp <- row.get(Col.timestamp),
+            Col.showData <- (try? row.get(Col.showData)),
+            Col.timestamp <- try row.get(Col.timestamp),
             Col.sortOrder <- importSortOrder,
             Col.appID <- appID,
-            Col.searchText <- row.get(Col.searchText),
-            Col.length <- row.get(Col.length),
+            Col.searchText <- try row.get(Col.searchText),
+            Col.length <- try row.get(Col.length),
             Col.group <- group,
             Col.hidden <- (try? row.get(Col.hidden)) ?? 0,
             Col.tag <- try? row.get(Col.tag),
-            Col.alias <- try? row.get(Col.alias),
-            Col.aliasSearch <- try? row.get(Col.aliasSearch)
-        )
+        ]
+        // 别名与归一化检索列由 alias 原文推导，保证导入后别名搜索可用。
+        setters += Self.aliasSetters((try? row.get(Col.alias)) ?? "")
 
+        let insert = try destTable.insert(setters)
         try database.run(insert)
         return true
     }
