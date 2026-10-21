@@ -344,14 +344,21 @@ extension PasteDataStore {
         elapsed: Duration,
         publishElapsed: Duration
     ) {
-        let tokens = SearchTextNormalizer.queryTokens(criteria.keyword).count
+        let tokenList = SearchTextNormalizer.queryTokens(criteria.keyword)
+        let lengths = tokenList.map(\.count)
+        // Phase 0 采样：trigram 仅对 ≥3 字符的词元生效，据此判断是否值得引入 FTS。
+        let minToken = lengths.min() ?? 0
+        let maxToken = lengths.max() ?? 0
+        let ftsEligible = !lengths.isEmpty && minToken >= 3
         let payload = result.reduce(0) { $0 + $1.data.count }
-        let message = "[search] kw=\"\(criteria.keyword)\" tokens=\(tokens) "
+        let message = "[search] kw=\"\(criteria.keyword)\" tokens=\(tokenList.count) "
             + "rows=\(rows) mapped=\(result.count) total=\(total) countScan=\(countScan) "
             + "filters=\(filter != nil ? 1 : 0) "
             + "sql=\(sqlElapsed.millisecondsText) count=\(countElapsed.millisecondsText) "
             + "map=\(mapElapsed.millisecondsText) publish=\(publishElapsed.millisecondsText) "
             + "db=\(elapsed.millisecondsText) "
+            + "tokenMin=\(minToken) tokenMax=\(maxToken) fts=\(ftsEligible ? 1 : 0) "
+            + "corpus=\(totalCount) kinds=\(Self.filterKinds(criteria)) "
             + "payload=\(payload.formatted(.byteCount(style: .memory)))"
         // 分别关注「数据库慢」与「发布/渲染慢」，两者堆到一起会掩盖真实瓶颈。
         if elapsed.milliseconds >= 100 || publishElapsed.milliseconds >= 100 {
@@ -359,6 +366,17 @@ extension PasteDataStore {
         } else {
             log.info(message)
         }
+    }
+
+    /// 压缩成短代码，便于离线统计哪类筛选组合在变慢。
+    private static func filterKinds(_ criteria: SearchCriteria) -> String {
+        var kinds: [String] = []
+        if !criteria.keyword.isEmpty { kinds.append("k") }
+        if !criteria.selectedGroupIds.isEmpty { kinds.append("g") }
+        if !criteria.selectedTypes.isEmpty { kinds.append("t") }
+        if !criteria.selectedAppIDs.isEmpty { kinds.append("a") }
+        if criteria.selectedDateFilter != nil { kinds.append("d") }
+        return kinds.isEmpty ? "-" : kinds.joined()
     }
 
     @discardableResult
