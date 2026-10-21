@@ -5982,6 +5982,24 @@
         }
       }
     },
+    "undoDeletePartiallyFailed" : {
+      "comment" : "HUD: undo delete partially failed, restored count and failed count",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restored %1$lld, %2$lld failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已恢复 %1$lld 条，%2$lld 条失败"
+          }
+        }
+      }
+    },
     "undoDeleteSucceeded" : {
       "comment" : "HUD: undo delete succeeded, with the number of restored items",
       "extractionState" : "manual",

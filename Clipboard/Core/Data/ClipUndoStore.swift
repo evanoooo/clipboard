@@ -60,6 +60,15 @@ nonisolated enum ClipUndoAction: Sendable {
     }
 }
 
+/// 一次撤销的结果：部分失败时 `failedAction` 保留未恢复的部分，可回推栈重试。
+nonisolated struct UndoOutcome: Sendable {
+    let restoredIds: [Int64]
+    let failedAction: ClipUndoAction?
+
+    var restoredCount: Int { restoredIds.count }
+    var failedCount: Int { failedAction?.itemCount ?? 0 }
+}
+
 @MainActor
 final class ClipUndoStore {
     static let shared = ClipUndoStore()

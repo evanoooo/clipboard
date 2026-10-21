@@ -221,11 +221,26 @@ extension ClipFloatingViewController {
         }
 
         Task { @MainActor in
-            let count = await PasteDataStore.main.undoLastDelete()
-            guard count > 0 else { return }
+            let outcome = await PasteDataStore.main.undoLastDelete()
+            if outcome.failedCount > 0 {
+                HUDManager.shared.show(
+                    icon: NSImage(
+                        systemSymbolName: "exclamationmark.triangle",
+                        accessibilityDescription: nil
+                    ),
+                    text: String(
+                        localized: .undoDeletePartiallyFailed(
+                            outcome.restoredCount,
+                            outcome.failedCount
+                        )
+                    )
+                )
+                return
+            }
+            guard outcome.restoredCount > 0 else { return }
             HUDManager.shared.show(
                 icon: NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil),
-                text: String(localized: .undoDeleteSucceeded(count))
+                text: String(localized: .undoDeleteSucceeded(outcome.restoredCount))
             )
         }
         return nil

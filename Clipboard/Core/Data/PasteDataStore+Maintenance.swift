@@ -71,52 +71,85 @@ extension PasteDataStore {
         }
     }
 
-    /// 撤销最近一次删除；返回实际恢复条数，0 表示失败且记录已退回栈。
+    /// 撤销最近一次删除。未恢复的部分在 `failedAction` 中返回，并已回推栈以便重试。
     @discardableResult
-    func undoLastDelete() async -> Int {
-        guard !isUndoing, let action = ClipUndoStore.shared.pop() else { return 0 }
+    func undoLastDelete() async -> UndoOutcome {
+        guard !isUndoing, let action = ClipUndoStore.shared.pop() else {
+            return UndoOutcome(restoredIds: [], failedAction: nil)
+        }
 
         isUndoing = true
         defer { isUndoing = false }
 
         // 先等删除/移组/隐藏/置顶落库，否则恢复后可能被排队的写操作再次覆盖。
         await awaitPendingMutations()
-        let restoredIds = await applyUndo(action)
+        let outcome = await applyUndo(action)
 
-        if !restoredIds.isEmpty {
-            await reloadAfterUndo(restoredIds)
+        if let failedAction = outcome.failedAction {
+            ClipUndoStore.shared.push(failedAction)
+        }
+        if !outcome.restoredIds.isEmpty {
+            await reloadAfterUndo(outcome.restoredIds)
         } else {
-            ClipUndoStore.shared.push(action)
             NSSound.beep()
         }
-        return restoredIds.count
+        return outcome
     }
 
-    private func applyUndo(_ action: ClipUndoAction) async -> [Int64] {
+    private func applyUndo(_ action: ClipUndoAction) async -> UndoOutcome {
         switch action {
         case let .batch(actions):
             var restored: [Int64] = []
+            var failed: [ClipUndoAction] = []
             for sub in actions.reversed() {
-                restored += await applyUndo(sub)
+                let outcome = await applyUndo(sub)
+                restored += outcome.restoredIds
+                if let failedAction = outcome.failedAction {
+                    failed.append(failedAction)
+                }
             }
-            return restored
+            return UndoOutcome(
+                restoredIds: restored,
+                failedAction: failed.isEmpty ? nil : .batch(failed)
+            )
 
         case let .deleted(snapshots):
-            return await sqlManager.restore(snapshots)
+            // 恢复在单个事务中执行：要么全部成功，要么全部回滚。
+            let restored = await sqlManager.restore(snapshots)
+            return UndoOutcome(
+                restoredIds: restored,
+                failedAction: restored.isEmpty ? action : nil
+            )
 
         case let .ungrouped(ids, groupId):
             var restored: [Int64] = []
-            for id in ids where await sqlManager.updateItemGroup(id: id, groupId: groupId) {
-                restored.append(id)
+            var failed: [Int64] = []
+            for id in ids {
+                if await sqlManager.updateItemGroup(id: id, groupId: groupId) {
+                    restored.append(id)
+                } else {
+                    failed.append(id)
+                }
             }
-            return restored
+            return UndoOutcome(
+                restoredIds: restored,
+                failedAction: failed.isEmpty ? nil : .ungrouped(ids: failed, groupId: groupId)
+            )
 
         case let .hidden(ids):
             var restored: [Int64] = []
-            for id in ids where await sqlManager.updateItemHidden(id: id, hidden: false) {
-                restored.append(id)
+            var failed: [Int64] = []
+            for id in ids {
+                if await sqlManager.updateItemHidden(id: id, hidden: false) {
+                    restored.append(id)
+                } else {
+                    failed.append(id)
+                }
             }
-            return restored
+            return UndoOutcome(
+                restoredIds: restored,
+                failedAction: failed.isEmpty ? nil : .hidden(ids: failed)
+            )
         }
     }
 
