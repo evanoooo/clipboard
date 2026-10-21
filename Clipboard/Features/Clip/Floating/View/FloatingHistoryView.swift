@@ -254,10 +254,13 @@ final class FloatingHistoryView: NSView {
     func requestDelete(at index: Int) {
         let items = selectedModels
         if items.count > 1 {
-            guard NSAlert.runConfirm(
-                title: String(localized: .deleteTitle),
-                message: String(localized: .deleteMessage)
-            ) else { return }
+            if PasteUserDefaults.delConfirm,
+               !NSAlert.runConfirm(
+                   title: String(localized: .deleteTitle),
+                   message: String(localized: .deleteMessage)
+               ) {
+                return
+            }
             let minIndex = collectionView.selectionIndexPaths.map(\.item).min() ?? index
             let countAfterDelete = dataList.count - items.count
             if countAfterDelete > 0 {
