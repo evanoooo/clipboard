@@ -68,7 +68,7 @@ extension PasteDataStore {
             await sqlManager.delete(filter: deletedIds.contains(Col.id))
             let count = await sqlManager.getTotalCount()
             let filter = inFilter ? activeFilter : nil
-            let rows = await sqlManager.search(
+            let rows = await PasteReadStore.shared.search(
                 filter: filter ?? (Col.hidden == 0),
                 limit: deficit,
                 offset: currentCount
@@ -76,7 +76,7 @@ extension PasteDataStore {
             let backfillItems = await mapRows(rows)
             let filtered: Int =
                 if inFilter, let activeFilter {
-                    await sqlManager.getCount(filter: activeFilter)
+                    await PasteReadStore.shared.getCount(filter: activeFilter)
                 } else {
                     count
                 }
@@ -115,7 +115,7 @@ extension PasteDataStore {
             let count = await sqlManager.getTotalCount()
             let filtered: Int =
                 if inFilter, let activeFilter {
-                    await sqlManager.getCount(filter: activeFilter)
+                    await PasteReadStore.shared.getCount(filter: activeFilter)
                 } else {
                     count
                 }
@@ -139,7 +139,7 @@ extension PasteDataStore {
 
             let filtered: Int =
                 if inFilter, let activeFilter {
-                    await sqlManager.getCount(filter: activeFilter)
+                    await PasteReadStore.shared.getCount(filter: activeFilter)
                 } else {
                     count
                 }
@@ -221,10 +221,10 @@ extension PasteDataStore {
             let revision = listRevision
             let filterVersion = filterRevision
             let filter = isInFilterMode ? currentFilter : nil
-            let rows = await sqlManager.search(filter: filter ?? (Col.hidden == 0), limit: pageSize)
+            let rows = await PasteReadStore.shared.search(filter: filter ?? (Col.hidden == 0), limit: pageSize)
             let list = await mapRows(rows)
             let count = await sqlManager.getTotalCount()
-            let filtered = if let filter { await sqlManager.getCount(filter: filter) } else { count }
+            let filtered = if let filter { await PasteReadStore.shared.getCount(filter: filter) } else { count }
             guard !Task.isCancelled else { return nil }
             guard revision == listRevision, filterVersion == filterRevision else { continue }
             totalCount = count
@@ -298,6 +298,6 @@ extension PasteDataStore {
     }
 
     func getCountByGroup(groupId: Int) async -> Int {
-        await sqlManager.getCountByGroup(groupId: groupId)
+        await PasteReadStore.shared.getCountByGroup(groupId: groupId)
     }
 }

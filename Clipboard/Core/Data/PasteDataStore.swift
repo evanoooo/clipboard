@@ -58,6 +58,8 @@ final class PasteDataStore {
 
     func setup() async -> Bool {
         guard await sqlManager.setup() else { return false }
+        // 写入侧完成建表/迁移后再开只读连接，避免读到旧 schema。
+        guard await PasteReadStore.shared.setup() else { return false }
         SourceAppCache.shared.replace(await sqlManager.getDistinctAppInfo())
         await resetDefaultList()
         let count = await sqlManager.getTotalCount()
@@ -114,7 +116,7 @@ extension PasteDataStore {
 
             let newItems: [PasteboardModel]
             if let filter {
-                let rows = await sqlManager.search(
+                let rows = await PasteReadStore.shared.search(
                     filter: filter,
                     limit: pageSize,
                     offset: currentOffset
@@ -233,7 +235,7 @@ extension PasteDataStore {
             repeat {
                 revision = orderRevision
                 let sqlStarted = ContinuousClock.now
-                let rows = await sqlManager.search(filter: filter, limit: pageSize)
+                let rows = await PasteReadStore.shared.search(filter: filter, limit: pageSize)
                 sqlElapsed = sqlStarted.duration(to: .now)
                 rowCount = rows.count
                 try Task.checkCancellation()
@@ -248,7 +250,7 @@ extension PasteDataStore {
             let total: Int
             if needsCount {
                 let countStarted = ContinuousClock.now
-                total = await sqlManager.getCount(filter: filter)
+                total = await PasteReadStore.shared.getCount(filter: filter)
                 countElapsed = countStarted.duration(to: .now)
                 try Task.checkCancellation()
             } else {
@@ -377,9 +379,9 @@ extension PasteDataStore {
         totalCount = count
 
         if isInFilterMode, let filter = currentFilter {
-            filteredCount = await sqlManager.getCount(filter: filter)
+            filteredCount = await PasteReadStore.shared.getCount(filter: filter)
             guard let id = model.id,
-                  await sqlManager.getCount(filter: filter && Col.id == id) > 0
+                  await PasteReadStore.shared.getCount(filter: filter && Col.id == id) > 0
             else { return }
         } else {
             filteredCount = count
@@ -432,7 +434,7 @@ extension PasteDataStore {
 
         let list: [PasteboardModel]
         if isInFilterMode, let currentFilter {
-            let rows = await sqlManager.search(
+            let rows = await PasteReadStore.shared.search(
                 filter: currentFilter,
                 limit: loadedLimit
             )
@@ -443,7 +445,7 @@ extension PasteDataStore {
 
         totalCount = await sqlManager.getTotalCount()
         if isInFilterMode, let currentFilter {
-            filteredCount = await sqlManager.getCount(filter: currentFilter)
+            filteredCount = await PasteReadStore.shared.getCount(filter: currentFilter)
         } else {
             filteredCount = totalCount
         }
@@ -471,7 +473,7 @@ extension PasteDataStore {
         }
 
         let loadedLimit = max(pageSize, dataList.value.count)
-        let rows = await sqlManager.search(filter: currentFilter, limit: loadedLimit)
+        let rows = await PasteReadStore.shared.search(filter: currentFilter, limit: loadedLimit)
         // 复用已有实例（仅别名字段变化），命中集合不变时无需重建快照。
         let existing = Dictionary(dataList.value.compactMap { model in
             model.id.map { ($0, model) }
@@ -479,7 +481,7 @@ extension PasteDataStore {
         let list = await mapRows(rows).map { model in
             model.id.flatMap { existing[$0] } ?? model
         }
-        filteredCount = await sqlManager.getCount(filter: currentFilter)
+        filteredCount = await PasteReadStore.shared.getCount(filter: currentFilter)
         hasMoreData = list.count < filteredCount
         pageIndex = max(0, (list.count - 1) / pageSize)
         lastRequestedPage = pageIndex

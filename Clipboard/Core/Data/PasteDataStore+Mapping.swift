@@ -6,7 +6,7 @@ import SQLite
 extension PasteDataStore {
     func getItems(limit: Int = 50, offset: Int? = nil) async
         -> [PasteboardModel] {
-        let rows = await sqlManager.search(
+        let rows = await PasteReadStore.shared.search(
             filter: Col.hidden == 0,
             limit: limit,
             offset: offset
