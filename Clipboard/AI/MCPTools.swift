@@ -101,7 +101,16 @@ struct MCPTools {
             .limit(limit)
 
         if !query.isEmpty {
-            queryExpr = queryExpr.filter(Col.searchText.like("%\(query)%"))
+            // 与 App 入库侧同一套归一化，否则 "hello world"、"https://..." 这类输入永远匹配不到
+            let tokens = SearchText.tokens(query)
+            if tokens.isEmpty {
+                // 归一化后为空（纯标点/空白）：与任何入库文本都不可能匹配
+                queryExpr = queryExpr.filter(Expression<Bool>(value: false))
+            } else {
+                for token in tokens {
+                    queryExpr = queryExpr.filter(Col.searchText.like("%\(token)%"))
+                }
+            }
         }
 
         if let typeFilter {
@@ -332,5 +341,43 @@ private struct MCPCategoryChip: Codable {
 private extension Data {
     var sha256Hex: String {
         SHA256.hash(data: self).reduce(into: "") { $0 += String(format: "%02hhx", $1) }
+    }
+}
+
+// MARK: - 搜索文本归一化 (mirrors SearchTextNormalizer.swift, local to clipmcp)
+
+private enum SearchText {
+    /// 保留字母、数字与符号，丢弃空白和标点；与 App 入库侧保持一致。
+    /// 结果不会包含 LIKE 通配符 `%` / `_`，无需额外转义。
+    static func normalize(_ raw: String) -> String {
+        var output = ""
+        output.reserveCapacity(raw.utf8.count)
+        for character in raw {
+            guard let scalar = character.unicodeScalars.first else { continue }
+            switch scalar.properties.generalCategory {
+            case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+                 .decimalNumber, .letterNumber, .otherNumber,
+                 .mathSymbol, .currencySymbol, .modifierSymbol, .otherSymbol:
+                output.append(character)
+            default:
+                if (scalar.value == 0x23 || scalar.value == 0x2A),
+                   character.unicodeScalars.contains(where: { $0.value == 0x20E3 }) {
+                    output.append(character)
+                }
+            }
+        }
+        return output
+    }
+
+    /// 按空白切分并逐词归一化，用于词元 AND 匹配。
+    static func tokens(_ raw: String) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for part in raw.split(whereSeparator: \.isWhitespace) {
+            let token = normalize(String(part))
+            guard !token.isEmpty, seen.insert(token).inserted else { continue }
+            result.append(token)
+        }
+        return result
     }
 }
