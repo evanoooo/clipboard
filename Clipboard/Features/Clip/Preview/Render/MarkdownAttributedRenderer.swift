@@ -38,11 +38,11 @@ struct MarkdownAttributedRenderer: MarkupVisitor {
         return result
     }
 
-    @MainActor
-    static func render(_ markdown: String) async -> NSAttributedString {
-        let result = NSMutableAttributedString(attributedString: renderSync(markdown))
-        await loadImages(into: result)
-        return result
+    static func trimTrailingNewlines(_ result: NSMutableAttributedString) {
+        while result.length > 0,
+              (result.string as NSString).substring(from: result.length - 1) == "\n" {
+            result.deleteCharacters(in: NSRange(location: result.length - 1, length: 1))
+        }
     }
 
     // MARK: - 默认遍历
@@ -115,13 +115,6 @@ struct MarkdownAttributedRenderer: MarkupVisitor {
         let attachment = NSTextAttachment()
         attachment.image = placeholder
         let result = NSMutableAttributedString(attachment: attachment)
-        if let source = image.source, !source.isEmpty {
-            result.addAttribute(
-                .markdownImageSource,
-                value: source,
-                range: NSRange(location: 0, length: result.length)
-            )
-        }
         result.append(blockTerminator())
         return result
     }
@@ -301,12 +294,6 @@ struct MarkdownAttributedRenderer: MarkupVisitor {
             string.deleteCharacters(in: NSRange(location: string.length - 1, length: 1))
         }
     }
-}
-
-// MARK: - 自定义 AttributedString Key
-
-extension NSAttributedString.Key {
-    static let markdownImageSource = NSAttributedString.Key("markdownImageSource")
 }
 
 // MARK: - 段落样式辅助
