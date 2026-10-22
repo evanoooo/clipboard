@@ -313,6 +313,24 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             }
         }
 
+        // 机密与安全增强：自动拦截已知密码管理软件与高危敏感凭证（如私钥、Token）
+        if checkSensitive {
+            let sourceBundleID = resolveSourceBundleID()
+            if PasteboardContentFilter.isPasswordManager(bundleID: sourceBundleID) {
+                log.info("检测到来自密码管理器(\(sourceBundleID ?? ""))的机密内容，跳过记录")
+                changeCount = pasteboard.changeCount
+                return
+            }
+
+            if types.contains(.string),
+               let text = pasteboard.string(forType: .string),
+               let credentialType = PasteboardContentFilter.detectSensitiveCredential(in: text) {
+                log.info("检测到高危凭证内容(\(credentialType))，跳过记录以保护安全")
+                changeCount = pasteboard.changeCount
+                return
+            }
+        }
+
         // 检查隐私设置：忽略特定应用
         let ignoredApps = PasteUserDefaults.ignoredApps
         if !ignoredApps.isEmpty {
@@ -394,6 +412,17 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     }
 
     private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
+
+    /// 解析当前剪贴板写入来源的 Bundle Identifier
+    private func resolveSourceBundleID() -> String? {
+        if let declared = declaredSource() {
+            if declared.hasPrefix("/") {
+                return Bundle(path: declared)?.bundleIdentifier
+            }
+            return declared
+        }
+        return NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    }
 
     /// 剪贴板自带的来源标识：约定是写入方的 bundle id，少数工具会写应用路径
     private func declaredSource() -> String? {

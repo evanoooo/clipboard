@@ -18,6 +18,8 @@ final class PasteboardMonitoringTests {
         testNormalContentPassthrough(runner: runner)
         testMixedTypesFiltering(runner: runner)
         testAdaptiveIntervalPolicy(runner: runner)
+        testPasswordManagerDetection(runner: runner)
+        testSensitiveCredentialDetection(runner: runner)
 
         print("✓ Pasteboard Monitoring & Ephemeral Content tests passed!")
     }
@@ -151,5 +153,125 @@ final class PasteboardMonitoringTests {
         let tick4 = AdaptiveIntervalPolicy.nextTick(countChanged: true, currentIdleTicks: 10)
         runner.assertTrue(tick4.isActive, "New change wakes up to active mode")
         runner.assertEqual(tick4.nextIdleTicks, 0, "Idle ticks reset to 0")
+    }
+
+    private static func testPasswordManagerDetection(runner: TestRunner.Type) {
+        let passwordManagers = [
+            "com.agilebits.onepassword",
+            "com.1password.1password",
+            "com.bitwarden.desktop",
+            "org.keepassxc.keepassxc",
+            "app.macpass.MacPass",
+            "com.enpass.Enpass",
+            "io.enpass.Enpass",
+            "com.nordpass.macos",
+            "com.lastpass.LastPass",
+            "com.dashlane.Dashlane",
+            "com.keepersecurity.KeeperPasswordManager",
+            "com.apple.keychainaccess",
+            "com.apple.Passwords",
+        ]
+
+        for bundleID in passwordManagers {
+            runner.assertTrue(
+                PasteboardContentFilter.isPasswordManager(bundleID: bundleID),
+                "\(bundleID) must be recognized as a password manager"
+            )
+            // Case-insensitive test
+            runner.assertTrue(
+                PasteboardContentFilter.isPasswordManager(bundleID: bundleID.uppercased()),
+                "\(bundleID.uppercased()) must be recognized regardless of casing"
+            )
+        }
+
+        let nonPasswordManagers = [
+            "com.apple.Safari",
+            "com.google.Chrome",
+            "com.apple.dt.Xcode",
+            "com.sublimetext.4",
+            "com.microsoft.VSCode",
+            "",
+            nil,
+        ]
+
+        for bundleID in nonPasswordManagers {
+            runner.assertTrue(
+                !PasteboardContentFilter.isPasswordManager(bundleID: bundleID),
+                "\(bundleID ?? "nil") must not be recognized as a password manager"
+            )
+        }
+    }
+
+    private static func testSensitiveCredentialDetection(runner: TestRunner.Type) {
+        // 1. Private keys detection
+        let openSSHPrivateKey = """
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABlwAAAAdzc2gtcn
+        ...
+        -----END OPENSSH PRIVATE KEY-----
+        """
+        let rsaPrivateKey = """
+        -----BEGIN RSA PRIVATE KEY-----
+        MIIEowIBAAKCAQEA0r1n
+        ...
+        -----END RSA PRIVATE KEY-----
+        """
+        let genericPrivateKey = """
+        -----BEGIN PRIVATE KEY-----
+        MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...
+        -----END PRIVATE KEY-----
+        """
+        let ecPrivateKey = """
+        -----BEGIN EC PRIVATE KEY-----
+        MHcCAQEE...
+        -----END EC PRIVATE KEY-----
+        """
+
+        runner.assertTrue(
+            PasteboardContentFilter.detectSensitiveCredential(in: openSSHPrivateKey)?.contains("私钥凭证") == true,
+            "OpenSSH private key must be intercepted"
+        )
+        runner.assertTrue(
+            PasteboardContentFilter.detectSensitiveCredential(in: rsaPrivateKey)?.contains("私钥凭证") == true,
+            "RSA private key must be intercepted"
+        )
+        runner.assertTrue(
+            PasteboardContentFilter.detectSensitiveCredential(in: genericPrivateKey)?.contains("私钥凭证") == true,
+            "Generic private key must be intercepted"
+        )
+        runner.assertTrue(
+            PasteboardContentFilter.detectSensitiveCredential(in: ecPrivateKey)?.contains("私钥凭证") == true,
+            "EC private key must be intercepted"
+        )
+
+        // 2. AWS Key & GitHub Token detection
+        let awsText = "export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\nexport AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI"
+        runner.assertTrue(
+            PasteboardContentFilter.detectSensitiveCredential(in: awsText)?.contains("AWS") == true,
+            "AWS Access Key must be intercepted"
+        )
+
+        let ghToken = "Personal token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        runner.assertTrue(
+            PasteboardContentFilter.detectSensitiveCredential(in: ghToken)?.contains("GitHub") == true,
+            "GitHub Personal Access Token must be intercepted"
+        )
+
+        // 3. Normal developer content should pass safely
+        let normalTexts = [
+            "Hello, this is a normal clipboard text.",
+            "func testAuthentication() -> Bool { return true }",
+            "SELECT * FROM accounts WHERE id = 12345;",
+            "curl -X POST https://api.example.com/v1/charge -d 'amount=100'",
+            "public key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI user@host", // Public key is safe
+        ]
+
+        for text in normalTexts {
+            runner.assertEqual(
+                PasteboardContentFilter.detectSensitiveCredential(in: text),
+                nil,
+                "Normal developer text '\(text.prefix(30))' must NOT be intercepted"
+            )
+        }
     }
 }

@@ -33,6 +33,83 @@ struct PasteboardContentFilter: Sendable {
         "com.apple.pasteboard.promised-file-content-type",
     ]
 
+    /// 主流密码管理软件与系统凭证工具 Bundle ID
+    static let passwordManagerBundleIDs: Set<String> = [
+        "com.agilebits.onepassword",
+        "com.agilebits.onepassword7",
+        "com.1password.1password",
+        "com.1password.onepassword",
+        "com.bitwarden.desktop",
+        "org.keepassxc.keepassxc",
+        "app.macpass.MacPass",
+        "com.enpass.Enpass",
+        "io.enpass.Enpass",
+        "com.nordpass.macos",
+        "com.lastpass.mac",
+        "com.lastpass.LastPass",
+        "com.dashlane.dashlanephonefinal",
+        "com.dashlane.Dashlane",
+        "com.keepersecurity.KeeperPasswordManager",
+        "com.keeper.KeeperPassManager",
+        "com.apple.keychainaccess",
+        "com.apple.Passwords",
+    ]
+
+    /// 检查应用 Bundle ID 是否为已知密码管理器或凭证工具
+    static func isPasswordManager(bundleID: String?) -> Bool {
+        guard let bundleID = bundleID?.trimmingCharacters(in: .whitespacesAndNewlines), !bundleID.isEmpty else {
+            return false
+        }
+        let lower = bundleID.lowercased()
+        return passwordManagerBundleIDs.contains(where: { $0.lowercased() == lower })
+    }
+
+    // MARK: - 敏感凭证高危正则表达式规则
+
+    private static let privateKeyRegex: NSRegularExpression? = {
+        try? NSRegularExpression(
+            pattern: "-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----",
+            options: []
+        )
+    }()
+
+    private static let awsKeyRegex: NSRegularExpression? = {
+        try? NSRegularExpression(
+            pattern: "\\bAKIA[0-9A-Z]{16}\\b",
+            options: []
+        )
+    }()
+
+    private static let githubTokenRegex: NSRegularExpression? = {
+        try? NSRegularExpression(
+            pattern: "\\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,255}\\b",
+            options: []
+        )
+    }()
+
+    /// 检查纯文本内容是否命中高危敏感凭证特征（如私钥、API 令牌等）
+    /// - Parameter text: 待检测的文本字符串
+    /// - Returns: 若包含高危凭证，返回敏感类型描述；否则返回 nil
+    static func detectSensitiveCredential(in text: String) -> String? {
+        guard !text.isEmpty else { return nil }
+
+        // 私钥特征通常在开头或前几千字符内，快速前缀检查（避免数兆大文本做全量正则匹配）
+        let checkSlice: Substring = text.count > 32768 ? text.prefix(32768) : text[...]
+        let checkString = String(checkSlice)
+        let fullRange = NSRange(checkString.startIndex ..< checkString.endIndex, in: checkString)
+
+        if let regex = privateKeyRegex, regex.firstMatch(in: checkString, options: [], range: fullRange) != nil {
+            return "私钥凭证 (PRIVATE KEY)"
+        }
+        if let regex = awsKeyRegex, regex.firstMatch(in: checkString, options: [], range: fullRange) != nil {
+            return "AWS Access Key 访问凭证"
+        }
+        if let regex = githubTokenRegex, regex.firstMatch(in: checkString, options: [], range: fullRange) != nil {
+            return "GitHub Personal Access Token"
+        }
+        return nil
+    }
+
     /// 检查类型列表是否命中机密或瞬时内容规则
     /// - Returns: 若需要忽略，返回具体的拦截原因；若正常放行，返回 nil
     static func shouldIgnoreContent(
