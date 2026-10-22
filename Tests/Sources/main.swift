@@ -60,6 +60,7 @@ final class TestRunner {
         QuickTransformServiceTests.run(runner: TestRunner.self)
         QuickPasteShortcutTests.run(runner: TestRunner.self)
         SystemEnergyMonitorTests.run(runner: TestRunner.self)
+        StorageAnalysisTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")

@@ -12,10 +12,13 @@ import UniformTypeIdentifiers
 
 struct StorageSettingView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var storageService = StorageAnalysisService.shared
 
     @State private var totalCount: Int = 0
     @State private var isExporting = false
     @State private var isImporting = false
+    @State private var isVacuuming = false
+    @State private var showInspector = false
     @State private var showAlert = false
     @State private var alertTitle = ""
     @State private var alertMessage = ""
@@ -25,7 +28,18 @@ struct StorageSettingView: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Const.space16) {
-                VStack(alignment: .leading, spacing: 0) {
+                // MARK: - 存储健康度看板
+                VStack(alignment: .leading, spacing: Const.space12) {
+                    DataStatRow(
+                        title: "物理磁盘总占用",
+                        value: storageService.diskUsage?.formattedTotalDisk ?? "计算中..."
+                    )
+                    Divider()
+                    DataStatRow(
+                        title: "可压缩碎片空洞",
+                        value: storageService.diskUsage?.formattedReclaimable ?? "0 B"
+                    )
+                    Divider()
                     DataStatRow(
                         title: String(localized: .storageItemCount),
                         value: String.localizedStringWithFormat(
@@ -37,10 +51,42 @@ struct StorageSettingView: View {
                             totalCount
                         )
                     )
+
+                    if !storageService.typeProportions.isEmpty {
+                        Divider()
+                        StorageBreakdownBarView(proportions: storageService.typeProportions)
+                    }
+                }
+                .padding(.horizontal, Const.space16)
+                .padding(.vertical, Const.space4)
+                .settingsStyle()
+
+                // MARK: - 空间透视与自主整理
+                VStack(alignment: .leading, spacing: 0) {
+                    DataActionRow(
+                        title: "分析空间占用...",
+                        subtitle: "按体积大小查看 Top 大项，由您自主勾选清理大图、富文本等旧历史",
+                        buttonTitle: "深度分析",
+                        isLoading: false
+                    ) {
+                        showInspector = true
+                    }
+
+                    Divider()
+
+                    DataActionRow(
+                        title: "压缩数据库 (Vacuum)",
+                        subtitle: "整理数据库碎片，将已删除的碎片空洞物理归还给 macOS 系统",
+                        buttonTitle: "立即压缩",
+                        isLoading: isVacuuming
+                    ) {
+                        vacuumDatabase()
+                    }
                 }
                 .padding(.horizontal, Const.space16)
                 .settingsStyle()
 
+                // MARK: - 备份与还原
                 Text(.storageBackupTitle)
                     .font(.headline)
                     .bold()
@@ -89,11 +135,38 @@ struct StorageSettingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             totalCount = await PasteSQLManager.manager.getTotalCount()
+            await storageService.refreshDiskUsage()
+        }
+        .sheet(isPresented: $showInspector) {
+            StorageInspectorSheet()
         }
         .alert(alertTitle, isPresented: $showAlert) {
             Button(.commonConfirm, role: .cancel) {}
         } message: {
             Text(alertMessage)
+        }
+    }
+
+    // MARK: - 压缩数据库
+
+    private func vacuumDatabase() {
+        isVacuuming = true
+        Task {
+            defer { isVacuuming = false }
+            do {
+                let (before, after) = try await storageService.vacuumDatabase()
+                let freed = max(before - after, 0)
+                let freedStr = ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+                let currentStr = ByteCountFormatter.string(fromByteCount: after, countStyle: .file)
+                totalCount = await PasteSQLManager.manager.getTotalCount()
+                alertTitle = "压缩完成"
+                alertMessage = "已成功整理数据库碎片！释放了约 \(freedStr) 磁盘空间，当前物理占用为 \(currentStr)。"
+                showAlert = true
+            } catch {
+                alertTitle = "压缩失败"
+                alertMessage = error.localizedDescription
+                showAlert = true
+            }
         }
     }
 
@@ -171,6 +244,7 @@ struct StorageSettingView: View {
                         db.totalCount = count
                         totalCount = count
                         db.notifyCategoryChipsChanged()
+                        await storageService.refreshDiskUsage()
                     }
                 } else {
                     log.error("数据库导入失败: \(result.message)")
@@ -250,6 +324,52 @@ struct DataActionRow: View {
             }
         }
         .padding(.vertical, Const.space12)
+    }
+}
+
+// MARK: - 数据类型占比色条
+
+struct StorageBreakdownBarView: View {
+    let proportions: [StorageTypeProportion]
+
+    private var totalBytes: Int64 {
+        max(proportions.reduce(0) { $0 + $1.totalBytes }, 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Const.space8) {
+            Text("数据类型占用分布")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    ForEach(proportions) { item in
+                        let ratio = max(CGFloat(item.totalBytes) / CGFloat(totalBytes), 0.03)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(item.swiftUIColor)
+                            .frame(width: max((geo.size.width - CGFloat(proportions.count - 1) * 2) * ratio, 6))
+                            .help("\(item.displayName): \(item.formattedBytes) (\(item.count) 项)")
+                    }
+                }
+            }
+            .frame(height: 8)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+
+            HStack(spacing: Const.space12) {
+                ForEach(proportions.prefix(4)) { item in
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(item.swiftUIColor)
+                            .frame(width: 8, height: 8)
+                        Text("\(item.displayName) \(item.formattedBytes)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, Const.space4)
     }
 }
 
