@@ -19,14 +19,10 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     /// 避免把写入失败或用户紧接着的复制一起吞掉。
     private var ownWriteChangeCount: Int?
 
-    // MARK: - 自适应时钟与静止窗口配置
+    // MARK: - 自适应能耗感知与静止窗口配置
 
-    /// 活跃状态巡检间隔（刚发生变动或捕获到快捷键时）：120ms
-    private static let activeInterval: TimeInterval = 0.12
-    /// 空闲状态巡检间隔（连续无变动时降频）：1200ms
-    private static let idleInterval: TimeInterval = 1.2
-    /// 连续无变动多少次后从活跃态步进进入空闲降频态（10次 * 120ms ≈ 1.2秒）
-    private static let idleThresholdTicks = 10
+    private var energyMonitor: SystemEnergyMonitor { SystemEnergyMonitor.shared }
+    private var currentEnergyProfile: EnergyProfile { energyMonitor.currentProfile }
 
     /// Office、浏览器等复制时会分多次写入剪贴板（每次写入都让 changeCount 递增），
     /// 等待静止窗口（Quiescence Window）让写入方收尾，避免入库内容残缺。
@@ -67,7 +63,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         guard !isPaused else { return }
 
         idleTicks = 0
-        scheduleNextPoll(interval: Self.activeInterval)
+        scheduleNextPoll(interval: currentEnergyProfile.activeInterval)
         registerEventMonitors()
     }
 
@@ -153,11 +149,11 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             // 检测到变动：重置空闲计数，调度入库并在 120ms 后继续活跃巡检
             idleTicks = 0
             handlePasteboardCountChanged(currentCount: currentCount)
-            scheduleNextPoll(interval: Self.activeInterval)
+            scheduleNextPoll(interval: currentEnergyProfile.activeInterval)
         } else {
             // 未变动：递增空闲计数，达到阈值后自动拉长间隔到 1.2 秒（节能降频）
             idleTicks += 1
-            let nextInterval = idleTicks >= Self.idleThresholdTicks ? Self.idleInterval : Self.activeInterval
+            let nextInterval = idleTicks >= currentEnergyProfile.idleThresholdTicks ? currentEnergyProfile.idleInterval : currentEnergyProfile.activeInterval
             scheduleNextPoll(interval: nextInterval)
         }
     }
@@ -247,13 +243,19 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         }
 
         sleepObservers = [sleep1, sleep2, wake1, wake2]
+
+        // 监听系统能耗模式（低电量/发热降频）动态调整
+        energyMonitor.onProfileDidChange = { [weak self] profile in
+            guard let self, !self.isPaused else { return }
+            self.scheduleNextPoll(interval: profile.activeInterval)
+        }
     }
 
     private func handleSystemAwake() {
         guard !isPaused else { return }
         changeCount = pasteboard.changeCount
         idleTicks = 0
-        scheduleNextPoll(interval: Self.activeInterval)
+        scheduleNextPoll(interval: currentEnergyProfile.activeInterval)
     }
 
     // MARK: - 剪贴板变更防抖与静止合并
