@@ -39,7 +39,17 @@ extension PasteboardModel {
     }
 
     var cachedImageSize: CGSize? {
-        get { runtimeCache.imageSize }
+        get {
+            if let size = runtimeCache.imageSize {
+                return size
+            }
+            if pasteboardType == .png || pasteboardType == .tiff {
+                let size = Self.computeImageSize(from: data)
+                runtimeCache.imageSize = size
+                return size
+            }
+            return nil
+        }
         set { runtimeCache.imageSize = newValue }
     }
 
@@ -64,7 +74,19 @@ extension PasteboardModel {
     }
 
     var cachedFilePaths: [String]? {
-        get { runtimeCache.filePaths }
+        get {
+            if let paths = runtimeCache.filePaths {
+                return paths
+            }
+            if pasteboardType == .fileURL {
+                if let urlString = String(data: data, encoding: .utf8) {
+                    let paths = urlString.components(separatedBy: "\n").filter { !$0.isEmpty }
+                    runtimeCache.filePaths = paths
+                    return paths
+                }
+            }
+            return nil
+        }
         set { runtimeCache.filePaths = newValue }
     }
 

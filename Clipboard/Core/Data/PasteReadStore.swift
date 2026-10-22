@@ -67,7 +67,7 @@ actor PasteReadStore {
 
         let sel =
             select ?? [
-                Col.id, Col.uniqueId, Col.type, Col.data, Col.timestamp,
+                Col.id, Col.uniqueId, Col.type, Col.timestamp,
                 Col.appID, Col.searchText,
                 Col.showData, Col.length, Col.group,
                 Col.tag, Col.alias, Col.hidden, Col.sortOrder

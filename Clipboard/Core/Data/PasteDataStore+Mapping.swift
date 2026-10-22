@@ -18,9 +18,9 @@ extension PasteDataStore {
         await loadMissingApps(in: rows)
         return rows.compactMap { row in
             if let type = try? row.get(Col.type),
-               let data = try? row.get(Col.data),
                let timestamp = try? row.get(Col.timestamp),
                let uniqueId = try? row.get(Col.uniqueId) {
+                let data = try? row.get(Col.data)
                 let id = try? row.get(Col.id)
                 let appID = try? row.get(Col.appID)
                 var showData = try? row.get(Col.showData)
@@ -35,10 +35,11 @@ extension PasteDataStore {
                 let pType = PasteboardType(type)
 
                 if pType.isText(), showData == nil {
+                    let d = data ?? PasteDataPointReader.loadData(id: id, uniqueId: uniqueId) ?? Data()
                     if let plain = NSAttributedString(
-                        with: data,
+                        with: d,
                         type: pType
-                    )?.string ?? String(data: data, encoding: .utf8) {
+                    )?.string ?? String(data: d, encoding: .utf8) {
                         showData = String(plain.prefix(300)).data(
                             using: .utf8
                         )

@@ -15,7 +15,27 @@ final class PasteboardModel: Identifiable, Codable {
     var sortOrder: Int64 = 0
     let uniqueId: String
     let pasteboardType: PasteboardType
-    let data: Data
+    private var _data: Data?
+
+    var hasLoadedData: Bool {
+        _data != nil
+    }
+
+    var data: Data {
+        get {
+            if let _data {
+                return _data
+            }
+            if let loaded = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId) {
+                _data = loaded
+                return loaded
+            }
+            return Data()
+        }
+        set {
+            _data = newValue
+        }
+    }
     let showData: Data?
     private(set) var timestamp: Int64
     var appID: Int64?
@@ -64,7 +84,7 @@ final class PasteboardModel: Identifiable, Codable {
 
     init(
         pasteboardType: PasteboardType,
-        data: Data,
+        data: Data? = nil,
         showData: Data?,
         timestamp: Int64,
         appPath: String,
@@ -80,7 +100,7 @@ final class PasteboardModel: Identifiable, Codable {
         sourceBundleID: String? = nil
     ) {
         self.pasteboardType = pasteboardType
-        self.data = data
+        self._data = data
         self.showData = showData
         self.timestamp = timestamp
         self.sourcePath = appPath
@@ -96,18 +116,20 @@ final class PasteboardModel: Identifiable, Codable {
 
         self.uniqueId = uniqueId ?? Self.generateUniqueId(
             for: pasteboardType,
-            data: data
+            data: data ?? Data()
         )
 
-        if pasteboardType == .fileURL {
-            if let urlString = String(data: data, encoding: .utf8) {
-                cachedFilePaths = urlString.components(separatedBy: "\n")
-                    .filter { !$0.isEmpty }
+        if let data {
+            if pasteboardType == .fileURL {
+                if let urlString = String(data: data, encoding: .utf8) {
+                    cachedFilePaths = urlString.components(separatedBy: "\n")
+                        .filter { !$0.isEmpty }
+                }
             }
-        }
 
-        if pasteboardType == .png || pasteboardType == .tiff {
-            cachedImageSize = Self.computeImageSize(from: data)
+            if pasteboardType == .png || pasteboardType == .tiff {
+                cachedImageSize = Self.computeImageSize(from: data)
+            }
         }
 
         let (bg, fg, hasBg) = computeColors()
