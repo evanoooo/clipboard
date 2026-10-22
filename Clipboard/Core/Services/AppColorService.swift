@@ -93,7 +93,7 @@ final class AppColorService {
 
     func color(for model: PasteboardModel) -> NSColor {
         if let chip = model.getGroupChip() {
-            return Self.paletteNSColor(at: chip.colorIndex)
+            return chip.displayNSColor
         }
         if let colorStr = colorDict[model.appName] {
             return NSColor(hex: colorStr).withAlphaComponent(0.9)

@@ -87,7 +87,7 @@ final class FilterTagSectionView: NSStackView {
         var buttons: [FilterButton] = []
         for chip in availableGroups {
             let button = FilterTagButton(
-                colorIndex: chip.colorIndex,
+                color: chip.displayNSColor,
                 title: chip.name,
                 groupId: chip.id
             )

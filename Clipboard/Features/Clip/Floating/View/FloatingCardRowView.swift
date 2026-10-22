@@ -155,7 +155,7 @@ final class FloatingCardRowView: NSView {
         }
 
         if let chip = model.getGroupChip() {
-            chipTagIcon.contentTintColor = CategoryChip.nsColor(at: chip.colorIndex)
+            chipTagIcon.contentTintColor = chip.displayNSColor
             chipTagIcon.isHidden = false
         } else {
             chipTagIcon.isHidden = true

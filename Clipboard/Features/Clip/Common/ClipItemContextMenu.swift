@@ -208,7 +208,7 @@ extension ClipItemMenuActionable where Self: NSObject {
             chipItem.target = self
             chipItem.tag = chip.id
             chipItem.state = model.group == chip.id ? .on : .off
-            chipItem.image = clipChipDotImage(colorIndex: chip.colorIndex)
+            chipItem.image = clipChipDotImage(color: chip.displayNSColor)
             submenu.addItem(chipItem)
         }
 
@@ -245,6 +245,13 @@ extension ClipItemMenuActionable where Self: NSObject {
 func clipChipDotImage(colorIndex: Int) -> NSImage {
     CategoryDotRenderer.image(
         colorIndex: colorIndex,
+        canvasSize: CategoryDotRenderer.diameter
+    )
+}
+
+func clipChipDotImage(color: NSColor) -> NSImage {
+    CategoryDotRenderer.image(
+        color: color,
         canvasSize: CategoryDotRenderer.diameter
     )
 }

@@ -14,17 +14,23 @@ final class FilterTagButton: FilterButton {
     init(colorIndex: Int, title: String, groupId: Int) {
         self.groupId = groupId
         super.init(icon: nil, title: title)
-        setupDot(colorIndex: colorIndex)
+        setupDot(color: CategoryChip.nsColor(at: colorIndex))
     }
 
-    private func setupDot(colorIndex: Int) {
+    init(color: NSColor, title: String, groupId: Int) {
+        self.groupId = groupId
+        super.init(icon: nil, title: title)
+        setupDot(color: color)
+    }
+
+    private func setupDot(color: NSColor) {
         let dotContainer = NSView()
         dotContainer.snp.makeConstraints { make in
             make.width.height.equalTo(20)
         }
 
         let dotView = NSView()
-        CategoryDotRenderer.configure(dotView, colorIndex: colorIndex)
+        CategoryDotRenderer.configure(dotView, color: color)
         dotContainer.addSubview(dotView)
         dotView.snp.makeConstraints { make in
             make.width.height.equalTo(CategoryDotRenderer.diameter)

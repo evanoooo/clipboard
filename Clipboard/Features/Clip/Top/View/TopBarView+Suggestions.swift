@@ -66,7 +66,7 @@ extension TopBarView {
                 continue
             }
             guard fuzzyMatch(chip.name, query: query) else { continue }
-            let dotIcon = makeChipDotIcon(colorIndex: chip.colorIndex)
+            let dotIcon = CategoryDotRenderer.image(color: chip.displayNSColor)
             suggestions.append(SearchSuggestionItem(
                 title: chip.name,
                 icon: dotIcon,

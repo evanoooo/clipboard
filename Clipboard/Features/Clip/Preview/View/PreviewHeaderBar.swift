@@ -338,7 +338,7 @@ private final class PinChipButton: NSView {
             item.target = self
             item.tag = chip.id
             item.state = currentGroup == chip.id ? .on : .off
-            item.image = chipDotImage(colorIndex: chip.colorIndex)
+            item.image = CategoryDotRenderer.image(color: chip.displayNSColor)
             menu.addItem(item)
         }
 
