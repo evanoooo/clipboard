@@ -498,7 +498,7 @@ extension PasteDataStore {
         if elapsed.milliseconds >= 100 || publishElapsed.milliseconds >= 100 {
             Log.database.warn(message)
         } else {
-            Log.database.debug(message)
+            Log.database.info(message)
         }
     }
 

@@ -11,11 +11,22 @@ import os.log
 
 // MARK: - 日志级别
 
-nonisolated enum LogLevel: String, CaseIterable, Comparable, Sendable {
+nonisolated enum LogLevel: String, CaseIterable, Comparable, Identifiable, Sendable {
     case debug = "DEBUG"
     case info = "INFO"
     case warning = "WARN"
     case error = "ERROR"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .debug: return "调试 (Debug)"
+        case .info: return "标准 (Info - 推荐)"
+        case .warning: return "仅告警 (Warn)"
+        case .error: return "仅错误 (Error)"
+        }
+    }
 
     var osLogType: OSLogType {
         switch self {
@@ -227,14 +238,17 @@ final class AppLogger: Sendable {
     private let osLoggers: [LogCategory: os.Logger]
     private let ringBuffer = DiagnosticRingBuffer(capacity: 600)
     private let fileWriter = AsyncFileLogWriter()
-    private let minimumLevel = OSAllocatedUnfairLock(initialState: AppLogger.defaultLevel)
+    private let minimumLevel = OSAllocatedUnfairLock(initialState: AppLogger.initialLevel)
 
-    private nonisolated static var defaultLevel: LogLevel {
-        #if DEBUG
-            .debug
-        #else
-            .info
-        #endif
+    private nonisolated static var initialLevel: LogLevel {
+        if let raw = UserDefaults.standard.string(forKey: "appLogLevel"), let level = LogLevel(rawValue: raw) {
+            return level
+        }
+        return .info
+    }
+
+    nonisolated var currentMinimumLogLevel: LogLevel {
+        minimumLevel.withLock { $0 }
     }
 
     private nonisolated init() {
@@ -344,6 +358,24 @@ final class AppLogger: Sendable {
 
     nonisolated func setMinimumLogLevel(_ level: LogLevel) {
         minimumLevel.withLock { $0 = level }
+        UserDefaults.standard.set(level.rawValue, forKey: "appLogLevel")
+    }
+
+    /// 打开访达定位日志目录
+    nonisolated func openLogsDirectory() {
+        let dir = URL.applicationSupportDirectory.appending(path: "com.crown.clipboard/logs")
+        DispatchQueue.main.async {
+            NSWorkspace.shared.open(dir)
+        }
+    }
+
+    /// 清空历史日志
+    nonisolated func clearHistoricalLogs() {
+        let dir = URL.applicationSupportDirectory.appending(path: "com.crown.clipboard/logs")
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension == "log" {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     /// 立即同步冲刷异步写盘队列（如应用即将退出时）

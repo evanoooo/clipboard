@@ -250,6 +250,7 @@ extension PasteSQLManager {
         let afterBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
             + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
 
+        Log.storage.info("数据库压缩整理(VACUUM)完成：释放物理碎片空间 \(beforeBytes - afterBytes) 字节 (从 \(beforeBytes) 压缩至 \(afterBytes))")
         return (beforeBytes, afterBytes)
     }
 
@@ -316,7 +317,7 @@ extension PasteSQLManager {
             if !idsToDelete.isEmpty {
                 _ = deleteStorageItems(ids: idsToDelete)
                 _ = try? vacuumDatabase()
-                log.info("Auto eviction completed: evicted \(idsToDelete.count) items, freed \(totalBytesFreed) bytes")
+                Log.storage.info("自动淘汰完成：已清理 \(idsToDelete.count) 项未收藏旧图，释放 \(totalBytesFreed) 字节，已执行 VACUUM 回收磁盘")
             }
         } catch {
             log.error("Failed to perform auto eviction: \(error)")

@@ -75,6 +75,8 @@ enum PrefKey: String, CaseIterable {
     case softQuotaAgingPolicy
     /// 空闲时自动维护瘦身
     case enableIdleAutoMaintenance
+    /// 日志记录级别
+    case appLogLevel
 }
 
 /// 应用语言

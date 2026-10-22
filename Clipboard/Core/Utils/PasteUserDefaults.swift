@@ -174,6 +174,9 @@ enum PasteUserDefaults {
     /// 空闲时自动维护瘦身
     @UserDefaultsWrapper(.enableIdleAutoMaintenance, defaultValue: false)
     static var enableIdleAutoMaintenance
+    /// 日志记录级别
+    @UserDefaultsWrapper(.appLogLevel, defaultValue: "INFO")
+    static var appLogLevel: String
 }
 
 @propertyWrapper

@@ -45,7 +45,7 @@ extension PasteSQLManager {
                     updates.append(Col.group <- group)
                 }
                 try connection?.run(query.update(updates))
-                log.debug("更新时间戳成功：\(existingId)")
+                Log.database.info("更新已有条目时间戳：id=\(existingId)")
             } catch {
                 log.error("更新时间戳失败：\(error)")
             }
@@ -77,8 +77,8 @@ extension PasteSQLManager {
         )
         do {
             let rowId = try connection?.run(insert)
-            log.debug("插入成功：\(String(describing: rowId))")
             let id = rowId ?? -1
+            Log.database.info("新增条目入库成功：id=\(id), type=\(item.pasteboardType.rawValue)")
             return PasteInsertResult(
                 id: id,
                 group: nil,
@@ -96,7 +96,7 @@ extension PasteSQLManager {
         do {
             let count = try connection?.run(query.delete())
             await refreshAppCache()
-            log.debug("删除的条数为：\(String(describing: count))")
+            Log.database.info("删除条目成功，影响行数：\(count ?? 0)")
         } catch {
             log.error("删除失败：\(error)")
         }
@@ -162,7 +162,7 @@ extension PasteSQLManager {
                     restored.append(try connection.run(table.insert(setters)))
                 }
             }
-            log.info("恢复删除成功：\(restored.count) 条")
+            Log.database.info("撤销恢复条目成功：共恢复 \(restored.count) 条")
         } catch {
             log.error("恢复删除失败：\(error)")
             return []
@@ -227,7 +227,7 @@ extension PasteSQLManager {
         let update = query.update(Col.group <- groupId)
         do {
             let count = try connection?.run(update)
-            log.debug("更新项目分组成功，影响行数：\(String(describing: count))")
+            Log.database.info("更新条目分组成功，影响行数：\(count ?? 0)")
             return (count ?? 0) > 0
         } catch {
             log.error("更新项目分组失败：\(error)")

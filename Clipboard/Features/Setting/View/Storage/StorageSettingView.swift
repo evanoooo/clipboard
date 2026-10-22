@@ -27,6 +27,8 @@ struct StorageSettingView: View {
     @State private var selectedQuotaThreshold: Int64 = PasteUserDefaults.softQuotaBytes
     @State private var selectedAgingPolicy: String = PasteUserDefaults.softQuotaAgingPolicy
     @State private var enableIdleAutoMaintenance: Bool = PasteUserDefaults.enableIdleAutoMaintenance
+    @State private var selectedLogLevel: String = PasteUserDefaults.appLogLevel
+    @State private var copiedReport = false
 
     private let db = PasteDataStore.main
 
@@ -284,6 +286,69 @@ struct StorageSettingView: View {
                 .padding(.horizontal, Const.space16)
                 .settingsStyle()
 
+                // MARK: - 诊断与日志
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("日志记录级别")
+                                .font(.callout)
+                            Text("控制输出到本地 log 文件的详细程度，支持即时动态生效")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $selectedLogLevel) {
+                            ForEach(LogLevel.allCases) { level in
+                                Text(level.displayName).tag(level.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 170)
+                        .onChange(of: selectedLogLevel) { _, newValue in
+                            PasteUserDefaults.appLogLevel = newValue
+                            if let level = LogLevel(rawValue: newValue) {
+                                AppLogger.shared.setMinimumLogLevel(level)
+                            }
+                        }
+                    }
+                    .padding(.vertical, Const.space12)
+
+                    Divider()
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("日志文件管理")
+                                .font(.callout)
+                            Text(copiedReport ? "已复制诊断报告至剪贴板！" : "日志保存在 ~/Library/Application Support/com.crown.clipboard/logs")
+                                .font(.caption2)
+                                .foregroundStyle(copiedReport ? Color.green : Color.secondary)
+                        }
+                        Spacer()
+                        HStack(spacing: Const.space8) {
+                            Button(copiedReport ? "已复制" : "复制诊断") {
+                                let report = AppLogger.shared.exportDiagnosticReport()
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(report, forType: .string)
+                                copiedReport = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    copiedReport = false
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button("在访达中显示") {
+                                AppLogger.shared.openLogsDirectory()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        }
+                    }
+                    .padding(.vertical, Const.space12)
+                }
+                .padding(.horizontal, Const.space16)
+                .settingsStyle()
+
                 Text(.storageNotesTitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -307,6 +372,7 @@ struct StorageSettingView: View {
             selectedQuotaThreshold = PasteUserDefaults.softQuotaBytes
             selectedAgingPolicy = PasteUserDefaults.softQuotaAgingPolicy
             enableIdleAutoMaintenance = PasteUserDefaults.enableIdleAutoMaintenance
+            selectedLogLevel = PasteUserDefaults.appLogLevel
             await storageService.refreshDiskUsage()
         }
         .sheet(isPresented: $showInspector) {

@@ -308,7 +308,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
                 checkEphemeral: checkEphemeral
             )
             if let reason = ignoreResult {
-                log.info("检测到需忽略的内容，跳过记录: \(reason)")
+                Log.pasteboard.info("检测到需忽略的内容，跳过记录: \(reason)")
                 // 标记已处理该 changeCount，避免重复触发，同时保证后续正常复制不受阻
                 changeCount = pasteboard.changeCount
                 return
@@ -327,7 +327,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             if types.contains(.string),
                let text = pasteboard.string(forType: .string),
                let credentialType = PasteboardContentFilter.detectSensitiveCredential(in: text) {
-                log.info("检测到高危凭证内容(\(credentialType))，跳过记录以保护安全")
+                Log.pasteboard.info("检测到高危凭证内容(\(credentialType))，跳过记录以保护安全")
                 changeCount = pasteboard.changeCount
                 return
             }
