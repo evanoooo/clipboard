@@ -2,7 +2,7 @@
 //  Logger.swift
 //  Clipboard
 //
-//  现代化日志系统：基于 Apple Unified Logging (os.Logger) 与内存环形诊断缓冲区
+//  现代化日志系统：基于 Apple Unified Logging (os.Logger)、内存诊断环形缓冲区与异步批量写盘队列
 //
 
 import AppKit
@@ -110,6 +110,112 @@ nonisolated private final class DiagnosticRingBuffer: Sendable {
     }
 }
 
+// MARK: - 异步队列批量落盘写入器 (Async Batching File Writer)
+
+nonisolated private final class AsyncFileLogWriter: @unchecked Sendable {
+    private let writeQueue = DispatchQueue(label: "com.crown.clipboard.log-writer", qos: .utility)
+    private let logsDirectory: URL?
+    private var pendingEntries: [String] = []
+    private var flushWorkItem: DispatchWorkItem?
+    private var currentFileHandle: FileHandle?
+    private var currentDateString: String = ""
+
+    init() {
+        let dir = URL.applicationSupportDirectory.appending(path: "com.crown.clipboard/logs")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        self.logsDirectory = dir
+
+        writeQueue.async { [weak self] in
+            self?.purgeOldLogs()
+        }
+    }
+
+    nonisolated func enqueue(_ logLine: String) {
+        writeQueue.async { [weak self] in
+            guard let self else { return }
+            self.pendingEntries.append(logLine + "\n")
+
+            // 批量触发：满 20 条立即落盘，否则 1 秒去抖冲刷
+            if self.pendingEntries.count >= 20 {
+                self.flushWorkItem?.cancel()
+                self.flushWorkItem = nil
+                self.flushPending()
+            } else if self.flushWorkItem == nil {
+                let item = DispatchWorkItem { [weak self] in
+                    self?.flushWorkItem = nil
+                    self?.flushPending()
+                }
+                self.flushWorkItem = item
+                self.writeQueue.asyncAfter(deadline: .now() + 1.0, execute: item)
+            }
+        }
+    }
+
+    nonisolated func flushSync() {
+        writeQueue.sync {
+            self.flushWorkItem?.cancel()
+            self.flushWorkItem = nil
+            self.flushPending()
+        }
+    }
+
+    private func flushPending() {
+        guard !pendingEntries.isEmpty, let logsDirectory else { return }
+        let now = Date()
+        let dateStr = now.formatted(Self.fileDateFormat)
+
+        // 跨天检测：轮转关闭旧句柄
+        if dateStr != currentDateString {
+            try? currentFileHandle?.close()
+            currentFileHandle = nil
+            currentDateString = dateStr
+            purgeOldLogs()
+        }
+
+        let fileURL = logsDirectory.appending(path: "clip-\(dateStr).log")
+
+        if currentFileHandle == nil {
+            if !FileManager.default.fileExists(atPath: fileURL.path) {
+                FileManager.default.createFile(atPath: fileURL.path, contents: nil)
+            }
+            if let handle = try? FileHandle(forWritingTo: fileURL) {
+                _ = try? handle.seekToEnd()
+                currentFileHandle = handle
+            }
+        }
+
+        guard let handle = currentFileHandle else { return }
+
+        let combinedString = pendingEntries.joined()
+        if let data = combinedString.data(using: .utf8) {
+            _ = try? handle.write(contentsOf: data)
+        }
+        pendingEntries.removeAll(keepingCapacity: true)
+    }
+
+    private func purgeOldLogs(before days: Int = 7) {
+        guard let logsDirectory else { return }
+        let cutoff = Date().addingTimeInterval(-Double(days * 86400))
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: logsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return }
+        for file in files where file.pathExtension == "log" {
+            if let values = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+               let date = values.contentModificationDate,
+               date < cutoff {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+
+    nonisolated private static let fileDateFormat = Date.VerbatimFormatStyle(
+        format: "\(year: .defaultDigits)\(month: .twoDigits)\(day: .twoDigits)",
+        timeZone: .current,
+        calendar: Calendar(identifier: .gregorian)
+    )
+}
+
 // MARK: - 现代化 AppLogger 核心实现
 
 final class AppLogger: Sendable {
@@ -117,9 +223,10 @@ final class AppLogger: Sendable {
 
     nonisolated private static let subsystem = "com.crown.clipboard"
 
-    // 各模块预置的系统级 os.Logger，由 macOS Unified Logging 守护进程零损耗调度
+    // 各模块预置的系统级 os.Logger，由 macOS Unified Logging 守护进程调度
     private let osLoggers: [LogCategory: os.Logger]
     private let ringBuffer = DiagnosticRingBuffer(capacity: 600)
+    private let fileWriter = AsyncFileLogWriter()
     private let minimumLevel = OSAllocatedUnfairLock(initialState: AppLogger.defaultLevel)
 
     private nonisolated static var defaultLevel: LogLevel {
@@ -170,10 +277,12 @@ final class AppLogger: Sendable {
             }
         #endif
 
-        // 纯内存高并发环形诊断缓冲区录入（微秒级，绝不发生磁盘写入），用于一键故障报告
+        let timestamp = Date()
+
+        // 1. 录入内存环形诊断缓冲区（微秒级，用于一键故障报告）
         let entry = DiagnosticLogEntry(
             id: UUID(),
-            timestamp: Date(),
+            timestamp: timestamp,
             level: level,
             category: category,
             message: message,
@@ -181,7 +290,15 @@ final class AppLogger: Sendable {
             line: line
         )
         ringBuffer.append(entry)
+
+        // 2. 投递到异步批量写盘队列，平滑写入 clip-YYYYMMDD.log（零阻塞主线程）
+        let fileLogLine = "[\(timestamp.formatted(Self.fileTimestampFormat))] [\(level.rawValue)] [\(category.rawValue)] [\(fileName):\(line)] \(function) - \(message)"
+        fileWriter.enqueue(fileLogLine)
     }
+
+    nonisolated private static let fileTimestampFormat: Date.FormatStyle = .dateTime
+        .year().month().day()
+        .hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits)
 
     // MARK: - 公共便捷 API (兼容旧调用)
 
@@ -227,6 +344,11 @@ final class AppLogger: Sendable {
 
     nonisolated func setMinimumLogLevel(_ level: LogLevel) {
         minimumLevel.withLock { $0 = level }
+    }
+
+    /// 立即同步冲刷异步写盘队列（如应用即将退出时）
+    nonisolated func flushSync() {
+        fileWriter.flushSync()
     }
 
     // MARK: - 性能耗时跟踪 (零开销分级记录)
