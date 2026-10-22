@@ -58,6 +58,7 @@ final class TestRunner {
         PasteboardMonitoringTests.run(runner: TestRunner.self)
         EscapeHandlingTests.run(runner: TestRunner.self)
         QuickTransformServiceTests.run(runner: TestRunner.self)
+        QuickPasteShortcutTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")

@@ -49,8 +49,10 @@ extension ClipMainViewController {
             return handleFocusedKeyEvent(event)
         }
 
-        if focusRegion == .collection, let index = handleQuickPasteShortcut(event) {
-            performQuickPaste(at: index)
+        // 极客键盘流：无论焦点在列表还是搜索框，⌘ + 1~9 均可秒速直达粘贴对应位置卡片
+        if let index = handleQuickPasteShortcut(event) {
+            let isAttribute = !hasPlainTextModifier(event)
+            performQuickPaste(at: index, isAttribute: isAttribute)
             return nil
         }
 

@@ -206,4 +206,52 @@ enum KeyCode {
         let modifier = modifierFlags(from: PasteUserDefaults.quickPasteModifier)
         return NSEvent.modifierFlags.contains(modifier)
     }
+
+    // MARK: - 快捷粘贴键位解析
+
+    /// 匹配快捷粘贴的数字键位索引（0 ~ 8 对应第 1 ~ 9 项）
+    /// - Parameters:
+    ///   - event: 键盘事件
+    ///   - modifierIndex: 用户设置的修饰键索引（默认读取 PasteUserDefaults.quickPasteModifier）
+    ///   - plainTextModifierIndex: 允许附带的纯文本修饰键索引（默认读取 PasteUserDefaults.plainTextModifier）
+    /// - Returns: 0 ~ 8 的下标，若非快捷粘贴则返回 nil
+    static func quickPasteIndex(
+        for event: NSEvent,
+        modifierIndex: Int = PasteUserDefaults.quickPasteModifier,
+        plainTextModifierIndex: Int = PasteUserDefaults.plainTextModifier
+    ) -> Int? {
+        guard hasModifier(event, modifierIndex: modifierIndex) else {
+            return nil
+        }
+
+        let requiredModifier = modifierFlags(from: modifierIndex)
+        let plainModifier = modifierFlags(from: plainTextModifierIndex)
+        let allowedModifiers: NSEvent.ModifierFlags = [requiredModifier, plainModifier]
+
+        let otherModifiers = event.modifierFlags
+            .intersection([.command, .option, .control, .shift])
+            .subtracting(allowedModifiers)
+
+        guard otherModifiers.isEmpty else {
+            return nil
+        }
+
+        return digitIndex(for: event.keyCode)
+    }
+
+    /// 将按键代码转换为 0 ~ 8 的数字下标（1 对应 0，9 对应 8；其它按键返回 nil）
+    static func digitIndex(for keyCode: UInt16) -> Int? {
+        switch keyCode {
+        case one, keypad1: return 0
+        case two, keypad2: return 1
+        case three, keypad3: return 2
+        case four, keypad4: return 3
+        case five, keypad5: return 4
+        case six, keypad6: return 5
+        case seven, keypad7: return 6
+        case eight, keypad8: return 7
+        case nine, keypad9: return 8
+        default: return nil
+        }
+    }
 }

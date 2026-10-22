@@ -15,13 +15,19 @@ extension ClipFloatingViewController {
             return event
         }
 
-        if [.popover, .chipEditing, .search].contains(focusRegion) {
+        if [.popover, .chipEditing].contains(focusRegion) {
             return focusedKeyDown(event)
         }
 
+        // 极客键盘流：无论焦点在列表还是搜索框，⌘ + 1~9 均可秒速直达粘贴对应条目
         if let index = quickPasteIndex(for: event) {
-            performQuickPaste(at: index)
+            let isAttribute = !KeyCode.hasModifier(event, modifierIndex: PasteUserDefaults.plainTextModifier)
+            performQuickPaste(at: index, isAttribute: isAttribute)
             return nil
+        }
+
+        if focusRegion == .search {
+            return focusedKeyDown(event)
         }
 
         if KeyCode.shouldTriggerSearch(for: event),
@@ -287,21 +293,19 @@ extension ClipFloatingViewController {
     // MARK: - Quick Paste
 
     private func quickPasteIndex(for event: NSEvent) -> Int? {
-        guard isQuickPastePressed else { return nil }
-        let keyCodes: [UInt16: Int] = [
-            KeyCode.one: 0, KeyCode.two: 1, KeyCode.three: 2,
-            KeyCode.four: 3, KeyCode.five: 4, KeyCode.six: 5,
-            KeyCode.seven: 6, KeyCode.eight: 7, KeyCode.nine: 8
-        ]
-        return keyCodes[event.keyCode]
+        KeyCode.quickPasteIndex(for: event)
     }
 
-    private func performQuickPaste(at index: Int) {
+    private func performQuickPaste(at index: Int, isAttribute: Bool = true) {
         let historyView = floatingContentView.historyView
-        guard index < historyView.dataList.count else { return }
+        guard index < historyView.dataList.count else {
+            NSSound.beep()
+            return
+        }
         historyView.selectAndScrollTo(index: index)
         ClipActionService.shared.paste(
             historyView.dataList[index],
+            isAttribute: isAttribute,
             checkPermissions: PasteUserDefaults.pasteDirect,
             showTip: !PasteUserDefaults.pasteDirect
         )
