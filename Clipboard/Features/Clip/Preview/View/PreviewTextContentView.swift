@@ -120,9 +120,26 @@ final class PreviewTextContentView: NSView {
     }
 
     private func applyPlainContent(for model: PasteboardModel) {
-        textView.font = .systemFont(ofSize: NSFont.systemFontSize)
-        textView.textColor = .labelColor
-        textView.string = String(data: model.data, encoding: .utf8)
+        let source = String(data: model.data, encoding: .utf8)
             ?? model.attributeString.string
+
+        if let language = model.detectedCodeLanguage {
+            // 代码/配置语言：调度 CodeHighlighter 应用语法高亮并确保等宽空格与制表符对齐
+            let theme = CodeTheme(fontSize: NSFont.systemFontSize)
+            let attributed = CodeHighlighter.highlight(source, language: language, theme: theme)
+
+            let mutable = NSMutableAttributedString(attributedString: attributed)
+            let charWidth = (" " as NSString).size(withAttributes: [.font: theme.monospacedFont]).width
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.defaultTabInterval = max(charWidth * 4, 28)
+            paragraphStyle.tabStops = []
+            mutable.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: mutable.length))
+
+            textView.textStorage?.setAttributedString(mutable)
+        } else {
+            textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+            textView.textColor = .labelColor
+            textView.string = source
+        }
     }
 }
