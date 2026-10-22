@@ -136,6 +136,15 @@ private final class FloatingImageContentView: NSView {
     private let placeholder = NSImageView()
     private var loadTask: Task<Void, Never>?
 
+    deinit {
+        loadTask?.cancel()
+    }
+
+    func cancelLoad() {
+        loadTask?.cancel()
+        loadTask = nil
+    }
+
     init(model: PasteboardModel, displayMode: FloatingDisplayMode) {
         super.init(frame: .zero)
         imageView.wantsLayer = true

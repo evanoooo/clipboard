@@ -121,6 +121,21 @@ final class FloatingCardRowView: NSView {
         contentLoadTask?.cancel()
     }
 
+    func resetContent() {
+        iconLoadTask?.cancel()
+        iconLoadTask = nil
+        contentLoadTask?.cancel()
+        contentLoadTask = nil
+        if let sub = currentContentSubview {
+            // 取消子视图后台任务
+            (sub as? AnyObject)?.perform(Selector(("cancelLoad")))
+        }
+        currentContentSubview?.removeFromSuperview()
+        currentContentSubview = nil
+        currentModel = nil
+        currentKeyword = ""
+    }
+
     // MARK: - Configure
 
     func configure(

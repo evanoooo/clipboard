@@ -14,6 +14,11 @@ final class FloatingCollectionItem: NSCollectionViewItem {
         view = cardView
     }
 
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        cardView.resetContent()
+    }
+
     func configure(
         with model: PasteboardModel,
         keyword: String,
