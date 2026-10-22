@@ -92,9 +92,9 @@ actor PasteReadStore {
             let message = "[search.sql] rows=\(rows.count) limit=\(limit ?? -1) offset=\(offset ?? 0) "
                 + "elapsed=\(elapsed.millisecondsText)"
             if elapsed.milliseconds >= 50 {
-                log.warn(message)
+                Log.database.warn(message)
             } else {
-                log.debug(message)
+                Log.database.debug(message)
             }
             return rows
         } catch {

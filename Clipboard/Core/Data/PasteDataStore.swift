@@ -496,9 +496,9 @@ extension PasteDataStore {
             + "payload=\(payload.formatted(.byteCount(style: .memory)))"
         // 分别关注「数据库慢」与「发布/渲染慢」，两者堆在一起会掩盖真实瓶颈。
         if elapsed.milliseconds >= 100 || publishElapsed.milliseconds >= 100 {
-            log.warn(message)
+            Log.database.warn(message)
         } else {
-            log.info(message)
+            Log.database.debug(message)
         }
     }
 

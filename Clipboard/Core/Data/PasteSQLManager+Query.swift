@@ -57,9 +57,9 @@ extension PasteSQLManager {
                 + "elapsed=\(elapsed.millisecondsText)"
             // 慢查询落盘，便于区分「SQL 本身慢」与「等待 actor/主线程」。
             if elapsed.milliseconds >= 50 {
-                log.warn(message)
+                Log.database.warn(message)
             } else {
-                log.debug(message)
+                Log.database.debug(message)
             }
             return rows
         } catch {
