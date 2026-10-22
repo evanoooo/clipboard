@@ -216,6 +216,10 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"(?m)^\s*(?:sudo\s+)?(?:python3?|node|ruby|perl|deno|bun)\s+(?:-[A-Za-z]|\S+\.(?:py|js|mjs|cjs|ts|rb|pl|sh)\b)"#, weight: 7),
             .init(pattern: #"(?m)^\s*\$\s+[a-z][\w-]*\b"#, weight: 5),
             .init(pattern: #"(?m)^\s*(?:sudo\s+)?(?:brew|docker|kubectl|git|chmod|chown|npm|yarn|pnpm|cargo|pip3?|apt|apt-get|curl|wget)\s+\S"#, weight: 4),
+            // 多行命令行尾反斜杠续行（典型 curl / docker 等复杂脚本命令）
+            .init(pattern: #"(?m)\\\s*$"#, weight: 4),
+            // 多行 CLI 标志参数（如换行后的 -H, --data-raw 等）
+            .init(pattern: #"(?m)^\s*--?[a-zA-Z0-9_-]+"#, weight: 3),
             .init(pattern: #"(?m)^\s*if\s+(?:\[\[?|test\b)"#, weight: 5),
             .init(pattern: #"(?m)^\s*(?:fi|done|esac)\s*$"#, weight: 4),
             .init(pattern: #";\s*(?:then|do)\b"#, weight: 4),

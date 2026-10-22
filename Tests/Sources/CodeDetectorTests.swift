@@ -176,6 +176,22 @@ enum CodeDetectorTests {
         runner.assertEqual(CodeLanguage.nginx.displayName, "Nginx", "Nginx display name should be Nginx")
         runner.assertEqual(CodeLanguage.swift.displayName, "Swift", "Swift display name should be Swift")
 
+                // 16. Multiline curl command with JSON payload must be detected as Shell (.bash)
+        let curlCommand = """
+        curl --url 'http://192.168.12.207/hecate/api/v1/agentos/sessions/fcda5b67-37ba-4c33-9b46-b533dabea75a/messages' \\
+          -H 'Accept: application/json, text/plain, */*' \\
+          -H 'Accept-Language: zh-CN' \\
+          -H 'Content-Type: application/json' \\
+          -b 'SESSION=YWYwMjBkMzgtYmYyMS00ODA1LWIzNTYtNjIxNTRhZjkzNDZj' \\
+          -H 'Origin: http://192.168.12.207' \\
+          -H 'Proxy-Connection: keep-alive' \\
+          -H 'Referer: http://192.168.12.207/hecate' \\
+          -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' \\
+          --data-raw '{"blocks":[{"type":"text","content":"你是哪个大模型啊"}]}' \\
+          --insecure
+        """
+        runner.assertEqual(CodeLanguageDetector.detect(curlCommand), .bash, "Multiline curl command must be detected as Shell")
+
         print("✓ CodeLanguageDetector & Shell/Nginx tests passed!")
     }
 }
