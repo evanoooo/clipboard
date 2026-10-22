@@ -19,6 +19,17 @@ final class CategoryCustomColorCoordinator: NSObject {
 
     private override init() {
         super.init()
+
+        // 当应用整体失去焦点且主剪贴板窗口已不可见时，联动关闭调色器
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            if !WindowManager.shared.isVisible {
+                self?.closePanelIfOpen()
+            }
+        }
     }
 
     /// 打开系统调色器为指定分类挑选颜色
@@ -54,6 +65,19 @@ final class CategoryCustomColorCoordinator: NSObject {
 
         panel.orderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// 关闭当前系统调色板（如果正处于打开状态）
+    func closePanelIfOpen() {
+        if NSColorPanel.sharedColorPanelExists {
+            let panel = NSColorPanel.shared
+            if panel.isVisible {
+                panel.orderOut(nil)
+                panel.close()
+            }
+        }
+        activeChip = nil
+        onColorChanged = nil
     }
 
     /// 响应系统颜色面板的标准 action

@@ -258,6 +258,7 @@ final class ClipFloatingWindowController: NSWindowController {
             completionHandler?()
             return
         }
+        CategoryCustomColorCoordinator.shared.closePanelIfOpen()
 
         // 窗口一隐藏就丢弃撤销记录：下次唤出不应再能恢复上一次的删除。
         ClipUndoStore.shared.removeAll()

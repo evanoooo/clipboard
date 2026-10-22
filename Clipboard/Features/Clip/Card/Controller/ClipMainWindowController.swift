@@ -82,6 +82,7 @@ extension ClipMainWindowController {
     func dismiss(_ completionHandler: (@MainActor () -> Void)? = nil) {
         guard targetVisible, let window, window.isVisible else { return }
         targetVisible = false
+        CategoryCustomColorCoordinator.shared.closePanelIfOpen()
         // 窗口一隐藏就丢弃撤销记录：下次唤出不应再能恢复上一次的删除。
         ClipUndoStore.shared.removeAll()
         animateContent(visible: false) { [weak self] in
