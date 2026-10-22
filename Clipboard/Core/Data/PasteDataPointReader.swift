@@ -9,12 +9,12 @@ import Foundation
 import SQLite3
 
 enum PasteDataPointReader {
-    static var databasePath: String {
+    nonisolated static var databasePath: String {
         PasteSQLManager.databasePath
     }
 
     /// 根据 id（主键 B-Tree）或 uniqueId 点查单条记录的完整二进制数据
-    static func loadData(id: Int64?, uniqueId: String) -> Data? {
+    nonisolated static func loadData(id: Int64?, uniqueId: String) -> Data? {
         var db: OpaquePointer?
         guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
             return nil
