@@ -22,23 +22,17 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     // MARK: - 自适应时钟与静止窗口配置
 
     /// 活跃状态巡检间隔（刚发生变动或捕获到快捷键时）：120ms
-    private static let activeInterval = AdaptiveIntervalPolicy.activeInterval
+    private static let activeInterval: TimeInterval = 0.12
     /// 空闲状态巡检间隔（连续无变动时降频）：1200ms
-    private static let idleInterval = AdaptiveIntervalPolicy.idleInterval
+    private static let idleInterval: TimeInterval = 1.2
     /// 连续无变动多少次后从活跃态步进进入空闲降频态（10次 * 120ms ≈ 1.2秒）
-    private static let idleThresholdTicks = AdaptiveIntervalPolicy.idleThresholdTicks
+    private static let idleThresholdTicks = 10
 
     /// Office、浏览器等复制时会分多次写入剪贴板（每次写入都让 changeCount 递增），
     /// 等待静止窗口（Quiescence Window）让写入方收尾，避免入库内容残缺。
     private static let quiescenceDebounce: Duration = .milliseconds(100)
 
-    /// 专用于后台轮询 changeCount 的低优先级串行队列，绝不阻塞主线程
-    private let monitorQueue = DispatchQueue(
-        label: "com.clipboard.pasteboard-monitor",
-        qos: .utility
-    )
-    private var monitorTimer: DispatchSourceTimer?
-    private var isTimerActiveMode = true
+    private var pollTimer: Timer?
     private var idleTicks = 0
 
     /// 等待中的静止防抖任务
@@ -66,23 +60,20 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         setupSleepNotifications()
     }
 
-
-
     // MARK: - 监听启停
 
     func startListening() {
         stopListening()
         guard !isPaused else { return }
 
-        // 1. 启动后台自适应 DispatchSourceTimer
-        startAdaptiveMonitorTimer()
-
-        // 2. 注册 ⌘+C / ⌘+X 全局与本地键盘事件监视器（事件辅助加速）
+        idleTicks = 0
+        scheduleNextPoll(interval: Self.activeInterval)
         registerEventMonitors()
     }
 
     func stopListening() {
-        stopAdaptiveMonitorTimer()
+        pollTimer?.invalidate()
+        pollTimer = nil
         unregisterEventMonitors()
         quiescenceTask?.cancel()
         quiescenceTask = nil
@@ -140,57 +131,35 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         isPaused && pauseDuration == nil
     }
 
-    // MARK: - 自适应后台轮询实现
+    // MARK: - 自适应轮询调度
 
-    private func startAdaptiveMonitorTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: monitorQueue)
-        isTimerActiveMode = true
-        idleTicks = 0
-        timer.schedule(deadline: .now() + Self.activeInterval, repeating: Self.activeInterval)
-
-        timer.setEventHandler { [weak self] in
-            self?.pollPasteboardOnBackgroundQueue()
-        }
-        timer.resume()
-        monitorTimer = timer
-    }
-
-    private func stopAdaptiveMonitorTimer() {
-        monitorTimer?.cancel()
-        monitorTimer = nil
-    }
-
-    /// 在后台串行队列上快速核对 changeCount，不阻塞任何主线程操作
-    nonisolated private func pollPasteboardOnBackgroundQueue() {
-        let currentCount = NSPasteboard.general.changeCount
-
-        Task { @MainActor [weak self] in
-            guard let self, !self.isPaused else { return }
-
-            if currentCount == self.changeCount {
-                // 计数值未变：增加空闲计数，必要时自动降频节电
-                self.idleTicks += 1
-                if self.isTimerActiveMode, self.idleTicks >= Self.idleThresholdTicks {
-                    self.switchTimerInterval(active: false)
-                }
-            } else {
-                // 计数值变动：立即重置回活跃模式并进入检查与静止窗口
-                if !self.isTimerActiveMode {
-                    self.switchTimerInterval(active: true)
-                }
-                self.idleTicks = 0
-                self.handlePasteboardCountChanged(currentCount: currentCount)
+    private func scheduleNextPoll(interval: TimeInterval) {
+        pollTimer?.invalidate()
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.performAdaptivePoll()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
     }
 
-    /// 切换定时器周期（活跃 120ms vs 空闲 1200ms）
-    private func switchTimerInterval(active: Bool) {
-        guard isTimerActiveMode != active, let timer = monitorTimer else { return }
-        isTimerActiveMode = active
-        idleTicks = 0
-        let interval = active ? Self.activeInterval : Self.idleInterval
-        timer.schedule(deadline: .now() + interval, repeating: interval)
+    private func performAdaptivePoll() {
+        guard !isPaused else { return }
+
+        let currentCount = pasteboard.changeCount
+
+        if currentCount != changeCount {
+            // 检测到变动：重置空闲计数，调度入库并在 120ms 后继续活跃巡检
+            idleTicks = 0
+            handlePasteboardCountChanged(currentCount: currentCount)
+            scheduleNextPoll(interval: Self.activeInterval)
+        } else {
+            // 未变动：递增空闲计数，达到阈值后自动拉长间隔到 1.2 秒（节能降频）
+            idleTicks += 1
+            let nextInterval = idleTicks >= Self.idleThresholdTicks ? Self.idleInterval : Self.activeInterval
+            scheduleNextPoll(interval: nextInterval)
+        }
     }
 
     // MARK: - 辅助事件加速（⌘+C / ⌘+X 监视）
@@ -226,19 +195,11 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard flags.contains(.command) else { return }
 
-        // keyCode 8 为 C，keyCode 7 为 X；或通过 charactersIgnoringModifiers 匹配
         let key = event.charactersIgnoringModifiers?.lowercased()
         if key == "c" || key == "x" || event.keyCode == 8 || event.keyCode == 7 {
-            // 捕获到复制/剪切动作：立即切回活跃状态并在 30ms 后调度快速采样
-            switchTimerInterval(active: true)
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .milliseconds(30))
-                guard let self, !self.isPaused else { return }
-                let count = self.pasteboard.changeCount
-                if count != self.changeCount {
-                    self.handlePasteboardCountChanged(currentCount: count)
-                }
-            }
+            // 捕获到复制/剪切动作：重置空闲计数并在 30ms 后极速主动拉取
+            idleTicks = 0
+            scheduleNextPoll(interval: 0.03)
         }
     }
 
@@ -253,14 +214,16 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.stopAdaptiveMonitorTimer()
+            self?.pollTimer?.invalidate()
+            self?.pollTimer = nil
         }
         let sleep2 = wsCenter.addObserver(
             forName: NSWorkspace.screensDidSleepNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.stopAdaptiveMonitorTimer()
+            self?.pollTimer?.invalidate()
+            self?.pollTimer = nil
         }
 
         // 系统唤醒 / 亮屏：恢复轮询并同步计数值
@@ -285,7 +248,8 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     private func handleSystemAwake() {
         guard !isPaused else { return }
         changeCount = pasteboard.changeCount
-        startAdaptiveMonitorTimer()
+        idleTicks = 0
+        scheduleNextPoll(interval: Self.activeInterval)
     }
 
     // MARK: - 剪贴板变更防抖与静止合并
