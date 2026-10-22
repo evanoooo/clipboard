@@ -103,17 +103,36 @@ actor PasteReadStore {
         }
     }
 
-    func getCount(filter: Expression<Bool>?) async -> Int {
+    /// 获取满足条件的数量；如果指定了 limit，则至多统计到 limit（如 501 用于 500+ 截断），仅扫描索引列避免大字段全表开销
+    func getCount(filter: Expression<Bool>?, limit: Int? = nil) async -> Int {
+        guard !Task.isCancelled else { return 0 }
         let started = ContinuousClock.now
         do {
             let total: Int
-            if let filter {
-                total = try connection?.scalar(table.filter(filter).count) ?? 0
+            if let limit {
+                var query = table.select(Col.id)
+                if let filter {
+                    query = query.filter(filter)
+                }
+                query = query.limit(limit)
+                if let result = try connection?.prepare(query) {
+                    var count = 0
+                    for _ in result {
+                        count += 1
+                    }
+                    total = count
+                } else {
+                    total = 0
+                }
             } else {
-                total = try connection?.scalar(table.count) ?? 0
+                if let filter {
+                    total = try connection?.scalar(table.filter(filter).count) ?? 0
+                } else {
+                    total = try connection?.scalar(table.count) ?? 0
+                }
             }
             log.debug(
-                "[search.count] total=\(total) filtered=\(filter != nil) "
+                "[search.count] total=\(total) filtered=\(filter != nil) limit=\(limit ?? -1) "
                     + "elapsed=\(started.duration(to: .now).millisecondsText)"
             )
             return total

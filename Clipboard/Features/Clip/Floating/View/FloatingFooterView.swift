@@ -77,12 +77,21 @@ final class FloatingFooterView: NSView {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updatePauseState() }
             .store(in: &cancellables)
+        PasteDataStore.main.countUpdated
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateCount() }
+            .store(in: &cancellables)
         updateCount()
     }
 
     func updateCount() {
         let count = PasteDataStore.main.filteredCount
-        countLabel.stringValue = String(localized: .itemCount(count))
+        if PasteDataStore.main.isInFilterMode && PasteDataStore.main.isFilteredCountCapped {
+            let base = String(localized: .itemCount(count))
+            countLabel.stringValue = base.replacingOccurrences(of: "\(count)", with: "\(count)+")
+        } else {
+            countLabel.stringValue = String(localized: .itemCount(count))
+        }
     }
 
     // MARK: - Setup

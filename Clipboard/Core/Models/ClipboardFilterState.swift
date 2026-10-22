@@ -26,6 +26,9 @@ final class ClipboardFilterState: @unchecked Sendable {
     /// Total matching count in filter mode
     var filteredCount: Int = 0
 
+    /// Whether the filteredCount is capped at the threshold (e.g. 500+)
+    var isCountCapped: Bool = false
+
     /// Monotonically increasing revision to detect cancellation or stale results
     private(set) var revision: Int = 0
 
@@ -36,6 +39,7 @@ final class ClipboardFilterState: @unchecked Sendable {
     func update(criteria: SearchCriteria) -> SQLite.Expression<Bool>? {
         revision &+= 1
         self.criteria = criteria
+        self.isCountCapped = false
         if criteria.isEmpty {
             self.currentFilter = nil
         } else {
@@ -49,11 +53,14 @@ final class ClipboardFilterState: @unchecked Sendable {
         revision &+= 1
         criteria = .empty
         currentFilter = nil
+        filteredCount = 0
+        isCountCapped = false
     }
 
     /// Manually sets currentFilter for specialized queries or maintenance reload.
     func setFilter(_ filter: SQLite.Expression<Bool>?) {
         revision &+= 1
         self.currentFilter = filter
+        self.isCountCapped = false
     }
 }

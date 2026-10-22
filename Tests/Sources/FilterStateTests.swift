@@ -20,6 +20,7 @@ enum FilterStateTests {
         runner.assertTrue(state.currentFilter == nil, "Initial filter should be nil")
         runner.assertTrue(!state.isInFilterMode, "Initial mode should not be in filter mode")
         runner.assertEqual(state.filteredCount, 0, "Initial filtered count should be 0")
+        runner.assertTrue(!state.isCountCapped, "Initial isCountCapped should be false")
         runner.assertEqual(state.revision, 0, "Initial revision should be 0")
 
         // 2. Update with empty criteria
@@ -68,10 +69,12 @@ enum FilterStateTests {
         runner.assertEqual(state.revision, 4, "Revision should be 4")
 
         // 6. Reset
+        state.isCountCapped = true
         state.reset()
         runner.assertEqual(state.criteria, SearchCriteria.empty, "Criteria must be reset to empty")
         runner.assertTrue(state.currentFilter == nil, "Filter must be reset to nil")
         runner.assertTrue(!state.isInFilterMode, "Should exit filter mode after reset")
+        runner.assertTrue(!state.isCountCapped, "Reset should clear isCountCapped")
         runner.assertEqual(state.revision, 5, "Revision should be 5")
 
         // 7. Manual setFilter

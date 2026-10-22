@@ -64,6 +64,11 @@ enum PaginationTests {
         let hasMoreC = (50 == pageSize && 50 < 100)
         runner.assertTrue(hasMoreC, "When page is full and more items remain, hasMoreData is true")
 
+        // Case D: Capped count (500+): when page is full, pagination continues even if list reaches 500
+        let isCountCapped = true
+        let hasMoreD = (50 == pageSize && (isCountCapped || 500 < 500))
+        runner.assertTrue(hasMoreD, "Capped count allows pagination beyond cap")
+
         // 3. Stale revision barrier simulation
         func simulateBarrier(captured: Int, current: Int) -> Bool {
             captured == current
