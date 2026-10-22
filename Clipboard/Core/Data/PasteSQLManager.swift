@@ -38,6 +38,10 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         let database = try Connection(Self.databasePath)
         database.busyTimeout = 5.0
         try database.execute("PRAGMA journal_mode=WAL")
+        // WAL 模式黄金搭档：在保证事务原子性与断电安全前提下，大幅减少 fsync 同步阻塞，提升写入性能
+        try? database.execute("PRAGMA synchronous=NORMAL")
+        // 临时表与复杂排序驻留内存，杜绝临时文件写盘 I/O 尖刺
+        try? database.execute("PRAGMA temp_store=MEMORY")
         // 整库内存映射：窄关键词全表扫描实测 32.6 ms → 19.0 ms。
         // mmap_size 需不小于库体积才生效，1 GB 可覆盖绝大多数历史库。
         try? database.execute("PRAGMA mmap_size=1073741824")

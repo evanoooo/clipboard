@@ -45,6 +45,7 @@ actor PasteReadStore {
             database.busyTimeout = 5.0
             try database.execute("PRAGMA query_only=1")
             try? database.execute("PRAGMA mmap_size=1073741824")
+            try? database.execute("PRAGMA temp_store=MEMORY")
             return database
         } catch {
             log.error("查询连接打开失败（readonly=\(readonly)）：\(error)")
