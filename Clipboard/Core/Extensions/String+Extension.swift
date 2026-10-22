@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import NaturalLanguage
 
 extension String {
     static let regex =
@@ -208,23 +207,22 @@ extension String {
 
     nonisolated var smartWordCount: Int {
         var count = 0
-
-        let tokenizer = NLTokenizer(unit: .word)
-        tokenizer.string = self
-
-        tokenizer.enumerateTokens(in: startIndex ..< endIndex) { range, _ in
-            guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return false }
-            let token = self[range]
-
-            // CJK：逐字符
-            if token.unicodeScalars.allSatisfy({
-                CharacterSet.cjkUnifiedIdeographs.contains($0)
-            }) {
-                count += token.count
-            } else {
-                count += 1
+        enumerateSubstrings(
+            in: startIndex ..< endIndex,
+            options: [.byWords, .substringNotRequired]
+        ) { _, substringRange, _, _ in
+            guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return }
+            let token = self[substringRange]
+            var cjkCount = 0
+            var hasNonCJK = false
+            for scalar in token.unicodeScalars {
+                if CharacterSet.cjkUnifiedIdeographs.contains(scalar) {
+                    cjkCount += 1
+                } else if !CharacterSet.whitespacesAndNewlines.contains(scalar) && !CharacterSet.punctuationCharacters.contains(scalar) {
+                    hasNonCJK = true
+                }
             }
-            return true
+            count += cjkCount + (hasNonCJK ? 1 : 0)
         }
         return count
     }
