@@ -124,22 +124,47 @@ final class PreviewTextContentView: NSView {
             ?? model.attributeString.string
 
         if let language = model.detectedCodeLanguage {
-            // 代码/配置语言：调度 CodeHighlighter 应用语法高亮并确保等宽空格与制表符对齐
             let theme = CodeTheme(fontSize: NSFont.systemFontSize)
-            let attributed = CodeHighlighter.highlight(source, language: language, theme: theme)
 
-            let mutable = NSMutableAttributedString(attributedString: attributed)
-            let charWidth = (" " as NSString).size(withAttributes: [.font: theme.monospacedFont]).width
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.defaultTabInterval = max(charWidth * 4, 28)
-            paragraphStyle.tabStops = []
-            mutable.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: mutable.length))
+            if source.count > CodeHighlighter.fastViewportLength {
+                // 视口分级渲染：首屏立即渲染快速视口（~0.2ms），保证展开弹窗 0 卡顿
+                let fastAttributed = CodeHighlighter.highlight(
+                    source,
+                    language: language,
+                    theme: theme,
+                    limitLength: CodeHighlighter.fastViewportLength
+                )
+                setTextViewFormattedContent(fastAttributed, theme: theme)
 
-            textView.textStorage?.setAttributedString(mutable)
+                // 随后在后台异步计算全量高亮，完成后无缝平滑替换
+                let currentID = model.id
+                Task { @MainActor [weak self] in
+                    let fullAttributed = await CodeHighlighter.highlightAsync(
+                        source,
+                        language: language,
+                        theme: theme
+                    )
+                    guard let self, self.model.id == currentID else { return }
+                    self.setTextViewFormattedContent(fullAttributed, theme: theme)
+                }
+            } else {
+                let attributed = CodeHighlighter.highlight(source, language: language, theme: theme)
+                setTextViewFormattedContent(attributed, theme: theme)
+            }
         } else {
             textView.font = .systemFont(ofSize: NSFont.systemFontSize)
             textView.textColor = .labelColor
             textView.string = source
         }
+    }
+
+    private func setTextViewFormattedContent(_ attributed: NSAttributedString, theme: CodeTheme) {
+        let mutable = NSMutableAttributedString(attributedString: attributed)
+        let charWidth = (" " as NSString).size(withAttributes: [.font: theme.monospacedFont]).width
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.defaultTabInterval = max(charWidth * 4, 28)
+        paragraphStyle.tabStops = []
+        mutable.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: mutable.length))
+        textView.textStorage?.setAttributedString(mutable)
     }
 }

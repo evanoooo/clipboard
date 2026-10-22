@@ -209,7 +209,7 @@ final class CardStringContentView: NSView, PassthroughMouseEvents {
     }
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
-        let attributed = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false)
+        let attributed = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false, isCardSnippet: true)
         textView.textStorage?.setAttributedString(attributed)
         if model.pasteboardType == .string, model.detectedCodeLanguage == nil {
             textView.font = .preferredFont(forTextStyle: .body)

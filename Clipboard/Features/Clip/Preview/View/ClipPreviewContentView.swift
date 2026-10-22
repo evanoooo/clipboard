@@ -91,7 +91,7 @@ final class ClipPreviewContentView: NSView {
         }
         if let language = model.detectedCodeLanguage {
             let source = String(data: model.data, encoding: .utf8) ?? model.attributeString.string
-            return CodeHighlighter.highlight(source, language: language, theme: CodeTheme(fontSize: NSFont.systemFontSize))
+            return CodeHighlighter.highlight(source, language: language, theme: CodeTheme(fontSize: NSFont.systemFontSize), limitLength: CodeHighlighter.fastViewportLength)
         }
         return model.attributeString
     }

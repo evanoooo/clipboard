@@ -42,17 +42,23 @@ enum ClipContentRenderer {
         }
     }
 
+    /// 卡片展示的最大高亮字符数（卡片可视区域仅展示前十几行，超出的部分完全在卡片裁剪区外）
+    static let cardHighlightLimit = 3_500
+
     /// Computes unified highlighted attributed string for text-based items.
     static func resolveText(
         for model: PasteboardModel,
         keyword: String,
-        isRich: Bool
+        isRich: Bool,
+        isCardSnippet: Bool = false
     ) -> NSAttributedString {
         if isRich {
             return model.highlightedRichText(keyword: keyword)
         } else {
             if let language = model.detectedCodeLanguage {
                 let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+                let limit = isCardSnippet ? cardHighlightLimit : nil
+
                 if trimmedKeyword.isEmpty {
                     if let cached = model.cachedHighlightedCode {
                         return cached
@@ -60,15 +66,19 @@ enum ClipContentRenderer {
                     let highlighted = CodeHighlighter.highlight(
                         model.attributeString.string,
                         language: language,
-                        keyword: nil
+                        keyword: nil,
+                        limitLength: limit
                     )
-                    model.cachedHighlightedCode = highlighted
+                    if !isCardSnippet || model.attributeString.string.count <= cardHighlightLimit {
+                        model.cachedHighlightedCode = highlighted
+                    }
                     return highlighted
                 } else {
                     return CodeHighlighter.highlight(
                         model.attributeString.string,
                         language: language,
-                        keyword: trimmedKeyword
+                        keyword: trimmedKeyword,
+                        limitLength: limit
                     )
                 }
             }

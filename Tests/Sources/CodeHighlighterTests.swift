@@ -18,6 +18,7 @@ enum CodeHighlighterTests {
         testCommentAndStringHighlighting(runner: runner)
         testSearchKeywordHighlightMerge(runner: runner)
         testSafeBoundsHandling(runner: runner)
+        testViewportTieredHighlighting(runner: runner)
         print("✓ CodeHighlighter tests passed!")
     }
 
@@ -189,5 +190,20 @@ enum CodeHighlighterTests {
         let hugeCode = String(repeating: "worker_processes auto;\n", count: 2000)
         let hugeAttributed = CodeHighlighter.highlight(hugeCode, language: .nginx)
         runner.assertEqual(hugeAttributed.length, (hugeCode as NSString).length, "Length should match source")
+    }
+
+    private static func testViewportTieredHighlighting(runner: TestRunner.Type) {
+        let code = String(repeating: "let x = 42\n", count: 500) // ~5,500 chars
+        let theme = CodeTheme()
+        let fastAttributed = CodeHighlighter.highlight(code, language: .swift, theme: theme, limitLength: 500)
+        runner.assertEqual(fastAttributed.length, (code as NSString).length, "Total length should still match source string")
+
+        let string = fastAttributed.string as NSString
+        let letRange = string.range(of: "let")
+        let firstLetColor = fastAttributed.attribute(.foregroundColor, at: letRange.location, effectiveRange: nil) as? NSColor
+        runner.assertEqual(firstLetColor, theme.color(for: .keyword), "First 'let' should have syntax color")
+
+        let farColor = fastAttributed.attribute(.foregroundColor, at: 2000, effectiveRange: nil) as? NSColor
+        runner.assertEqual(farColor, theme.color(for: .plain), "Tokens beyond limitLength should be plain color")
     }
 }

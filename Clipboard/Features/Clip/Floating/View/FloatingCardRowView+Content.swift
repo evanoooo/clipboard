@@ -57,7 +57,7 @@ final class FloatingTextContentView: NSView {
     }
 
     func update(keyword: String, model: PasteboardModel) {
-        let text = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false)
+        let text = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false, isCardSnippet: true)
         if textField.maximumNumberOfLines == 1, model.pasteboardType == .string {
             let preview = NSMutableAttributedString(attributedString: text)
             let font: NSFont = model.detectedCodeLanguage != nil

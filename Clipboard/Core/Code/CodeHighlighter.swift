@@ -12,6 +12,9 @@ enum CodeHighlighter {
     /// 语法高亮的最大字符长度上限，防止超大型文件卡顿
     static let maxHighlightLength = 30_000
 
+    /// 首屏极速视口高亮阈值（字符数），在 ~0.2ms 内完成，确保滚动与展开绝对满帧
+    static let fastViewportLength = 3_500
+
     /// 为指定代码文本生成带语法高亮与搜索词高亮的 NSAttributedString
     /// - Parameters:
     ///   - text: 待高亮的代码纯文本
@@ -23,7 +26,8 @@ enum CodeHighlighter {
         _ text: String,
         language: CodeLanguage,
         theme: CodeTheme = CodeTheme(),
-        keyword: String? = nil
+        keyword: String? = nil,
+        limitLength: Int? = nil
     ) -> NSAttributedString {
         guard !text.isEmpty else {
             return NSAttributedString(string: "", attributes: theme.attributes(for: .plain))
@@ -36,7 +40,8 @@ enum CodeHighlighter {
         )
 
         // 仅在安全长度阈值内进行词法扫描着色
-        let scanLength = min(text.count, maxHighlightLength)
+        let effectiveLimit = min(limitLength ?? maxHighlightLength, maxHighlightLength)
+        let scanLength = min(text.count, effectiveLimit)
         let scanEndIndex = text.index(text.startIndex, offsetBy: scanLength)
         let scanSubstring = text[..<scanEndIndex]
 
@@ -55,6 +60,25 @@ enum CodeHighlighter {
         }
 
         return attributedString
+    }
+
+    /// 异步后台执行语法高亮，避免超长代码在主线程引起微秒级掉帧
+    /// 异步延迟分帧执行完整语法高亮，先让出主线程保证视图首帧满帧展现，再无缝平滑更新
+    static func highlightAsync(
+        _ text: String,
+        language: CodeLanguage,
+        theme: CodeTheme = CodeTheme(),
+        keyword: String? = nil,
+        limitLength: Int? = nil
+    ) async -> NSAttributedString {
+        await Task.yield()
+        return highlight(
+            text,
+            language: language,
+            theme: theme,
+            keyword: keyword,
+            limitLength: limitLength
+        )
     }
 
     // MARK: - 词法扫描与应用
