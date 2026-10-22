@@ -19,6 +19,16 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+
+        // 关键修复：中文 macOS 环境下 WebKit 默认 fallback 文本编码为 gb18030。
+        // 当预览未显式声明 charset 的脚本/纯文本（如 .sh/.py/.txt/.json）或缺少 meta 的网页时，
+        // 会导致 UTF-8 编码的中文被按 GBK 解码，呈现为经典乱码（例如 "涓€閿笂浼"）。
+        // 将默认文本编码显式设为 "utf-8"；若页面/响应头有显式 charset，WebKit 仍会优先遵从。
+        let encodingSelector = Selector(("_setDefaultTextEncodingName:"))
+        if configuration.preferences.responds(to: encodingSelector) {
+            configuration.preferences.perform(encodingSelector, with: "utf-8")
+        }
+
         webView = WKWebView(frame: .zero, configuration: configuration)
         loadingIndicator = NSProgressIndicator()
         errorLabel = NSTextField(wrappingLabelWithString: "")
@@ -90,7 +100,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
 
     private static let externalSchemes: Set<String> = ["http", "https", "mailto"]
 
-    /// 与 `PreviewMarkdownView` 保持一致：只拦用户点击的链接，
+    /// 与 `PreviewMarkdownView` 保持一致：只拦截用户点击的链接，
     /// 重定向与脚本跳转交给页面，避免把预览变成“什么都点不动”。
     func webView(
         _: WKWebView,
