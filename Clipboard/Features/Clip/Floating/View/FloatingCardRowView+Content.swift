@@ -204,8 +204,6 @@ private final class FloatingImageContentView: NSView {
     required init?(coder _: NSCoder) {
         fatalError()
     }
-
-    deinit { loadTask?.cancel() }
 }
 
 // MARK: - FloatingFileContentView
