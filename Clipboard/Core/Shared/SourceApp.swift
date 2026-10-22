@@ -34,18 +34,26 @@ nonisolated enum SourceAppSQL {
             """)
     }
 
-    static func readAll(on database: Connection, id: Int64? = nil, referencedOnly: Bool = false) throws -> [SourceApp] {
+    static func readAll(on database: Connection, id: Int64? = nil, referencedOnly: Bool = false, includeIconData: Bool = false) throws -> [SourceApp] {
         let condition = id != nil ? " WHERE id = ?"
             : referencedOnly ? " WHERE EXISTS (SELECT 1 FROM Clip WHERE app_id = App.id)" : ""
-        let query = "SELECT id, bundle_id, app_name, app_path, icon_data FROM App" + condition
+        let columns = includeIconData
+            ? "id, bundle_id, app_name, app_path, icon_data"
+            : "id, bundle_id, app_name, app_path"
+        let query = "SELECT \(columns) FROM App" + condition
         let bindings: [Binding?] = id.map { [$0] } ?? []
         return try database.prepare(query, bindings).map {
             SourceApp(
                 id: $0[0] as? Int64 ?? 0, bundleID: $0[1] as? String,
                 name: $0[2] as? String ?? "", path: $0[3] as? String ?? "",
-                iconData: ($0[4] as? Blob).map { Data($0.bytes) }
+                iconData: includeIconData ? ($0[4] as? Blob).map { Data($0.bytes) } : nil
             )
         }
+    }
+
+    static func readIconData(for id: Int64, on database: Connection) throws -> Data? {
+        let blob = try database.scalar("SELECT icon_data FROM App WHERE id = ?", id) as? Blob
+        return blob.map { Data($0.bytes) }
     }
 
     /// 仅在身份可确认时合并；名称相同不代表同一个应用。
@@ -123,7 +131,7 @@ nonisolated enum SourceAppSQL {
     ) throws -> [String: Int64] {
         let records: [(key: String, app: SourceApp)]
         if normalized {
-            records = try SourceAppSQL.readAll(on: source).map { (String($0.id), $0) }
+            records = try SourceAppSQL.readAll(on: source, includeIconData: true).map { (String($0.id), $0) }
         } else {
             records = try source.prepare("SELECT DISTINCT app_name, app_path FROM Clip").map { row in
                 let name = row[0] as? String ?? ""

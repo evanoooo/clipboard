@@ -45,10 +45,10 @@ final class SourceAppCache {
 
     func warmMissingIcons() {
         warmingTask?.cancel()
-        let missing = apps.values.filter { $0.iconData == nil && !$0.path.isEmpty }
+        // 仅预热最近活跃的 Top 15 个应用图标，其余历史冷门应用在卡片滑入时按需加载，避免启动时并发占用内存
+        let topApps = Array(orderedApps.prefix(15))
         warmingTask = Task(priority: .utility) {
-            // 单路补全，不阻塞首屏，不为每条历史记录创建任务。
-            for app in missing {
+            for app in topApps {
                 guard !Task.isCancelled else { return }
                 _ = await AppIconCache.shared.loadIcon(forAppID: app.id, path: app.path)
                 await Task.yield()

@@ -28,16 +28,21 @@ extension PasteSQLManager {
         let id = try SourceAppSQL.resolve(name: name, path: path, bundleID: bundleID, on: connection)
         let previous = try apps[id] ?? SourceAppSQL.readAll(on: connection, id: id).first
         apps[id] = SourceApp(id: id, bundleID: bundleID ?? previous?.bundleID,
-                             name: name, path: path, iconData: previous?.iconData)
+                             name: name, path: path, iconData: nil)
         appIdentities[key] = id
         return id
+    }
+
+    func getAppIconData(id: Int64) -> Data? {
+        guard let connection else { return nil }
+        return try? SourceAppSQL.readIconData(for: id, on: connection)
     }
 
     func saveAppIcon(id: Int64, path: String, data: Data) -> SourceApp? {
         guard let connection, let app = apps[id], app.path == path else { return nil }
         do {
             try connection.run("UPDATE App SET icon_data = ? WHERE id = ?", Blob(bytes: [UInt8](data)), id)
-            let updated = SourceApp(id: id, bundleID: app.bundleID, name: app.name, path: path, iconData: data)
+            let updated = SourceApp(id: id, bundleID: app.bundleID, name: app.name, path: path, iconData: nil)
             apps[id] = updated
             return updated
         } catch {

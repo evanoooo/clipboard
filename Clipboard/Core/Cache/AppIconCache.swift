@@ -24,15 +24,19 @@ final class AppIconCache {
         if let image = cache.object(forKey: key as NSString) { return image }
         if let task = inFlightTasks[key] { return await task.value }
         let app = id.flatMap { SourceAppCache.shared.apps[$0] }
-        let iconData = app?.iconData
         let sourcePath = app?.path ?? path
         let currentGeneration = generation
         let task = Task { [fallback] in
+            let iconData: Data? = if let id {
+                await PasteSQLManager.manager.getAppIconData(id: id)
+            } else {
+                nil
+            }
             let loaded = await Task.detached(priority: .utility) {
                 SourceAppIcon.read(data: iconData, path: sourcePath)
             }.value
             guard self.generation == currentGeneration else { return fallback }
-            if let data = loaded.data, let id {
+            if let data = loaded.data, let id, iconData == nil {
                 Task(priority: .utility) { [self] in
                     let updated = await PasteSQLManager.manager.saveAppIcon(id: id, path: sourcePath, data: data)
                     guard generation == currentGeneration, let updated else { return }
