@@ -22,6 +22,7 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
 
     private let overlayView = ImageAnalysisOverlayView()
     private var analysisTask: Task<Void, Never>?
+    private var imageDecodeTask: Task<Void, Never>?
 
     private static let analysisDelay: Duration = .milliseconds(400)
 
@@ -43,6 +44,7 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
 
     deinit {
         analysisTask?.cancel()
+        imageDecodeTask?.cancel()
     }
 
     override func viewDidMoveToWindow() {
@@ -55,6 +57,8 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
     }
 
     func resetPreview() {
+        imageDecodeTask?.cancel()
+        imageDecodeTask = nil
         cancelAnalysis()
         overlayView.analysis = nil
         overlayView.trackingImageView = nil
@@ -111,17 +115,29 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
     }
 
     private func loadImage(from data: Data) {
-        if let image = NSImage(data: data) {
-            imageView.image = image
-            scheduleAnalysisIfNeeded()
-        } else {
-            let configuration = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
-            imageView.image = NSImage(
-                systemSymbolName: "photo.badge.arrow.down",
-                accessibilityDescription: nil
-            )?.withSymbolConfiguration(configuration)
-            imageView.imageScaling = .scaleNone
-            imageView.contentTintColor = .secondaryLabelColor
+        imageDecodeTask?.cancel()
+        imageDecodeTask = Task { @MainActor [weak self] in
+            // 后台异步解压高分辨率位图，避免 20MB+ 截图卡顿主线程
+            let decoded = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                guard let image = NSImage(data: data) else { return nil }
+                _ = image.representations.first
+                return image
+            }.value
+
+            guard !Task.isCancelled, let self else { return }
+
+            if let decoded {
+                self.imageView.image = decoded
+                self.scheduleAnalysisIfNeeded()
+            } else {
+                let configuration = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+                self.imageView.image = NSImage(
+                    systemSymbolName: "photo.badge.arrow.down",
+                    accessibilityDescription: nil
+                )?.withSymbolConfiguration(configuration)
+                self.imageView.imageScaling = .scaleNone
+                self.imageView.contentTintColor = .secondaryLabelColor
+            }
         }
     }
 
