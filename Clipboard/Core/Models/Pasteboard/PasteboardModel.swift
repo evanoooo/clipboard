@@ -206,10 +206,11 @@ final class PasteboardModel: Identifiable, Codable {
         }
 
         let task = Task<NSImage?, Never> { @MainActor in
-            let imageData = data
+            // 性能优化：优先使用轻量缩略图 showData（几十KB），避免无节制触发 loadData 将数十兆原图常驻内存
+            let thumbnailSourceData = (showData != nil && !(showData?.isEmpty ?? true)) ? showData! : data
 
             let image = await Task.detached(priority: .userInitiated) {
-                Self.downsampledImage(from: imageData, maxPixelSize: 600) ?? NSImage(data: imageData)
+                Self.downsampledImage(from: thumbnailSourceData, maxPixelSize: 600) ?? NSImage(data: thumbnailSourceData)
             }.value
 
             cachedThumbnail = image
