@@ -118,7 +118,7 @@ enum CodeHighlighter {
                 continue
             }
 
-            // 4. 检查常规字符串（"...", '...'）
+            // 4. 检查常规字符串（"...", '...', `...`）
             if let stringRule = rules.strings.first(where: { remainder.hasPrefix($0.open) }) {
                 let tokenStart = currentIndex
                 currentIndex = text.index(currentIndex, offsetBy: stringRule.open.count)
@@ -146,18 +146,24 @@ enum CodeHighlighter {
 
             let currentChar = text[currentIndex]
 
-            // 5. 变量识别（特别是 Nginx / Shell / PHP 中的 $variable 或 ${variable}）
+            // 5. 变量识别（特别是 Nginx / Shell / PHP 中的 $variable 或 ${variable}，以及 Shell 特殊变量 $?, $@, $#, $$, $*, $!, $-）
             if currentChar == "$" {
                 let tokenStart = currentIndex
                 var nextIndex = text.index(after: currentIndex)
 
                 if nextIndex < text.endIndex && text[nextIndex] == "{" {
-                    // 形如 ${variable}
+                    // 形如 ${variable} 或 ${VAR:-default}
                     if let closeBrace = text[nextIndex...].firstIndex(of: "}") {
                         currentIndex = text.index(after: closeBrace)
                         apply(token: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
                         continue
                     }
+                } else if nextIndex < text.endIndex && "?@#*!$-".contains(text[nextIndex]) {
+                    // Shell 特殊单字符变量：$?, $@, $#, $$, $*, $!, $-
+                    nextIndex = text.index(after: nextIndex)
+                    currentIndex = nextIndex
+                    apply(token: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                    continue
                 } else {
                     // 形如 $host, $1, $remote_addr
                     while nextIndex < text.endIndex {
@@ -211,7 +217,7 @@ enum CodeHighlighter {
                 continue
             }
 
-            // 7. 单词标识符识别（字母、下划线、以及特定配置语言允许的破折号）
+            // 7. 单词标识符识别（字母、下划线、以及特定配置或Shell语言允许的破折号）
             if isIdentifierStart(currentChar, language: language) {
                 let tokenStart = currentIndex
                 var nextIndex = text.index(after: currentIndex)
@@ -246,8 +252,8 @@ enum CodeHighlighter {
         if c.isLetter || c.isNumber || c == "_" {
             return true
         }
-        // Nginx 配置指令与 HTML 标签允许中划线，如 proxy-pass, worker-processes, content-type
-        if (language == .nginx || language == .html || language == .css) && c == "-" {
+        // Nginx 配置指令、HTML/CSS 标签以及 Shell/Bash 命令（如 apt-get, ssh-keygen）允许中划线
+        if (language == .nginx || language == .html || language == .css || language == .bash) && c == "-" {
             return true
         }
         return false

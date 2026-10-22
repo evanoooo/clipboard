@@ -86,7 +86,7 @@ rm -f "$BUILD_LOG"
 
 # 解析构建产物路径
 BUILD_SETTINGS=$(xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" -showBuildSettings)
-BUILD_DIR=$(echo "$BUILD_SETTINGS" | grep -m1 "CONFIGURATION_BUILD_DIR =" | awk -F " = " '{print $2}')
+BUILD_DIR=$(set +o pipefail; echo "$BUILD_SETTINGS" | grep "CONFIGURATION_BUILD_DIR =" | head -n 1 | awk -F " = " '{print $2}')
 SOURCE_APP="${BUILD_DIR}/${SCHEME}.app"
 
 if [ ! -d "$SOURCE_APP" ]; then

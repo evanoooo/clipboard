@@ -35,7 +35,7 @@ nonisolated enum CodeLanguage: String, Sendable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .bash: "Bash"
+        case .bash: "Shell"
         case .c: "C"
         case .cpp: "C++"
         case .csharp: "C#"

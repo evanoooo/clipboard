@@ -214,12 +214,24 @@ nonisolated struct CodeLanguageRules: Sendable {
             CodeLanguageRules(
                 lineComments: ["#"],
                 blockComments: [],
-                strings: [("\"", "\"", true), ("'", "'", false)],
+                strings: [("\"", "\"", true), ("'", "'", false), ("`", "`", true)],
                 multiLineStrings: [],
                 keywords: words("""
-                break case continue declare do done elif else esac eval exec exit export fi for
-                function getopts if in local printf read readonly return select set shift source
-                then time trap unset until while
+                alias apt apt-get awk base64 bash bg break brew builtin bzip2 cal cat cd
+                chmod chown chroot cksum clear cmp column compgen complete cp cpio
+                cron crontab curl cut date dd df diff dir dirname dmesg docker do
+                done du echo egrep elif else env esac eval exec exit export expr false
+                fc fgrep fi find fmt fold for function getopts git grep groupadd groupdel
+                gzip head history hostname id if in install jobs join kill killall less
+                let ln local locate logname ls lsof make man md5 md5sum mkdir mkfifo
+                more mv netstat nice nohup npm nproc openssl passwd paste patch pip pip3
+                pkill pnpm popd pr printf ps pushd pwd read readonly reboot return rm
+                rmdir rsync scp sed select set sftp sh shift shred shutdown sleep sort
+                source split ssh ssh-keygen stat sudo sum systemctl tail tar tee test
+                then time top touch tr trap true type typeset ulimit umask umount
+                unalias uname uniq unlink unzip until uptime useradd userdel usermod
+                vi vim wait wc wget whereis which while who whoami xargs yarn yes yum
+                zip zsh
                 """),
                 literals: words("true false"),
                 caseInsensitiveWords: false,
@@ -373,6 +385,6 @@ nonisolated struct CodeLanguageRules: Sendable {
     }
 
     private static func words(_ text: String) -> Set<String> {
-        Set(text.split(separator: " ").map(String.init))
+        Set(text.split(whereSeparator: \.isWhitespace).map(String.init))
     }
 }

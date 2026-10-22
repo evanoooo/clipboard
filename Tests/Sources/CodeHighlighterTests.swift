@@ -14,6 +14,7 @@ enum CodeHighlighterTests {
         print("\n--- Testing CodeHighlighter & CodeTheme ---")
         testNginxSyntaxHighlighting(runner: runner)
         testNginxVariableHighlighting(runner: runner)
+        testShellSyntaxHighlighting(runner: runner)
         testCommentAndStringHighlighting(runner: runner)
         testSearchKeywordHighlightMerge(runner: runner)
         testSafeBoundsHandling(runner: runner)
@@ -72,6 +73,67 @@ enum CodeHighlighterTests {
 
         let customVarColor = attributed.attribute(.foregroundColor, at: customVarRange.location, effectiveRange: nil) as? NSColor
         runner.assertTrue(customVarColor == theme.color(for: .variable), "$custom_var 应该是 variable 颜色")
+    }
+
+    private static func testShellSyntaxHighlighting(runner: TestRunner.Type) {
+        let code = """
+        # Build script
+        export APP_ENV="production"
+        chmod +x ./build.sh
+        CURRENT_DIR=`pwd`
+        TOTAL_ARGS=$#
+        PARAM_LIST=$@
+        if [ $? -eq 0 ]; then
+            echo "Done"
+            kill -9 8080
+        fi
+        """
+        let theme = CodeTheme()
+        let attributed = CodeHighlighter.highlight(code, language: .bash, theme: theme)
+
+        let string = attributed.string as NSString
+
+        // 1. Comments
+        let commentRange = string.range(of: "# Build script")
+        runner.assertTrue(commentRange.location != NSNotFound, "Should find comment")
+        let commentColor = attributed.attribute(.foregroundColor, at: commentRange.location, effectiveRange: nil) as? NSColor
+        runner.assertTrue(commentColor == theme.color(for: .comment), "Shell comment should be comment color")
+
+        // 2. Keywords & commands
+        for kw in ["export", "chmod", "if", "then", "echo", "kill", "fi"] {
+            let kwRange = string.range(of: kw)
+            runner.assertTrue(kwRange.location != NSNotFound, "Should find keyword '\(kw)'")
+            let kwColor = attributed.attribute(.foregroundColor, at: kwRange.location, effectiveRange: nil) as? NSColor
+            runner.assertTrue(kwColor == theme.color(for: .keyword), "Shell command '\(kw)' should be keyword color")
+        }
+
+        // 3. Variables ($?, $#, $@)
+        let statusVarRange = string.range(of: "$?")
+        runner.assertTrue(statusVarRange.location != NSNotFound, "Should find '$?'")
+        let statusColor = attributed.attribute(.foregroundColor, at: statusVarRange.location, effectiveRange: nil) as? NSColor
+        runner.assertTrue(statusColor == theme.color(for: .variable), "$? should be variable color")
+
+        let countVarRange = string.range(of: "$#")
+        runner.assertTrue(countVarRange.location != NSNotFound, "Should find '$#'")
+        let countColor = attributed.attribute(.foregroundColor, at: countVarRange.location, effectiveRange: nil) as? NSColor
+        runner.assertTrue(countColor == theme.color(for: .variable), "$# should be variable color")
+
+        let allArgsVarRange = string.range(of: "$@")
+        runner.assertTrue(allArgsVarRange.location != NSNotFound, "Should find '$@'")
+        let allArgsColor = attributed.attribute(.foregroundColor, at: allArgsVarRange.location, effectiveRange: nil) as? NSColor
+        runner.assertTrue(allArgsColor == theme.color(for: .variable), "$@ should be variable color")
+
+        // 4. Strings & Backticks
+        let backtickRange = string.range(of: "`pwd`")
+        runner.assertTrue(backtickRange.location != NSNotFound, "Should find backtick command substitution")
+        let backtickColor = attributed.attribute(.foregroundColor, at: backtickRange.location, effectiveRange: nil) as? NSColor
+        runner.assertTrue(backtickColor == theme.color(for: .string), "`pwd` should be string color")
+
+        // 5. Numbers
+        let numRange = string.range(of: "8080")
+        runner.assertTrue(numRange.location != NSNotFound, "Should find number 8080")
+        let numColor = attributed.attribute(.foregroundColor, at: numRange.location, effectiveRange: nil) as? NSColor
+        runner.assertTrue(numColor == theme.color(for: .number), "8080 should be number color")
     }
 
     private static func testCommentAndStringHighlighting(runner: TestRunner.Type) {

@@ -81,7 +81,7 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"\bfunction\s*\w*\s*\([^)]*\)\s*\{"#, weight: 3),
             .init(pattern: #"\bconsole\.(?:log|error|warn|info|debug)\s*\("#, weight: 5),
             .init(pattern: #"\b(?:require\s*\(|module\.exports|exports\.\w+\s*=)"#, weight: 3),
-            .init(pattern: ##"\bimport\s+[^;]+\bfrom\s+['"]"##, weight: 3),
+            .init(pattern: ##"\bimport\s+[^;]+\bfrom\s+['\"]"##, weight: 3),
             .init(pattern: #"\bdocument\.(?:getElementById|querySelector|querySelectorAll|createElement)\s*\("#, weight: 4),
             .init(pattern: #"\bexport\s+(?:default|const|let|var|function|class)\b"#, weight: 3),
             .init(pattern: #"\b(?:new\s+Promise|\.then\s*\(|\.catch\s*\()"#, weight: 3),
@@ -103,7 +103,7 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"(?m)^\s*(?:async\s+)?def\s+\w+\s*\([^)]*\)\s*(?:->[^:]+)?:"#, weight: 5),
             .init(pattern: #"(?m)^\s*from\s+[\w.]+\s+import\s+"#, weight: 5),
             .init(pattern: #"(?m)^\s*class\s+\w+\s*(?:\([\w.,\s]*\))?\s*:"#, weight: 4),
-            .init(pattern: ##"(?m)^\s*if\s+__name__\s*==\s*['"]"##, weight: 6),
+            .init(pattern: ##"(?m)^\s*if\s+__name__\s*==\s*['\"]"##, weight: 6),
             .init(pattern: #"(?m)^\s*@\w+(?:\.\w+)*\s*$"#, weight: 2),
             .init(pattern: #"\bself\.\w+"#, weight: 3),
             .init(pattern: #"\braise\s+\w+|raise\s+$"#, weight: 3),
@@ -140,7 +140,7 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"\bmatch\s+\w+\s*\{"#, weight: 1)
         ],
         .c: [
-            .init(pattern: ##"#include\s*[<"](?:assert|ctype|errno|float|inttypes|limits|math|setjmp|signal|stdarg|stdbool|stddef|stdint|stdio|stdlib|string|time)\.h[>"]"##, weight: 6),
+            .init(pattern: ##"#include\s*[<\"](?:assert|ctype|errno|float|inttypes|limits|math|setjmp|signal|stdarg|stdbool|stddef|stdint|stdio|stdlib|string|time)\.h[>\"]"##, weight: 6),
             .init(pattern: #"(?m)^\s*(?:int|void|char|float|double|long|short|unsigned|size_t)\s+main\s*\("#, weight: 6),
             .init(pattern: #"\b(?:printf|fprintf|sprintf|scanf|fscanf|sscanf)\s*\("#, weight: 4),
             .init(pattern: #"\b(?:malloc|calloc|realloc|free)\s*\("#, weight: 4),
@@ -180,7 +180,7 @@ nonisolated enum CodeLanguageDetector {
         .ruby: [
             .init(pattern: #"(?m)^\s*def\s+\w+[!?]?\s*(\(|$|\s)"#, weight: 5),
             .init(pattern: #"\bputs\s+|\bp\s+\S|\bpp\s+\S"#, weight: 4),
-            .init(pattern: ##"(?m)^\s*(?:require|require_relative|load)\s+['"]"##, weight: 5),
+            .init(pattern: ##"(?m)^\s*(?:require|require_relative|load)\s+['\"]"##, weight: 5),
             .init(pattern: #"\battr_(?:accessor|reader|writer)\b|\bmattr_"#, weight: 5),
             .init(pattern: #"(?m)^\s*module\s+\w+"#, weight: 3),
             .init(pattern: #"\bdo\s*\|[\w,\s|]*\|"#, weight: 4),
@@ -199,11 +199,21 @@ nonisolated enum CodeLanguageDetector {
         ],
         .bash: [
             .init(pattern: #"(?m)^#!\s*\/(?:usr\/)?bin\/(?:env\s+)?(?:ba|z|fi|a)?sh\b"#, weight: 8),
-            .init(pattern: #"(?m)^\s*(?:export|source|echo|printf|cd|mkdir|cp|mv|rm|chmod|chown|sudo|curl|wget|git|npm|yarn|pip|pip3|docker|kubectl|brew|apt|apt-get|make|grep|sed|awk|cat|ls|touch|unzip|tar)\s+\S"#, weight: 2),
-            .init(pattern: #"(?m)^\s*\$\{?\w+\}?="#, weight: 2),
-            .init(pattern: #"(?m)^\s*(?:if|then|fi|for|while|do|done|case|esac)\b"#, weight: 2),
-            .init(pattern: ##"(?m)^\s*(?:\$\(|`)"##, weight: 3),
-            .init(pattern: ##"\|\||&&"##, weight: 1)
+            .init(pattern: #"(?m)^\s*\$\s+[a-z][\w-]*\b"#, weight: 5),
+            .init(pattern: #"(?m)^\s*(?:sudo\s+)?(?:brew|docker|kubectl|git|chmod|chown|npm|yarn|pnpm|cargo|pip3?|apt|apt-get|curl|wget)\s+\S"#, weight: 4),
+            .init(pattern: #"(?m)^\s*if\s+(?:\[\[?|test\b)"#, weight: 5),
+            .init(pattern: #"(?m)^\s*(?:fi|done|esac)\s*$"#, weight: 4),
+            .init(pattern: #";\s*(?:then|do)\b"#, weight: 4),
+            .init(pattern: #"(?m)^\s*(?:case\s+\S+\s+in|for\s+\w+\s+in\b|while\s+)"#, weight: 3),
+            .init(pattern: #"(?m)^\s*(?:echo|printf|cd|mkdir|cp|mv|rm|touch|cat|grep|sed|awk|tar|find|source|alias)\s+(?:-[a-zA-Z]|["'$/~])"#, weight: 3),
+            .init(pattern: #"(?m)^\s*(?:export|unset|readonly)\s+[A-Za-z_]"#, weight: 4),
+            .init(pattern: #"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*=(?:["'`]|\$\(|[^\s]+)"#, weight: 3),
+            .init(pattern: #"(?m)<<[-]?\s*['"]?[A-Z_]{2,}['"]?"#, weight: 5),
+            .init(pattern: #"2>&1|>/dev/null|>>\s*[\w/~.]"#, weight: 4),
+            .init(pattern: #"\|\s*(?:grep|awk|sed|xargs|sort|uniq|head|tail|wc|tee|bash|sh|zsh)\b"#, weight: 3),
+            .init(pattern: #"(?m)(?:\$\([a-zA-Z_]|`[a-zA-Z_])"#, weight: 3),
+            .init(pattern: #"\$\{?[A-Z_]{2,}\}?|\$(?:\?|@|#|\*|\!|\$|\d)"#, weight: 2),
+            .init(pattern: #"\|\||&&"#, weight: 1)
         ],
         .sql: [
             .init(pattern: #"(?m)^\s*SELECT\b[\s\S]{0,400}?\bFROM\b"#, weight: 6, caseSensitive: true),
