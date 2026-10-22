@@ -196,6 +196,14 @@ final class PasteboardModel: Identifiable, Codable {
         cachedThumbnail
     }
 
+    /// 深度闲置清理：释放内存中常驻的重量级二进制与解码位图（原始大图随时可通过 getter 自动重载）
+    func clearLoadedPayload() {
+        _data = nil
+        cachedThumbnail = nil
+        thumbnailLoadTask?.cancel()
+        thumbnailLoadTask = nil
+    }
+
     func loadThumbnail() async -> NSImage? {
         if let cachedThumbnail {
             return cachedThumbnail

@@ -30,6 +30,7 @@ final class PasteDataStore {
         for model in dataList.value {
             model.cachedHighlightedCode = nil
             model.cachedPlainTextAttributedString = nil
+            model.clearLoadedPayload()
         }
     }
     /// 截断扫描查询行数上限（达到 501 即可提前终止）
