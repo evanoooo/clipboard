@@ -105,6 +105,29 @@ final class CategoryChipStore {
         db.deleteItemsByGroup(chip.id)
     }
 
+    /// 移动用户标签到指定位置（安全保护：不允许移动系统内置标签，也不能移至系统标签前）
+    @discardableResult
+    func moveUserChip(fromIndex: Int, toIndex: Int) -> Bool {
+        let systemCount = CategoryChip.systemChips.count
+        guard fromIndex >= systemCount, fromIndex < chips.count,
+              toIndex >= systemCount, toIndex < chips.count,
+              fromIndex != toIndex else {
+            return false
+        }
+
+        let moved = chips.remove(at: fromIndex)
+        chips.insert(moved, at: toIndex)
+        saveUserCategories()
+        return true
+    }
+
+    /// 通过标签 ID 移动到目标全局位置
+    @discardableResult
+    func moveUserChip(id: Int, toIndex: Int) -> Bool {
+        guard let currentIndex = chips.firstIndex(where: { $0.id == id }) else { return false }
+        return moveUserChip(fromIndex: currentIndex, toIndex: toIndex)
+    }
+
     func clearUserCategories() {
         chips = CategoryChip.systemChips
         selectedChipId = chips.first?.id ?? -1

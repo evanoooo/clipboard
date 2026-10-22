@@ -2,7 +2,7 @@
 //  CategoryChipTests.swift
 //  Tests
 //
-//  Unit tests for CategoryChip custom color functionality and JSON backward compatibility.
+//  Unit tests for CategoryChip custom color functionality, reordering, and JSON backward compatibility.
 //
 
 import AppKit
@@ -19,6 +19,7 @@ final class CategoryChipTests {
         testBackwardCompatibleJSONDecoding(runner: runner)
         testFullCodableRoundtrip(runner: runner)
         testNSColorHexConversion(runner: runner)
+        testUserChipReordering(runner: runner)
 
         print("✓ CategoryChip & Custom Colors tests passed!")
     }
@@ -106,5 +107,51 @@ final class CategoryChipTests {
         let parsedColor = NSColor(hex: "#FF3366")
         let reencodedHex = parsedColor.toHexString(includeAlpha: false)
         runner.assertEqual(reencodedHex, "#FF3366", "Hex roundtrip should match")
+    }
+
+    private static func testUserChipReordering(runner: TestRunner.Type) {
+        // 模拟 [System, A(1), B(2), C(3)]
+        var chips: [CategoryChip] = [
+            CategoryChip(id: -1, name: "剪贴板", colorIndex: 0, isSystem: true),
+            CategoryChip(id: 1, name: "A", colorIndex: 1, isSystem: false),
+            CategoryChip(id: 2, name: "B", colorIndex: 2, isSystem: false),
+            CategoryChip(id: 3, name: "C", colorIndex: 3, isSystem: false)
+        ]
+
+        func moveChip(fromIndex: Int, toIndex: Int) -> Bool {
+            let systemCount = 1
+            guard fromIndex >= systemCount, fromIndex < chips.count,
+                  toIndex >= systemCount, toIndex < chips.count,
+                  fromIndex != toIndex else {
+                return false
+            }
+            let moved = chips.remove(at: fromIndex)
+            chips.insert(moved, at: toIndex)
+            return true
+        }
+
+        // 1. Move A (index 1) to end (index 3) -> [System, B, C, A]
+        let res1 = moveChip(fromIndex: 1, toIndex: 3)
+        runner.assertTrue(res1, "Moving A to end should succeed")
+        runner.assertEqual(chips.map(\.id), [-1, 2, 3, 1], "Order should be System, B, C, A")
+
+        // 2. Move C (index 2) to first user position (index 1) -> [System, C, B, A]
+        let res2 = moveChip(fromIndex: 2, toIndex: 1)
+        runner.assertTrue(res2, "Moving C forward should succeed")
+        runner.assertEqual(chips.map(\.id), [-1, 3, 2, 1], "Order should be System, C, B, A")
+
+        // 3. Prevent moving system chip (index 0)
+        let res3 = moveChip(fromIndex: 0, toIndex: 2)
+        runner.assertTrue(!res3, "Moving system chip must be rejected")
+        runner.assertEqual(chips.map(\.id), [-1, 3, 2, 1], "Order must remain unchanged")
+
+        // 4. Prevent moving user chip before system chip (target index 0)
+        let res4 = moveChip(fromIndex: 2, toIndex: 0)
+        runner.assertTrue(!res4, "Moving chip before system chip must be rejected")
+        runner.assertEqual(chips.map(\.id), [-1, 3, 2, 1], "Order must remain unchanged")
+
+        // 5. Out of bounds index
+        let res5 = moveChip(fromIndex: 1, toIndex: 99)
+        runner.assertTrue(!res5, "Out of bounds target must be rejected")
     }
 }

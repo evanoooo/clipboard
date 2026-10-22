@@ -63,6 +63,16 @@ final class ChipButton: NSView, NSTextFieldDelegate {
         target: self,
         action: #selector(handleDotClick)
     )
+    private lazy var panGestureRecognizer: NSPanGestureRecognizer = {
+        let pan = NSPanGestureRecognizer(
+            target: self,
+            action: #selector(handlePan(_:))
+        )
+        pan.buttonMask = 0x1
+        pan.delegate = self
+        return pan
+    }()
+
     private var nameFieldWidthConstraint: Constraint?
 
     private var config: Config
@@ -70,6 +80,15 @@ final class ChipButton: NSView, NSTextFieldDelegate {
     private var isDraggingOver = false
     private var didHandleEditingCompletion = false
     private var helpTextUpdateTask: Task<Void, Never>?
+
+    // MARK: - Reordering Callbacks
+    var onReorderDragBegan: ((ChipButton) -> Void)?
+    var onReorderDragged: ((ChipButton, CGFloat) -> Void)?
+    var onReorderDragEnded: ((ChipButton) -> Void)?
+    var onReorderDragCancelled: ((ChipButton) -> Void)?
+
+    var isReorderable: Bool = true
+    private var isReorderDragging = false
 
     var isSelected: Bool {
         get { config.isSelected }
@@ -157,6 +176,7 @@ final class ChipButton: NSView, NSTextFieldDelegate {
         )
 
         addGestureRecognizer(clickGestureRecognizer)
+        addGestureRecognizer(panGestureRecognizer)
         dotContainerView.addGestureRecognizer(dotClickGestureRecognizer)
 
         registerForDraggedTypes(PasteboardType.supportTypes)
@@ -483,8 +503,33 @@ final class ChipButton: NSView, NSTextFieldDelegate {
     }
 
     @objc private func handleClick() {
-        guard !config.isEditing else { return }
+        guard !config.isEditing, !isReorderDragging else { return }
         config.action()
+    }
+
+    @objc private func handlePan(_ pan: NSPanGestureRecognizer) {
+        guard !config.chip.isSystem, !config.isEditing, !config.dotMode else { return }
+
+        switch pan.state {
+        case .began:
+            isReorderDragging = true
+            onReorderDragBegan?(self)
+        case .changed:
+            let translation = pan.translation(in: superview)
+            onReorderDragged?(self, translation.x)
+        case .ended:
+            onReorderDragEnded?(self)
+            DispatchQueue.main.async { [weak self] in
+                self?.isReorderDragging = false
+            }
+        case .cancelled, .failed:
+            onReorderDragCancelled?(self)
+            DispatchQueue.main.async { [weak self] in
+                self?.isReorderDragging = false
+            }
+        default:
+            break
+        }
     }
 
     @objc private func handleDotClick() {
@@ -689,6 +734,28 @@ final class ChipButton: NSView, NSTextFieldDelegate {
     }
 }
 
+extension ChipButton: NSGestureRecognizerDelegate {
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
+        if gestureRecognizer === panGestureRecognizer {
+            guard isReorderable,
+                  !config.chip.isSystem,
+                  !config.isEditing,
+                  !config.dotMode else {
+                return false
+            }
+            return true
+        }
+        return true
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: NSGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: NSGestureRecognizer
+    ) -> Bool {
+        false
+    }
+}
+
 private final class ChipTextField: NSTextField {
     weak var focusRingMaskView: NSView?
     var containerCornerRadius: CGFloat = Const.radius
@@ -703,6 +770,11 @@ private final class ChipTextField: NSTextField {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard isEditable else { return nil }
+        return super.hitTest(point)
     }
 
     override var focusRingType: NSFocusRingType {

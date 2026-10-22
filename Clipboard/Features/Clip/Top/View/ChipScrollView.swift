@@ -9,6 +9,18 @@ import AppKit
 import SnapKit
 
 final class ChipScrollView: NSView {
+    // MARK: - Drag & Reorder State
+
+    private struct DragState {
+        let draggedButton: ChipButton
+        let fromIndex: Int
+        var targetIndex: Int
+        let initialFrames: [NSRect]
+    }
+
+    private var activeDragState: DragState?
+    private var isReordering: Bool = false
+
     // MARK: - Properties
 
     private let scrollView = HorizontalScrollView()
@@ -138,7 +150,7 @@ final class ChipScrollView: NSView {
         let oldButtons = Dictionary(uniqueKeysWithValues: zip(self.chips.map(\.id), chipButtons))
         let changed = self.chips.map(\.id) != chips.map(\.id)
         let hadPlaceholder = newChipButton != nil
-        let animate = !self.chips.isEmpty
+        let animate = !isReordering && !self.chips.isEmpty
             && ((changed && !hadPlaceholder) || (hadPlaceholder && !changed && !creatingChip))
 
         animateChanges(animate) { animated in
@@ -170,6 +182,7 @@ final class ChipScrollView: NSView {
                     button = makeButton(config: config)
                     insertButton(button, at: index, animated: animated)
                 }
+                button.isReorderable = !dotMode && !creatingChip
                 if contentStack.arrangedSubviews.firstIndex(of: button) != index {
                     contentStack.removeArrangedSubview(button)
                     contentStack.insertArrangedSubview(button, at: index)
@@ -205,6 +218,7 @@ final class ChipScrollView: NSView {
         }
         animateChanges(!chips.isEmpty) { animated in
             let button = makeButton(config: config)
+            button.isReorderable = false
             newChipButton = button
             insertButton(button, at: contentStack.arrangedSubviews.count, animated: animated)
             keepEditingEdgeVisible(button)
@@ -238,12 +252,188 @@ final class ChipScrollView: NSView {
     }
 }
 
+// MARK: - Drag to Reorder
+
+private extension ChipScrollView {
+    func handleReorderDragBegan(_ button: ChipButton) {
+        contentStack.layoutSubtreeIfNeeded()
+
+        guard let fromIndex = chipButtons.firstIndex(of: button) else { return }
+        let systemCount = CategoryChip.systemChips.count
+        guard fromIndex >= systemCount else { return }
+        guard chipButtons.count > systemCount + 1 else { return }
+
+        let initialFrames = chipButtons.map { $0.frame }
+        activeDragState = DragState(
+            draggedButton: button,
+            fromIndex: fromIndex,
+            targetIndex: fromIndex,
+            initialFrames: initialFrames
+        )
+        isReordering = true
+
+        button.wantsLayer = true
+        button.layer?.zPosition = 100
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            context.allowsImplicitAnimation = true
+            button.layer?.shadowColor = NSColor.black.cgColor
+            button.layer?.shadowOpacity = 0.22
+            button.layer?.shadowOffset = CGSize(width: 0, height: -2)
+            button.layer?.shadowRadius = 4
+        }
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .default)
+    }
+
+    func handleReorderDragged(_ button: ChipButton, translationX: CGFloat) {
+        guard var state = activeDragState, state.draggedButton === button else { return }
+
+        button.layer?.transform = CATransform3DMakeTranslation(translationX, 0, 0)
+
+        let currentCenterX = state.initialFrames[state.fromIndex].midX + translationX
+        let systemCount = CategoryChip.systemChips.count
+        let minSlot = systemCount
+        let maxSlot = chipButtons.count - 1
+        guard minSlot <= maxSlot else { return }
+
+        var candidate = state.fromIndex
+        if translationX > 0 {
+            for k in (state.fromIndex + 1)...maxSlot {
+                if currentCenterX > state.initialFrames[k].midX {
+                    candidate = k
+                }
+            }
+        } else if translationX < 0 {
+            for k in stride(from: state.fromIndex - 1, through: minSlot, by: -1) {
+                if currentCenterX < state.initialFrames[k].midX {
+                    candidate = k
+                }
+            }
+        }
+        let targetIndex = min(max(candidate, minSlot), maxSlot)
+
+        if targetIndex != state.targetIndex {
+            state.targetIndex = targetIndex
+            activeDragState = state
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .default)
+
+            let draggedWidth = state.initialFrames[state.fromIndex].width + contentStack.spacing
+            for (j, btn) in chipButtons.enumerated() where j != state.fromIndex {
+                var targetShiftX: CGFloat = 0
+                if targetIndex > state.fromIndex {
+                    if j > state.fromIndex && j <= targetIndex {
+                        targetShiftX = -draggedWidth
+                    }
+                } else if targetIndex < state.fromIndex {
+                    if j >= targetIndex && j < state.fromIndex {
+                        targetShiftX = draggedWidth
+                    }
+                }
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.2
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    context.allowsImplicitAnimation = true
+                    btn.layer?.transform = CATransform3DMakeTranslation(targetShiftX, 0, 0)
+                }
+            }
+        }
+
+        if scrollMode {
+            let visibleRect = scrollView.contentView.bounds
+            let buttonOriginInScroll = scrollView.convert(button.frame.origin, from: contentStack)
+            let currentX = buttonOriginInScroll.x + translationX
+            let leftMargin: CGFloat = 20
+            let rightMargin: CGFloat = visibleRect.width - button.bounds.width - 20
+
+            if currentX < leftMargin && visibleRect.minX > 0 {
+                let newOrigin = NSPoint(x: max(0, visibleRect.minX - 8), y: 0)
+                contentStack.scroll(newOrigin)
+            } else if currentX > rightMargin {
+                let maxScroll = max(0, contentStack.bounds.width - visibleRect.width)
+                if visibleRect.minX < maxScroll {
+                    let newOrigin = NSPoint(x: min(maxScroll, visibleRect.minX + 8), y: 0)
+                    contentStack.scroll(newOrigin)
+                }
+            }
+        }
+    }
+
+    func handleReorderDragEnded(_ button: ChipButton) {
+        guard let state = activeDragState, state.draggedButton === button else { return }
+        activeDragState = nil
+
+        let fromIndex = state.fromIndex
+        let targetIndex = state.targetIndex
+
+        let finalTranslationX: CGFloat
+        if targetIndex == fromIndex {
+            finalTranslationX = 0
+        } else if targetIndex > fromIndex {
+            finalTranslationX = state.initialFrames[targetIndex].maxX - state.initialFrames[fromIndex].maxX
+        } else {
+            finalTranslationX = state.initialFrames[targetIndex].minX - state.initialFrames[fromIndex].minX
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.allowsImplicitAnimation = true
+            button.layer?.transform = CATransform3DMakeTranslation(finalTranslationX, 0, 0)
+            button.layer?.shadowOpacity = 0
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            button.layer?.transform = CATransform3DIdentity
+            button.layer?.zPosition = 0
+            for btn in self.chipButtons {
+                btn.layer?.transform = CATransform3DIdentity
+            }
+            if targetIndex != fromIndex {
+                _ = CategoryChipStore.shared.moveUserChip(fromIndex: fromIndex, toIndex: targetIndex)
+            }
+            DispatchQueue.main.async {
+                self.isReordering = false
+            }
+        }
+    }
+
+    func handleReorderDragCancelled(_ button: ChipButton) {
+        guard let state = activeDragState, state.draggedButton === button else { return }
+        activeDragState = nil
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.allowsImplicitAnimation = true
+            button.layer?.transform = CATransform3DIdentity
+            button.layer?.shadowOpacity = 0
+            for btn in self.chipButtons {
+                btn.layer?.transform = CATransform3DIdentity
+            }
+        } completionHandler: { [weak self] in
+            button.layer?.zPosition = 0
+            self?.isReordering = false
+        }
+    }
+}
+
 private extension ChipScrollView {
     func makeButton(config: ChipButton.Config) -> ChipButton {
         let button = ChipButton(config: config)
         button.onWidthChanged = { [weak self, weak button] in
             guard let button else { return }
             self?.keepEditingEdgeVisible(button)
+        }
+        button.onReorderDragBegan = { [weak self] button in
+            self?.handleReorderDragBegan(button)
+        }
+        button.onReorderDragged = { [weak self] button, translationX in
+            self?.handleReorderDragged(button, translationX: translationX)
+        }
+        button.onReorderDragEnded = { [weak self] button in
+            self?.handleReorderDragEnded(button)
+        }
+        button.onReorderDragCancelled = { [weak self] button in
+            self?.handleReorderDragCancelled(button)
         }
         return button
     }
