@@ -20,6 +20,10 @@ extension FloatingCardRowView: ClipItemMenuActionable {
         onCopy?()
     }
 
+    func handleClipMergeCopy() {
+        onCopy?()
+    }
+
     func handleClipEdit() {
         onEdit?()
     }
@@ -63,6 +67,59 @@ extension FloatingCardRowView: ClipItemMenuActionable {
     func handleClipOpenWithDefaultApp() {
         guard let path = currentModel?.cachedFilePaths?.first else { return }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    // MARK: - Quick Transforms
+
+    func handleClipFormatJSON() {
+        guard let model = currentModel else { return }
+        switch QuickTransformService.formatJSON(model.plainText) {
+        case let .success(formatted):
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(formatted, forType: .string)
+            SoundManager.shared.play(.copy)
+            HUDManager.shared.show(
+                icon: NSImage(systemSymbolName: "curlybraces", accessibilityDescription: nil),
+                text: "JSON 已格式化并复制"
+            )
+        case .failure:
+            HUDManager.shared.show(
+                icon: NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil),
+                text: "JSON 解析错误，请检查语法"
+            )
+        }
+    }
+
+    private func handleClipConvertCase(_ style: QuickTransformService.CaseStyle) {
+        guard let model = currentModel else { return }
+        let converted = QuickTransformService.convertCase(model.plainText, to: style)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(converted, forType: .string)
+        SoundManager.shared.play(.copy)
+        HUDManager.shared.show(
+            icon: NSImage(systemSymbolName: "textformat", accessibilityDescription: nil),
+            text: "已转换为 \(style.rawValue) 并复制"
+        )
+    }
+
+    func handleClipConvertCamel() {
+        handleClipConvertCase(.camel)
+    }
+
+    func handleClipConvertPascal() {
+        handleClipConvertCase(.pascal)
+    }
+
+    func handleClipConvertSnake() {
+        handleClipConvertCase(.snake)
+    }
+
+    func handleClipConvertKebab() {
+        handleClipConvertCase(.kebab)
+    }
+
+    func handleClipConvertScreamingSnake() {
+        handleClipConvertCase(.screamingSnake)
     }
 }
 

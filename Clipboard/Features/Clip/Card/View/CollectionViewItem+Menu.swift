@@ -26,6 +26,23 @@ extension CollectionViewItem: ClipItemMenuActionable {
         delegate?.copy(model)
     }
 
+    func handleClipMergeCopy() {
+        if let paths = collectionView?.selectionIndexPaths, paths.count > 1 {
+            let items = paths.compactMap { (collectionView?.item(at: $0) as? CollectionViewItem)?.item }
+            if !items.isEmpty {
+                ClipActionService.shared.copyMultiple(items)
+                HUDManager.shared.show(
+                    icon: NSImage(systemSymbolName: "doc.on.doc.fill", accessibilityDescription: nil),
+                    text: "已合并复制 \(items.count) 项"
+                )
+                WindowManager.shared.dismiss()
+                return
+            }
+        }
+        guard let model = item else { return }
+        delegate?.copy(model)
+    }
+
     func handleClipEdit() {
         guard let model = item else { return }
         delegate?.edit(model)
@@ -73,6 +90,59 @@ extension CollectionViewItem: ClipItemMenuActionable {
     func handleClipOpenWithDefaultApp() {
         guard let path = item?.cachedFilePaths?.first else { return }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    // MARK: - Quick Transforms
+
+    func handleClipFormatJSON() {
+        guard let model = item else { return }
+        switch QuickTransformService.formatJSON(model.plainText) {
+        case let .success(formatted):
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(formatted, forType: .string)
+            SoundManager.shared.play(.copy)
+            HUDManager.shared.show(
+                icon: NSImage(systemSymbolName: "curlybraces", accessibilityDescription: nil),
+                text: "JSON 已格式化并复制"
+            )
+        case .failure:
+            HUDManager.shared.show(
+                icon: NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil),
+                text: "JSON 解析错误，请检查语法"
+            )
+        }
+    }
+
+    private func handleClipConvertCase(_ style: QuickTransformService.CaseStyle) {
+        guard let model = item else { return }
+        let converted = QuickTransformService.convertCase(model.plainText, to: style)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(converted, forType: .string)
+        SoundManager.shared.play(.copy)
+        HUDManager.shared.show(
+            icon: NSImage(systemSymbolName: "textformat", accessibilityDescription: nil),
+            text: "已转换为 \(style.rawValue) 并复制"
+        )
+    }
+
+    func handleClipConvertCamel() {
+        handleClipConvertCase(.camel)
+    }
+
+    func handleClipConvertPascal() {
+        handleClipConvertCase(.pascal)
+    }
+
+    func handleClipConvertSnake() {
+        handleClipConvertCase(.snake)
+    }
+
+    func handleClipConvertKebab() {
+        handleClipConvertCase(.kebab)
+    }
+
+    func handleClipConvertScreamingSnake() {
+        handleClipConvertCase(.screamingSnake)
     }
 }
 

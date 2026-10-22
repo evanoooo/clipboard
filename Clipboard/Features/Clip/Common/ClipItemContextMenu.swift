@@ -27,6 +27,7 @@ private final class ClipShareAction: NSObject {
     func handleClipPaste()
     func handleClipPastePlain()
     func handleClipCopy()
+    func handleClipMergeCopy()
     func handleClipEdit()
     func handleClipRename()
     func handleClipDelete()
@@ -37,6 +38,12 @@ private final class ClipShareAction: NSObject {
     func handleClipRevealInFinder()
     func handleClipOpenInBrowser()
     func handleClipOpenWithDefaultApp()
+    func handleClipFormatJSON()
+    func handleClipConvertCamel()
+    func handleClipConvertPascal()
+    func handleClipConvertSnake()
+    func handleClipConvertKebab()
+    func handleClipConvertScreamingSnake()
 }
 
 // MARK: - Default Menu Builder
@@ -97,6 +104,13 @@ extension ClipItemMenuActionable where Self: NSObject {
             keyEquivalent: "c",
             modifiers: .command
         ))
+        menu.addItem(makeMenuItem(
+            title: "合并复制",
+            symbol: "doc.on.doc.fill",
+            action: #selector(ClipItemMenuActionable.handleClipMergeCopy),
+            keyEquivalent: "C",
+            modifiers: [.command, .shift]
+        ))
         menu.addItem(.separator())
 
         if model.pasteboardType.isText() {
@@ -107,6 +121,21 @@ extension ClipItemMenuActionable where Self: NSObject {
                 keyEquivalent: "e",
                 modifiers: .command
             ))
+
+            // JSON 快捷格式化
+            if JSONTransformer.looksLikeJSON(model.plainText) {
+                menu.addItem(makeMenuItem(
+                    title: "格式化 JSON",
+                    symbol: "curlybraces",
+                    action: #selector(ClipItemMenuActionable.handleClipFormatJSON)
+                ))
+            }
+
+            // 变量命名风格转换子菜单（针对短文本/单行标识符）
+            let trimmed = model.plainText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, trimmed.count <= 200, !trimmed.contains("\n") {
+                menu.addItem(makeCaseTransformSubmenu())
+            }
         }
 
         menu.addItem(makeMenuItem(
@@ -140,7 +169,42 @@ extension ClipItemMenuActionable where Self: NSObject {
         return menu
     }
 
-    // MARK: - Item Factories
+    // MARK: - Submenu & Item Factories
+
+    private func makeCaseTransformSubmenu() -> NSMenuItem {
+        let parent = NSMenuItem(title: "转换命名风格", action: nil, keyEquivalent: "")
+        parent.image = NSImage(systemSymbolName: "textformat", accessibilityDescription: nil)
+        let submenu = NSMenu()
+
+        submenu.addItem(makeMenuItem(
+            title: "camelCase (小驼峰)",
+            symbol: "textformat.characters",
+            action: #selector(ClipItemMenuActionable.handleClipConvertCamel)
+        ))
+        submenu.addItem(makeMenuItem(
+            title: "PascalCase (大驼峰)",
+            symbol: "textformat.characters",
+            action: #selector(ClipItemMenuActionable.handleClipConvertPascal)
+        ))
+        submenu.addItem(makeMenuItem(
+            title: "snake_case (下划线)",
+            symbol: "textformat.characters",
+            action: #selector(ClipItemMenuActionable.handleClipConvertSnake)
+        ))
+        submenu.addItem(makeMenuItem(
+            title: "kebab-case (连字符)",
+            symbol: "textformat.characters",
+            action: #selector(ClipItemMenuActionable.handleClipConvertKebab)
+        ))
+        submenu.addItem(makeMenuItem(
+            title: "UPPER_CASE (常量大写)",
+            symbol: "textformat.characters",
+            action: #selector(ClipItemMenuActionable.handleClipConvertScreamingSnake)
+        ))
+
+        parent.submenu = submenu
+        return parent
+    }
 
     private func makeShareMenuItem(for model: PasteboardModel) -> NSMenuItem? {
         let items = model.shareableItems
@@ -149,9 +213,7 @@ extension ClipItemMenuActionable where Self: NSObject {
         guard !services.isEmpty else { return nil }
 
         let parent = NSMenuItem(title: String(localized: .share), action: nil, keyEquivalent: "")
-        if #available(macOS 26.0, *) {
-            parent.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
-        }
+        parent.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
 
         let submenu = NSMenu()
         for service in services {
@@ -183,18 +245,14 @@ extension ClipItemMenuActionable where Self: NSObject {
         item.keyEquivalentModifierMask = modifiers
         item.target = self
         if let symbol {
-            if #available(macOS 26.0, *) {
-                item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-            }
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         }
         return item
     }
 
     private func makePinMenuItem(for model: PasteboardModel) -> NSMenuItem {
         let parent = NSMenuItem(title: String(localized: .pin), action: nil, keyEquivalent: "")
-        if #available(macOS 26.0, *) {
-            parent.image = NSImage(systemSymbolName: "pin", accessibilityDescription: nil)
-        }
+        parent.image = NSImage(systemSymbolName: "pin", accessibilityDescription: nil)
 
         let submenu = NSMenu()
         let userChips = CategoryChipStore.shared.chips.filter { !$0.isSystem }
@@ -208,7 +266,7 @@ extension ClipItemMenuActionable where Self: NSObject {
             chipItem.target = self
             chipItem.tag = chip.id
             chipItem.state = model.group == chip.id ? .on : .off
-            chipItem.image = clipChipDotImage(color: chip.displayNSColor)
+            chipItem.image = clipChipDotImage(colorIndex: chip.colorIndex)
             submenu.addItem(chipItem)
         }
 
@@ -245,13 +303,6 @@ extension ClipItemMenuActionable where Self: NSObject {
 func clipChipDotImage(colorIndex: Int) -> NSImage {
     CategoryDotRenderer.image(
         colorIndex: colorIndex,
-        canvasSize: CategoryDotRenderer.diameter
-    )
-}
-
-func clipChipDotImage(color: NSColor) -> NSImage {
-    CategoryDotRenderer.image(
-        color: color,
         canvasSize: CategoryDotRenderer.diameter
     )
 }

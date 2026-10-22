@@ -211,6 +211,22 @@ extension ClipFloatingViewController {
     }
 
     private func commandKeyDown(_ event: NSEvent) -> NSEvent? {
+        // 支持 ⌘ + ⇧ + C 一键合并复制多选条目
+        if event.modifierFlags.contains(.command),
+           event.modifierFlags.contains(.shift),
+           event.keyCode == KeyCode.c {
+            let historyView = floatingContentView.historyView
+            let items = historyView.selectedModels
+            guard !items.isEmpty else { return nil }
+            ClipActionService.shared.copyMultiple(items)
+            HUDManager.shared.show(
+                icon: NSImage(systemSymbolName: "doc.on.doc.fill", accessibilityDescription: nil),
+                text: "已合并复制 \(items.count) 项"
+            )
+            WindowManager.shared.dismiss()
+            return nil
+        }
+
         guard event.modifierFlags.isDisjoint(with: [.option, .control, .shift]) else { return event }
 
         let historyView = floatingContentView.historyView

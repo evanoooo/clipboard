@@ -245,6 +245,13 @@ extension ClipMainViewController {
     private func handleCommandKeyEvent(_ event: NSEvent) -> NSEvent? {
         guard focusRegion == .collection else { return event }
 
+        // 支持 ⌘ + ⇧ + C 一键合并复制多项
+        if event.modifierFlags.contains(.command),
+           event.modifierFlags.contains(.shift),
+           event.keyCode == KeyCode.c {
+            return handleMergeCopy()
+        }
+
         guard event.modifierFlags.isDisjoint(with: [
             .option, .control, .shift
         ]) else {
@@ -277,6 +284,18 @@ extension ClipMainViewController {
     /// ⌘Z：撤销会话内最近一次删除。文本编辑区域不拦截，交给系统文本撤销。
     private func handleUndo() -> NSEvent? {
         ClipUndoExecutor.performUndo()
+        return nil
+    }
+
+    private func handleMergeCopy() -> NSEvent? {
+        let items = selectedModels
+        guard !items.isEmpty else { return nil }
+        ClipActionService.shared.copyMultiple(items)
+        HUDManager.shared.show(
+            icon: NSImage(systemSymbolName: "doc.on.doc.fill", accessibilityDescription: nil),
+            text: "已合并复制 \(items.count) 项"
+        )
+        WindowManager.shared.dismiss()
         return nil
     }
 
