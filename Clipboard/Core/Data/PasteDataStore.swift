@@ -17,6 +17,21 @@ final class PasteDataStore {
     let pageSize = 50
     /// 搜索模式下条目统计截断阈值（展示 500+）
     static let filteredCountCap = 500
+
+    @MainActor
+    func trimExcessMemory() {
+        guard !WindowManager.shared.isVisible else { return }
+        if dataList.value.count > pageSize {
+            dataList.value = Array(dataList.value.prefix(pageSize))
+            hasMoreData = true
+            lastRequestedPage = 0
+            pageIndex = 0
+        }
+        for model in dataList.value {
+            model.cachedHighlightedCode = nil
+            model.cachedPlainTextAttributedString = nil
+        }
+    }
     /// 截断扫描查询行数上限（达到 501 即可提前终止）
     static let countScanLimit = filteredCountCap + 1
 

@@ -35,10 +35,22 @@ final class WindowManager {
         return DisplayMode(rawValue: rawValue) ?? .drawer
     }
 
+    private var idleTrimTask: Task<Void, Never>?
+
+    private func scheduleIdleMemoryTrim() {
+        idleTrimTask?.cancel()
+        idleTrimTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 分钟闲置
+            guard !Task.isCancelled, !self.isVisible else { return }
+            PasteDataStore.main.trimExcessMemory()
+        }
+    }
+
     func toggleWindow(
         frame: NSRect? = nil,
         _ completionHandler: (@MainActor @Sendable () -> Void)? = nil
     ) {
+        idleTrimTask?.cancel()
         switch displayMode {
         case .drawer:
             dismissFloatingIfNeeded()
@@ -51,6 +63,7 @@ final class WindowManager {
 
     /// 幂等隐藏窗口，用于 Esc 退出、点击外部或操作完成关闭场景（避免 toggleWindow 造成竞态反向打开）
     func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
+        scheduleIdleMemoryTrim()
         switch displayMode {
         case .drawer:
             drawerController.dismiss(completionHandler)
