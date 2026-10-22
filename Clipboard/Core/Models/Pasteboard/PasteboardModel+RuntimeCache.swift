@@ -27,7 +27,6 @@ struct PasteboardModelRuntimeCache {
     var needsBottomMask: Bool?
     var thumbnailLoadTask: Task<NSImage?, Never>?
     var linkMetadata: LinkPreviewMetadata?
-    var isMarkdown: Bool?
     var codeDetectionState: CodeDetectionState = .uncomputed
 }
 
@@ -95,11 +94,6 @@ extension PasteboardModel {
     var cachedLinkMetadata: LinkPreviewMetadata? {
         get { runtimeCache.linkMetadata }
         set { runtimeCache.linkMetadata = newValue }
-    }
-
-    var cachedIsMarkdown: Bool? {
-        get { runtimeCache.isMarkdown }
-        set { runtimeCache.isMarkdown = newValue }
     }
 
     /// 嗅探并缓存纯文本代码语言（如 Nginx、Swift、JSON 等）

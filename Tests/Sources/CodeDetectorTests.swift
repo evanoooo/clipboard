@@ -143,7 +143,35 @@ enum CodeDetectorTests {
         runner.assertTrue(longPython.count > 20_000, "Long python source should exceed the previous 20k cap")
         runner.assertEqual(CodeLanguageDetector.detect(Data(longPython.utf8)), .python, "Long python source must be detected from raw data")
 
-        // 13. Display name verification
+        // 13. 解释器内联调用：外层是 shell 命令，内层源码没有可判别的头部信号
+        let inlinePythonCommand = """
+        python3 -c "
+        import sqlite3, shutil
+
+        # 1. 打开数据库并强制把 WAL 模式转为单文件 DELETE 模式
+        conn = sqlite3.connect('out.sqlite3')
+        check = conn.execute('PRAGMA integrity_check;').fetchone()[0]
+        print(f'数据库完整性检查: {check}')
+        "
+        """
+        runner.assertEqual(CodeLanguageDetector.detect(inlinePythonCommand), .bash, "python3 -c command must be detected as Shell")
+
+        // 14. 去掉命令行外壳后，纯 Python 片段靠普通 import 命中
+        let pythonBody = """
+        import sqlite3, shutil
+
+        # 1. 打开数据库并强制把 WAL 模式转为单文件 DELETE 模式
+        conn = sqlite3.connect('out.sqlite3')
+        check = conn.execute('PRAGMA integrity_check;').fetchone()[0]
+        print(f'数据库完整性检查: {check}')
+        """
+        runner.assertEqual(CodeLanguageDetector.detect(pythonBody), .python, "Plain import statement must be detected as Python")
+
+        // 15. 新增规则不应把普通说明文字误判
+        runner.assertTrue(CodeLanguageDetector.detect("python3 3.11 的新特性") == nil, "Prose starting with python3 must not be detected as Shell")
+        runner.assertTrue(CodeLanguageDetector.detect("import 导入模块的三种写法") == nil, "Prose starting with import must not be detected as Python")
+
+        // 16. Display name verification
         runner.assertEqual(CodeLanguage.bash.displayName, "Shell", "Bash display name should be Shell")
         runner.assertEqual(CodeLanguage.nginx.displayName, "Nginx", "Nginx display name should be Nginx")
         runner.assertEqual(CodeLanguage.swift.displayName, "Swift", "Swift display name should be Swift")

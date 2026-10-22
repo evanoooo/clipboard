@@ -42,7 +42,6 @@ final class TestRunner {
         FilterStateTests.run(runner: TestRunner.self)
         PaginationTests.run(runner: TestRunner.self)
         ClipContentRendererTests.run(runner: TestRunner.self)
-        MarkdownDetectorTests.run(runner: TestRunner.self)
         CodeDetectorTests.run(runner: TestRunner.self)
         CodeHighlighterTests.run(runner: TestRunner.self)
         CodePerformanceTests.run(runner: TestRunner.self)

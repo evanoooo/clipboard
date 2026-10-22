@@ -100,7 +100,10 @@ final class ClipPreviewPopover: NSPopover {
     static let chrome: CGFloat = 24 + Const.space8 + Const.space8 + 24 + Const.space12 * 2
 
     /// 根据 model 类型计算 Popover 的最佳尺寸，maxHeight 由调用侧传入可用屏幕高度
-    static func fitSize(for model: PasteboardModel, maxHeight: CGFloat = Const.maxPreviewHeight) -> NSSize {
+    static func fitSize(
+        for model: PasteboardModel,
+        maxHeight: CGFloat = Const.maxPreviewHeight
+    ) -> NSSize {
         let cap = min(Const.maxPreviewHeight, maxHeight)
         let contentMaxH = max(cap - chrome, 0)
         let measuredText = measuredTextIfNeeded(for: model)

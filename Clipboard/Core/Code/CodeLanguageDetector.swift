@@ -9,7 +9,7 @@ import Foundation
 
 /// 从纯文本判定代码语言。
 ///
-/// 设计原则与 `PasteboardModel.detectMarkdown` 一致：命中强特征直接定语言，
+/// 设计原则与 `MarkdownDetector.detect` 一致：命中强特征直接定语言，
 /// 普通特征按权重累计，低于阈值视为噪声，避免把普通文字、URL、
 /// 中英混排的便签误判成代码。
 nonisolated enum CodeLanguageDetector {
@@ -24,8 +24,8 @@ nonisolated enum CodeLanguageDetector {
     private static let threshold = 3
     /// 只分析开头若干字符：导入、包名、shebang 等判别信号集中在片段头部
     private static let analysisLimit = 2_000
-    /// 解码窗口：足以覆盖 `analysisLimit`（按 4 字节标量计），避免为识别解码整段超长文本
-    private static let sampleByteLimit = 8_192
+    /// 解码窗口：按 UTF-8 单标量最多 4 字节估算，避免为识别解码整段超长文本
+    private static let sampleByteLimit = analysisLimit * 4
 
     /// 从 UTF-8 原文判定语言。
     /// 只解码开头部分，调用方可以放心传入整段内容。
@@ -110,6 +110,7 @@ nonisolated enum CodeLanguageDetector {
         ],
         .python: [
             .init(pattern: #"(?m)^#![^\n]*\bpython[0-9.]*\b"#, weight: 8),
+            .init(pattern: #"(?m)^\s*import\s+[A-Za-z_][A-Za-z0-9_.]*(?:\s+as\s+[A-Za-z_][A-Za-z0-9_]*)?(?:\s*,\s*[A-Za-z_][A-Za-z0-9_.]*)*\s*$"#, weight: 5),
             .init(pattern: #"(?m)^\s*(?:async\s+)?def\s+\w+\s*\([^)]*\)\s*(?:->[^:]+)?:"#, weight: 5),
             .init(pattern: #"(?m)^\s*from\s+[\w.]+\s+import\s+"#, weight: 5),
             .init(pattern: #"(?m)^\s*class\s+\w+\s*(?:\([\w.,\s]*\))?\s*:"#, weight: 4),
@@ -211,6 +212,8 @@ nonisolated enum CodeLanguageDetector {
         ],
         .bash: [
             .init(pattern: #"(?m)^#!\s*\/(?:usr\/)?bin\/(?:env\s+)?(?:ba|z|fi|a)?sh\b"#, weight: 8),
+            // 解释器内联调用（python3 -c "..."、node -e "..."）：外层是命令，内层源码不一定有语言特征
+            .init(pattern: #"(?m)^\s*(?:sudo\s+)?(?:python3?|node|ruby|perl|deno|bun)\s+(?:-[A-Za-z]|\S+\.(?:py|js|mjs|cjs|ts|rb|pl|sh)\b)"#, weight: 7),
             .init(pattern: #"(?m)^\s*\$\s+[a-z][\w-]*\b"#, weight: 5),
             .init(pattern: #"(?m)^\s*(?:sudo\s+)?(?:brew|docker|kubectl|git|chmod|chown|npm|yarn|pnpm|cargo|pip3?|apt|apt-get|curl|wget)\s+\S"#, weight: 4),
             .init(pattern: #"(?m)^\s*if\s+(?:\[\[?|test\b)"#, weight: 5),

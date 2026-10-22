@@ -85,9 +85,6 @@ final class ClipPreviewContentView: NSView {
     }
 
     static func measuringAttributedString(for model: PasteboardModel) -> NSAttributedString {
-        if model.usesMarkdownPreview {
-            return MarkdownAttributedRenderer.renderSync(model.markdownSource)
-        }
         if model.type == .rich {
             return NSAttributedString(with: model.data, type: model.pasteboardType)
                 ?? model.attributeString
@@ -97,17 +94,6 @@ final class ClipPreviewContentView: NSView {
             return CodeHighlighter.highlight(source, language: language, theme: CodeTheme(fontSize: NSFont.systemFontSize))
         }
         return model.attributeString
-    }
-
-    var isMarkdownContent: Bool {
-        currentContentView is PreviewMarkdownView
-    }
-
-    func toggleMarkdownMode() -> Bool {
-        guard let markdownView = currentContentView as? PreviewMarkdownView else {
-            return true
-        }
-        return markdownView.toggleRendered()
     }
 
     private static func textContentHeight(
@@ -158,11 +144,7 @@ final class ClipPreviewContentView: NSView {
                 PreviewTextContentView(model: model)
             }
         case .string, .rich:
-            if model.usesMarkdownPreview {
-                PreviewMarkdownView(model: model)
-            } else {
-                PreviewTextContentView(model: model)
-            }
+            PreviewTextContentView(model: model)
         case .none:
             PreviewEmptyView()
         }
