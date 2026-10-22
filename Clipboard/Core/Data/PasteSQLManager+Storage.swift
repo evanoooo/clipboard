@@ -2,7 +2,7 @@
 //  PasteSQLManager+Storage.swift
 //  Clipboard
 //
-//  存储健康与空间占用深度分析、用户自主批量清理与 Vacuum 碎片整理
+//  存储健康分析、类型分布统计与大项排查
 //
 
 import AppKit
@@ -10,93 +10,118 @@ import Foundation
 import SQLite
 
 extension PasteSQLManager {
-    /// 获取 SQLite 物理磁盘占用与碎片空洞统计
+    /// 统计 SQLite 物理磁盘占用与碎片状态
     func getStorageDiskUsage() -> StorageDiskUsage {
+        let fm = FileManager.default
         let dbPath = Self.databasePath
         let walPath = dbPath + "-wal"
         let shmPath = dbPath + "-shm"
-        let fm = FileManager.default
 
-        let dbBytes = (try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0
+        let mainDbBytes = (try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0
         let walBytes = (try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0
         let shmBytes = (try? fm.attributesOfItem(atPath: shmPath)[.size] as? Int64) ?? 0
-        let totalDisk = dbBytes + walBytes + shmBytes
+        let totalDiskBytes = mainDbBytes + walBytes + shmBytes
 
-        let pageSize = (try? connection?.scalar("PRAGMA page_size") as? Int64) ?? 4096
-        let freeListCount = (try? connection?.scalar("PRAGMA freelist_count") as? Int64) ?? 0
-        let reclaimable = freeListCount * pageSize
+        var reclaimableFreeBytes: Int64 = 0
+        var totalItemCount: Int = 0
 
-        let totalCount = (try? connection?.scalar(table.count)) ?? 0
+        guard let connection else {
+            return StorageDiskUsage(
+                mainDbBytes: mainDbBytes,
+                walBytes: walBytes,
+                shmBytes: shmBytes,
+                totalDiskBytes: totalDiskBytes,
+                reclaimableFreeBytes: 0,
+                totalItemCount: 0
+            )
+        }
+
+        do {
+            // 获取 freelist_count (空闲碎片页数) 和 page_size (页大小)
+            var pageSize: Int64 = 4096
+            var freelistCount: Int64 = 0
+
+            if let pageStmt = try? connection.prepare("PRAGMA page_size"),
+               let row = pageStmt.makeIterator().next() {
+                pageSize = (row[0] as? Int64) ?? 4096
+            }
+
+            if let freeStmt = try? connection.prepare("PRAGMA freelist_count"),
+               let row = freeStmt.makeIterator().next() {
+                freelistCount = (row[0] as? Int64) ?? 0
+            }
+
+            reclaimableFreeBytes = freelistCount * pageSize
+
+            // 统计条目总数
+            if let countStmt = try? connection.prepare("SELECT COUNT(*) FROM Clip"),
+               let row = countStmt.makeIterator().next() {
+                totalItemCount = Int((row[0] as? Int64) ?? 0)
+            }
+        }
 
         return StorageDiskUsage(
-            mainDbBytes: dbBytes,
+            mainDbBytes: mainDbBytes,
             walBytes: walBytes,
             shmBytes: shmBytes,
-            totalDiskBytes: totalDisk,
-            reclaimableFreeBytes: reclaimable,
-            totalItemCount: totalCount
+            totalDiskBytes: totalDiskBytes,
+            reclaimableFreeBytes: reclaimableFreeBytes,
+            totalItemCount: totalItemCount
         )
     }
 
-    /// 获取按类型分布的体积占比
+    /// 获取按数据类型的占用空间分布
     func getStorageTypeProportions() -> [StorageTypeProportion] {
         guard let connection else { return [] }
-        var list: [StorageTypeProportion] = []
+        var proportions: [StorageTypeProportion] = []
+
         let sql = """
-            SELECT type, count(*), COALESCE(SUM(LENGTH(data)), 0)
+            SELECT type, COUNT(*) AS count, COALESCE(SUM(LENGTH(data)), 0) AS total_bytes
             FROM Clip
             GROUP BY type
-            ORDER BY SUM(LENGTH(data)) DESC
+            ORDER BY total_bytes DESC
         """
+
         do {
             let stmt = try connection.prepare(sql)
             for row in stmt {
-                let typeStr = (row[0] as? String) ?? "unknown"
+                guard let rawType = row[0] as? String else { continue }
                 let count = Int((row[1] as? Int64) ?? 0)
-                let bytes = (row[2] as? Int64) ?? 0
-                guard bytes > 0 else { continue }
+                let totalBytes = (row[2] as? Int64) ?? 0
 
-                let (displayName, color) = Self.typeMetadata(for: typeStr)
+                let (displayName, color) = self.metadataForType(rawType)
 
-                list.append(StorageTypeProportion(
-                    typeName: typeStr,
+                proportions.append(StorageTypeProportion(
+                    typeName: rawType,
                     displayName: displayName,
                     count: count,
-                    totalBytes: bytes,
+                    totalBytes: totalBytes,
                     color: color
                 ))
             }
         } catch {
             log.error("Failed to query storage type proportions: \(error)")
         }
-        return list
+
+        return proportions
     }
 
-    /// 类型友好名称与现代色谱映射
-    nonisolated static func typeMetadata(for typeStr: String) -> (displayName: String, color: NSColor) {
+    private func metadataForType(_ typeStr: String) -> (displayName: String, color: NSColor) {
         let lower = typeStr.lowercased()
-        if lower.contains("png") {
-            return ("PNG 图片", NSColor(red: 0.58, green: 0.32, blue: 0.88, alpha: 1.0)) // 现代紫
-        } else if lower.contains("tiff") {
-            return ("TIFF 截图", NSColor(red: 0.84, green: 0.22, blue: 0.72, alpha: 1.0)) // 亮品红
-        } else if lower.contains("jpeg") || lower.contains("jpg") {
-            return ("JPEG 照片", NSColor(red: 0.70, green: 0.38, blue: 0.98, alpha: 1.0)) // 兰花紫
-        } else if lower.contains("image") {
-            return ("图片", NSColor(red: 0.65, green: 0.30, blue: 0.85, alpha: 1.0))
+        if lower.contains("png") || lower.contains("tiff") || lower.contains("jpeg") || lower.contains("jpg") || lower.contains("image") {
+            return ("图片", NSColor(red: 0.65, green: 0.38, blue: 0.95, alpha: 1.0)) // 紫色
+        } else if lower.contains("rtf") || lower.contains("html") || lower == "rich" {
+            return ("富文本", NSColor(red: 0.20, green: 0.50, blue: 0.98, alpha: 1.0)) // 科技蓝
         } else if lower.contains("utf8") || lower.contains("text") || lower == "string" {
-            return ("纯文本", NSColor(red: 0.18, green: 0.68, blue: 0.78, alpha: 1.0)) // 活力青
-        } else if lower.contains("rtf") {
-            return ("RTF 富文本", NSColor(red: 0.12, green: 0.45, blue: 0.95, alpha: 1.0)) // 科技蓝
-        } else if lower.contains("html") {
-            return ("HTML 网页", NSColor(red: 0.22, green: 0.58, blue: 0.98, alpha: 1.0)) // 天蓝
+            return ("纯文本", NSColor(red: 0.22, green: 0.74, blue: 0.85, alpha: 1.0)) // 青蓝
         } else if lower.contains("file") {
-            return ("文件路径", NSColor(red: 0.95, green: 0.62, blue: 0.10, alpha: 1.0)) // 琥珀金
+            return ("文件", NSColor(red: 0.98, green: 0.60, blue: 0.20, alpha: 1.0)) // 暖橙
         } else if lower.contains("url") || lower.contains("link") {
             return ("链接", NSColor(red: 0.20, green: 0.78, blue: 0.45, alpha: 1.0)) // 翠绿
         } else if lower.contains("color") {
             return ("颜色值", NSColor(red: 0.98, green: 0.35, blue: 0.48, alpha: 1.0)) // 珊瑚粉
         } else {
-            return (typeStr.capitalized, NSColor(red: 0.55, green: 0.58, blue: 0.62, alpha: 1.0)) // 优雅雅灰
+            return (typeStr.capitalized, NSColor(red: 0.55, green: 0.58, blue: 0.62, alpha: 1.0)) // 优雅灰
         }
     }
 
@@ -108,18 +133,37 @@ extension PasteSQLManager {
         var whereClause = "WHERE 1=1"
         let nowSec = Int64(Date().timeIntervalSince1970)
         let thirtyDaysAgoSec = nowSec - (30 * 24 * 60 * 60)
-        let thirtyDaysAgoMs = thirtyDaysAgoSec * 1000
+        let ninetyDaysAgoSec = nowSec - (90 * 24 * 60 * 60)
+        let sixMonthsAgoSec = nowSec - (180 * 24 * 60 * 60)
 
         switch filter {
         case .all:
             break
+        case .oneMonthUnstarredImages:
+            // 30天前（1 个月前），未加入任何分类标签或加星 (group == -1 或 group IS NULL)
+            whereClause += """
+             AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') \
+            AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(thirtyDaysAgoSec)) \
+            AND (`group` IS NULL OR `group` = -1)
+            """
+        case .threeMonthsUnstarredImages:
+            // 90天前（约3 个月前），未加入任何分类标签或加星 (group == -1 或 group IS NULL)
+            whereClause += """
+             AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') \
+            AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(ninetyDaysAgoSec)) \
+            AND (`group` IS NULL OR `group` = -1)
+            """
+        case .sixMonthsUnstarredImages:
+            // 180天前（约6 个月前），未加入任何分类标签或加星 (group == -1 或 group IS NULL)
+            whereClause += """
+             AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') \
+            AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(sixMonthsAgoSec)) \
+            AND (`group` IS NULL OR `group` = -1)
+            """
         case .largeImages:
-            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND LENGTH(data) > 5242880"
-        case .oldUnstarredImages:
-            // 兼容秒级 (10位) 或毫秒级 (13位) 时间戳，未加入任何分类标签或加星 (group == -1)
-            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND ((timestamp < \(thirtyDaysAgoSec) AND timestamp < 10000000000) OR timestamp < \(thirtyDaysAgoMs)) AND (`group` IS NULL OR `group` = -1)"
+            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND LENGTH(data) > 5000000"
         case .largeRichText:
-            whereClause += " AND (tag = 'rich' OR type LIKE '%rtf%' OR type LIKE '%html%') AND LENGTH(data) > 1048576"
+            whereClause += " AND (tag = 'rich' OR type LIKE '%rtf%' OR type LIKE '%html%') AND LENGTH(data) > 1000000"
         }
 
         let sql = """
@@ -207,5 +251,77 @@ extension PasteSQLManager {
             + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
 
         return (beforeBytes, afterBytes)
+    }
+
+    // MARK: - 软配额老化与智能淘汰引擎
+
+    /// 统计符合当前软配额老化策略的待淘汰条目数与预估释放字节数
+    func getEvictionCandidates(policy: SoftQuotaAgingPolicy) -> (count: Int, bytes: Int64) {
+        guard let connection else { return (0, 0) }
+        let nowSec = Int64(Date().timeIntervalSince1970)
+        let cutoffSec = nowSec - Int64(policy.days * 86400)
+
+        let sql = """
+            SELECT COUNT(*), COALESCE(SUM(LENGTH(data)), 0) FROM Clip
+            WHERE (`group` IS NULL OR `group` = -1)
+              AND (tag IS NULL OR tag = '' OR lower(tag) IN ('image', 'rich', 'string', 'file', 'link', 'color', 'unknown'))
+              AND (lower(type) LIKE '%image%' OR lower(type) LIKE '%png%' OR lower(type) LIKE '%tiff%' OR lower(type) LIKE '%jpeg%' OR lower(type) LIKE '%jpg%')
+              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
+        """
+
+        do {
+            let stmt = try connection.prepare(sql)
+            if let row = stmt.makeIterator().next() {
+                let count = Int((row[0] as? Int64) ?? 0)
+                let bytes = (row[1] as? Int64) ?? 0
+                return (count, bytes)
+            }
+        } catch {
+            log.error("Failed to calculate eviction candidates: \(error)")
+        }
+        return (0, 0)
+    }
+
+    /// 执行智能淘汰瘦身：安全删除符合老化条件的未收藏旧图，并自动整理碎片
+    func performAutoEviction(policy: SoftQuotaAgingPolicy, maxBytesToFree: Int64? = nil) -> Int64 {
+        guard let connection else { return 0 }
+        let nowSec = Int64(Date().timeIntervalSince1970)
+        let cutoffSec = nowSec - Int64(policy.days * 86400)
+
+        let querySql = """
+            SELECT id, LENGTH(data) FROM Clip
+            WHERE (`group` IS NULL OR `group` = -1)
+              AND (tag IS NULL OR tag = '' OR lower(tag) IN ('image', 'rich', 'string', 'file', 'link', 'color', 'unknown'))
+              AND (lower(type) LIKE '%image%' OR lower(type) LIKE '%png%' OR lower(type) LIKE '%tiff%' OR lower(type) LIKE '%jpeg%' OR lower(type) LIKE '%jpg%')
+              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
+            ORDER BY timestamp ASC
+        """
+
+        var idsToDelete: [Int64] = []
+        var totalBytesFreed: Int64 = 0
+
+        do {
+            let stmt = try connection.prepare(querySql)
+            for row in stmt {
+                guard let id = row[0] as? Int64 else { continue }
+                let bytes = (row[1] as? Int64) ?? 0
+                idsToDelete.append(id)
+                totalBytesFreed += bytes
+
+                if let maxBytes = maxBytesToFree, totalBytesFreed >= maxBytes {
+                    break
+                }
+            }
+
+            if !idsToDelete.isEmpty {
+                _ = deleteStorageItems(ids: idsToDelete)
+                _ = try? vacuumDatabase()
+                log.info("Auto eviction completed: evicted \(idsToDelete.count) items, freed \(totalBytesFreed) bytes")
+            }
+        } catch {
+            log.error("Failed to perform auto eviction: \(error)")
+        }
+
+        return totalBytesFreed
     }
 }

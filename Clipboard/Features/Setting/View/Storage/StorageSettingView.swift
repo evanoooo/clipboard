@@ -23,6 +23,11 @@ struct StorageSettingView: View {
     @State private var alertTitle = ""
     @State private var alertMessage = ""
 
+    // 软配额配置状态
+    @State private var selectedQuotaThreshold: Int64 = PasteUserDefaults.softQuotaBytes
+    @State private var selectedAgingPolicy: String = PasteUserDefaults.softQuotaAgingPolicy
+    @State private var enableIdleAutoMaintenance: Bool = PasteUserDefaults.enableIdleAutoMaintenance
+
     private let db = PasteDataStore.main
 
     var body: some View {
@@ -61,12 +66,180 @@ struct StorageSettingView: View {
                 .padding(.vertical, Const.space4)
                 .settingsStyle()
 
+                // MARK: - 智能软配额与自动维护
+                VStack(alignment: .leading, spacing: Const.space12) {
+                    VStack(alignment: .leading, spacing: Const.space2) {
+                        Text("智能软配额与自动维护")
+                            .font(.headline)
+                            .bold()
+                        Text("设定弹性容量警戒线，超额时智能识别陈旧临时大图，绝不误删重要内容。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // 水位健康度彩色进度胶囊
+                    if let quota = storageService.quotaStatus, quota.isEnabled {
+                        VStack(spacing: Const.space6) {
+                            HStack {
+                                HStack(spacing: 4) {
+                                    Text("当前占用")
+                                        .foregroundStyle(.secondary)
+                                    Text(quota.formattedCurrent)
+                                        .bold()
+                                        .foregroundStyle(quota.isExceeded ? Color.red : (quota.isWarning ? Color.orange : Color.primary))
+                                }
+                                .font(.caption)
+
+                                Spacer()
+
+                                HStack(spacing: 4) {
+                                    Text(quota.isExceeded ? "已超出警戒线" : "软配额上限")
+                                        .foregroundStyle(quota.isExceeded ? Color.red : Color.secondary)
+                                    Text("\(quota.formattedQuota) (\(Int(min(quota.ratio, 9.99) * 100))%)")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .font(.caption)
+                            }
+
+                            GeometryReader { g in
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.secondary.opacity(0.15))
+                                    Capsule()
+                                        .fill(quota.isExceeded ? Color.red : (quota.isWarning ? Color.orange : Color.accentColor))
+                                        .frame(width: max(min(CGFloat(quota.ratio) * g.size.width, g.size.width), 4))
+                                }
+                            }
+                            .frame(height: 6)
+                        }
+                        .padding(.vertical, Const.space2)
+                    }
+
+                    // 智能瘦身建议条（当发现有符合老化条件的旧图时）
+                    if let quota = storageService.quotaStatus, quota.candidateItemCount > 0 {
+                        HStack(spacing: Const.space10) {
+                            Image(systemName: "lightbulb.max.fill")
+                                .font(.title3)
+                                .foregroundStyle(.orange)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("发现 \(quota.candidateItemCount) 项陈旧临时大图")
+                                    .font(.callout)
+                                    .bold()
+                                Text("预计可安全释放 \(quota.formattedCandidateFreed) 空间（加星收藏、分类标签与纯文本 100% 免疫）")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button("查看并清理") {
+                                showInspector = true
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(storageService.isEvicting)
+
+                            Button {
+                                performRecommendedEviction()
+                            } label: {
+                                if storageService.isEvicting {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Text("一键瘦身")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(storageService.isEvicting)
+                        }
+                        .padding(Const.space12)
+                        .background(Color.orange.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    Divider()
+
+                    // 配额警戒线选择
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("容量警戒线")
+                                .font(.callout)
+                            Text("超出该容量时激活智能建议，不影响新内容复制")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $selectedQuotaThreshold) {
+                            ForEach(SoftQuotaThreshold.allCases) { threshold in
+                                Text(threshold.displayName).tag(threshold.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 160)
+                        .onChange(of: selectedQuotaThreshold) { _, newValue in
+                            PasteUserDefaults.softQuotaBytes = newValue
+                            PasteUserDefaults.enableSoftQuota = newValue > 0
+                            Task {
+                                await storageService.refreshQuotaStatus()
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // 老化排查范围选择
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("老化排查范围")
+                                .font(.callout)
+                            Text("仅对该期限之前且未加星收藏的图片进行淘汰审查")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $selectedAgingPolicy) {
+                            ForEach(SoftQuotaAgingPolicy.allCases) { policy in
+                                Text(policy.displayName).tag(policy.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 210)
+                        .onChange(of: selectedAgingPolicy) { _, newValue in
+                            PasteUserDefaults.softQuotaAgingPolicy = newValue
+                            Task {
+                                await storageService.refreshQuotaStatus()
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    // 系统空闲时自动维护瘦身
+                    Toggle(isOn: $enableIdleAutoMaintenance) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("系统空闲时自动维护瘦身")
+                                .font(.callout)
+                            Text("在 Mac 闲置期间以最低能耗在后台安全清理未收藏旧图，并整理碎片空间。")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .onChange(of: enableIdleAutoMaintenance) { _, newValue in
+                        PasteUserDefaults.enableIdleAutoMaintenance = newValue
+                    }
+                }
+                .padding(.horizontal, Const.space16)
+                .padding(.vertical, Const.space12)
+                .settingsStyle()
+
                 // MARK: - 空间透视与自主整理
                 VStack(alignment: .leading, spacing: 0) {
                     DataActionRow(
-                        title: "分析空间占用...",
-                        subtitle: "按体积大小查看 Top 大项，由您自主勾选清理大图、富文本等旧历史",
-                        buttonTitle: "深度分析",
+                        title: "空间透视与批量管理",
+                        subtitle: "按类型分类透视前 100 个大文件，提供大图悬浮预览与安全批量清理",
+                        buttonTitle: "打开透视器",
                         isLoading: false
                     ) {
                         showInspector = true
@@ -75,9 +248,9 @@ struct StorageSettingView: View {
                     Divider()
 
                     DataActionRow(
-                        title: "压缩数据库 (Vacuum)",
-                        subtitle: "整理数据库碎片，将已删除的碎片空洞物理归还给 macOS 系统",
-                        buttonTitle: "立即压缩",
+                        title: "压缩整理数据库 (VACUUM)",
+                        subtitle: "回收删除条目后遗留的碎片空洞，释放物理磁盘占用",
+                        buttonTitle: "立即整理",
                         isLoading: isVacuuming
                     ) {
                         vacuumDatabase()
@@ -86,11 +259,7 @@ struct StorageSettingView: View {
                 .padding(.horizontal, Const.space16)
                 .settingsStyle()
 
-                // MARK: - 备份与还原
-                Text(.storageBackupTitle)
-                    .font(.headline)
-                    .bold()
-
+                // MARK: - 备份与恢复
                 VStack(alignment: .leading, spacing: 0) {
                     DataActionRow(
                         title: String(localized: .storageExportTitle),
@@ -135,6 +304,9 @@ struct StorageSettingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             totalCount = await PasteSQLManager.manager.getTotalCount()
+            selectedQuotaThreshold = PasteUserDefaults.softQuotaBytes
+            selectedAgingPolicy = PasteUserDefaults.softQuotaAgingPolicy
+            enableIdleAutoMaintenance = PasteUserDefaults.enableIdleAutoMaintenance
             await storageService.refreshDiskUsage()
         }
         .sheet(isPresented: $showInspector) {
@@ -144,6 +316,25 @@ struct StorageSettingView: View {
             Button(.commonConfirm, role: .cancel) {}
         } message: {
             Text(alertMessage)
+        }
+    }
+
+    // MARK: - 执行智能瘦身
+
+    private func performRecommendedEviction() {
+        Task {
+            do {
+                let freed = try await storageService.applyRecommendedEviction()
+                let freedStr = ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+                totalCount = await PasteSQLManager.manager.getTotalCount()
+                alertTitle = "瘦身完成"
+                alertMessage = "已安全清理未收藏临时旧图，共释放 \(freedStr) 数据。加星收藏与纯文本记录完好无损。"
+                showAlert = true
+            } catch {
+                alertTitle = "操作失败"
+                alertMessage = error.localizedDescription
+                showAlert = true
+            }
         }
     }
 

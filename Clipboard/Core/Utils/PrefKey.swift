@@ -67,6 +67,14 @@ enum PrefKey: String, CaseIterable {
     case appLanguage
     /// 已完成首次启动欢迎页
     case welcomeDone
+    /// 存储智能软配额开关
+    case enableSoftQuota
+    /// 软配额字节上限（默认 500MB）
+    case softQuotaBytes
+    /// 软配额老化策略
+    case softQuotaAgingPolicy
+    /// 空闲时自动维护瘦身
+    case enableIdleAutoMaintenance
 }
 
 /// 应用语言

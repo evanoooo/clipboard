@@ -11,7 +11,7 @@ import SwiftUI
 
 // MARK: - 存储用量与健康统计
 
-struct StorageDiskUsage: Sendable, Equatable {
+nonisolated struct StorageDiskUsage: Sendable, Equatable {
     let mainDbBytes: Int64
     let walBytes: Int64
     let shmBytes: Int64
@@ -54,7 +54,7 @@ struct StorageTypeProportion: Sendable, Identifiable, Equatable {
 
 // MARK: - 单条大文件元数据摘要
 
-struct StorageItemSummary: Sendable, Identifiable, Equatable {
+nonisolated struct StorageItemSummary: Sendable, Identifiable, Equatable {
     let id: Int64
     let uniqueId: String
     let type: String
@@ -138,11 +138,91 @@ struct StorageItemSummary: Sendable, Identifiable, Equatable {
 
 // MARK: - 预设建议筛选器
 
-enum StoragePresetFilter: String, CaseIterable, Identifiable {
+nonisolated enum StoragePresetFilter: String, CaseIterable, Identifiable, Sendable {
     case all = "全部大项"
-    case largeImages = "大图 (>5MB)"
-    case oldUnstarredImages = "30天前未收藏旧图"
-    case largeRichText = "大型富文本"
+    case oneMonthUnstarredImages = "1 个月前未收藏旧图"
+    case threeMonthsUnstarredImages = "3 个月前未收藏旧图"
+    case sixMonthsUnstarredImages = "6 个月前未收藏旧图"
+    case largeImages = "大图 (> 5 MB)"
+    case largeRichText = "大型富文本 (> 1 MB)"
 
     var id: String { rawValue }
+}
+
+// MARK: - 软配额与智能老化淘汰模型
+
+nonisolated enum SoftQuotaThreshold: Int64, CaseIterable, Identifiable, Sendable {
+    case mb500 = 500_000_000        // 500 MB (严格 1000 进制对齐 macOS .file 格式化)
+    case gb1 = 1_000_000_000        // 1 GB
+    case gb2 = 2_000_000_000        // 2 GB
+    case unlimited = 0              // 不限
+
+    var id: Int64 { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .mb500: return "500 MB (推荐)"
+        case .gb1: return "1 GB (适中)"
+        case .gb2: return "2 GB (充裕)"
+        case .unlimited: return "不设限制"
+        }
+    }
+}
+
+nonisolated enum SoftQuotaAgingPolicy: String, CaseIterable, Identifiable, Sendable {
+    case oneMonth = "one_month"
+    case threeMonths = "three_months"
+    case sixMonths = "six_months"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .oneMonth: return "1 个月前未收藏旧图"
+        case .threeMonths: return "3 个月前未收藏旧图 (推荐)"
+        case .sixMonths: return "6 个月前未收藏旧图"
+        }
+    }
+
+    var days: Int {
+        switch self {
+        case .oneMonth: return 30
+        case .threeMonths: return 90
+        case .sixMonths: return 180
+        }
+    }
+}
+
+nonisolated struct StorageQuotaStatus: Sendable, Equatable {
+    let currentBytes: Int64
+    let quotaBytes: Int64
+    let candidateItemCount: Int
+    let candidateFreedBytes: Int64
+
+    var isEnabled: Bool { quotaBytes > 0 }
+
+    var ratio: Double {
+        guard quotaBytes > 0 else { return 0 }
+        return Double(currentBytes) / Double(quotaBytes)
+    }
+
+    var isExceeded: Bool {
+        quotaBytes > 0 && currentBytes >= quotaBytes
+    }
+
+    var isWarning: Bool {
+        quotaBytes > 0 && ratio >= 0.85
+    }
+
+    var formattedCurrent: String {
+        ByteCountFormatter.string(fromByteCount: currentBytes, countStyle: .file)
+    }
+
+    var formattedQuota: String {
+        quotaBytes > 0 ? ByteCountFormatter.string(fromByteCount: quotaBytes, countStyle: .file) : "不限"
+    }
+
+    var formattedCandidateFreed: String {
+        ByteCountFormatter.string(fromByteCount: candidateFreedBytes, countStyle: .file)
+    }
 }

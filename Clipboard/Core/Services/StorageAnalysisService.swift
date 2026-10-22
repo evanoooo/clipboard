@@ -2,15 +2,13 @@
 //  StorageAnalysisService.swift
 //  Clipboard
 //
-//  存储空间深度分析与用户自主清理调度服务
+//  存储健康与大项分析服务
 //
 
 import AppKit
 import Combine
 import Foundation
 import SwiftUI
-
-// MARK: - 存储分析协调服务
 
 @MainActor
 final class StorageAnalysisService: ObservableObject {
@@ -19,8 +17,10 @@ final class StorageAnalysisService: ObservableObject {
     @Published private(set) var diskUsage: StorageDiskUsage?
     @Published private(set) var typeProportions: [StorageTypeProportion] = []
     @Published private(set) var topItems: [StorageItemSummary] = []
+    @Published private(set) var quotaStatus: StorageQuotaStatus?
     @Published private(set) var isAnalyzing: Bool = false
     @Published private(set) var isVacuuming: Bool = false
+    @Published private(set) var isEvicting: Bool = false
 
     private let sqlManager = PasteSQLManager.manager
 
@@ -31,6 +31,28 @@ final class StorageAnalysisService: ObservableObject {
         let proportions = await sqlManager.getStorageTypeProportions()
         self.diskUsage = usage
         self.typeProportions = proportions
+        await refreshQuotaStatus()
+    }
+
+    func refreshQuotaStatus() async {
+        let usage = if let diskUsage {
+            diskUsage
+        } else {
+            await sqlManager.getStorageDiskUsage()
+        }
+        let isEnabled = PasteUserDefaults.enableSoftQuota
+        let quotaBytes = isEnabled ? PasteUserDefaults.softQuotaBytes : 0
+        let policyRaw = PasteUserDefaults.softQuotaAgingPolicy
+        let policy = SoftQuotaAgingPolicy(rawValue: policyRaw) ?? .threeMonths
+
+        let (candidateCount, candidateBytes) = await sqlManager.getEvictionCandidates(policy: policy)
+
+        self.quotaStatus = StorageQuotaStatus(
+            currentBytes: usage.totalDiskBytes,
+            quotaBytes: quotaBytes,
+            candidateItemCount: candidateCount,
+            candidateFreedBytes: candidateBytes
+        )
     }
 
     func loadTopItems(limit: Int = 100, filter: StoragePresetFilter = .all) async {
@@ -59,5 +81,19 @@ final class StorageAnalysisService: ObservableObject {
         let count = await sqlManager.getTotalCount()
         PasteDataStore.main.totalCount = count
         return result
+    }
+
+    /// 执行智能建议的一键瘦身
+    func applyRecommendedEviction() async throws -> Int64 {
+        isEvicting = true
+        defer { isEvicting = false }
+        let policyRaw = PasteUserDefaults.softQuotaAgingPolicy
+        let policy = SoftQuotaAgingPolicy(rawValue: policyRaw) ?? .threeMonths
+        let freed = await sqlManager.performAutoEviction(policy: policy)
+        await refreshDiskUsage()
+        await PasteDataStore.main.resetDefaultList()
+        let count = await sqlManager.getTotalCount()
+        PasteDataStore.main.totalCount = count
+        return freed
     }
 }

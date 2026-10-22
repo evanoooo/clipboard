@@ -129,7 +129,7 @@ enum PasteUserDefaults {
     @UserDefaultsWrapper(.enableLinkPreview, defaultValue: true)
     static var enableLinkPreview
     /// Markdown 预览是否加载远程/本地图片。
-    /// 渲染发生在非隔离上下文，所以直接读 UserDefaults；key 缺省即为 false。
+    /// 渲染发生在其非隔离上下文，所以直接读 UserDefaults；key 缺省即为 false。
     /// 剪贴板内容不可信，默认不发起任何图片请求。
     nonisolated static var enableRemoteImages: Bool {
         UserDefaults.standard.bool(forKey: PrefKey.enableRemoteImages.rawValue)
@@ -161,6 +161,19 @@ enum PasteUserDefaults {
     /// 已完成首次启动欢迎页
     @UserDefaultsWrapper(.welcomeDone, defaultValue: false)
     static var welcomeDone
+
+    /// 智能软配额开关
+    @UserDefaultsWrapper(.enableSoftQuota, defaultValue: true)
+    static var enableSoftQuota
+    /// 软配额字节上限（默认 500MB，十进制精准对齐）
+    @UserDefaultsWrapper(.softQuotaBytes, defaultValue: Int64(500_000_000))
+    static var softQuotaBytes: Int64
+    /// 软配额老化策略
+    @UserDefaultsWrapper(.softQuotaAgingPolicy, defaultValue: "three_months")
+    static var softQuotaAgingPolicy
+    /// 空闲时自动维护瘦身
+    @UserDefaultsWrapper(.enableIdleAutoMaintenance, defaultValue: false)
+    static var enableIdleAutoMaintenance
 }
 
 @propertyWrapper
