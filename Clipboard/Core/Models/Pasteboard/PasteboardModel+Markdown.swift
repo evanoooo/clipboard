@@ -10,15 +10,17 @@ import Foundation
 
 extension PasteboardModel {
     var usesMarkdownPreview: Bool {
+        // 开关关闭时直接返回：不解码全文，也不跑 markdown 检测，预览固定走纯文本/代码
+        guard PasteUserDefaults.enableMarkdownPreview else { return false }
         switch type {
         case .string, .rich:
-            MarkdownDetector.usesMarkdownPreview(
+            return MarkdownDetector.usesMarkdownPreview(
                 markdownSource,
                 isMarkdown: isMarkdown,
                 codeLanguage: detectedCodeLanguage
             )
         default:
-            false
+            return false
         }
     }
 

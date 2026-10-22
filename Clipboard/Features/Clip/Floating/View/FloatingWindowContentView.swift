@@ -102,13 +102,6 @@ final class FloatingWindowContentView: NSView {
             self?.historyView.setFocusRegion(focused ? .chipEditing : .collection)
         }
 
-        PasteDataStore.main.dataList
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.footerView.updateCount()
-            }
-            .store(in: &cancellables)
-
         headerView.searchField.$text
             .removeDuplicates()
             .dropFirst()

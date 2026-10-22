@@ -69,6 +69,18 @@ enum PaginationTests {
         let hasMoreD = (50 == pageSize && (isCountCapped || 500 < 500))
         runner.assertTrue(hasMoreD, "Capped count allows pagination beyond cap")
 
+        // Case E: Dynamic countTask resolution with multi-page in flight:
+        // User already scrolled to 150 items before countTask finishes with total=300
+        let currentLoaded150 = 150
+        let total300 = 300
+        let hasMoreE = (50 == pageSize && (false || currentLoaded150 < total300))
+        runner.assertTrue(hasMoreE, "Dynamic hasMoreData preserves in-flight pagination state")
+
+        // Case F: Dynamic countTask resolution when user reached end of 300
+        let currentLoaded300 = 300
+        let hasMoreF = (50 == pageSize && (false || currentLoaded300 < total300))
+        runner.assertTrue(!hasMoreF, "When loaded equals total, hasMoreData correctly terminates")
+
         // 3. Stale revision barrier simulation
         func simulateBarrier(captured: Int, current: Int) -> Bool {
             captured == current

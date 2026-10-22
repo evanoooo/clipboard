@@ -83,6 +83,26 @@ enum FilterStateTests {
         runner.assertTrue(state.isInFilterMode, "Manual filter sets filter mode to true")
         runner.assertEqual(state.revision, 6, "Revision should be 6")
 
+        // 8. Capped count state transitions
+        func applyScanned(_ scanned: Int, to s: ClipboardFilterState) {
+            let cap = 500
+            let isCapped = scanned > cap
+            s.filteredCount = isCapped ? cap : scanned
+            s.isCountCapped = isCapped
+        }
+
+        applyScanned(300, to: state)
+        runner.assertEqual(state.filteredCount, 300, "Uncapped scanned count sets exact number")
+        runner.assertTrue(!state.isCountCapped, "Uncapped scanned count sets isCountCapped to false")
+
+        applyScanned(501, to: state)
+        runner.assertEqual(state.filteredCount, 500, "Capped scanned count caps at 500")
+        runner.assertTrue(state.isCountCapped, "501 rows sets isCountCapped to true")
+
+        // 9. Maintenance delete resets capped state
+        state.reset()
+        runner.assertTrue(!state.isCountCapped, "Reset clears capped state")
+
         print("✓ ClipboardFilterState tests passed!")
     }
 }

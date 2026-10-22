@@ -168,8 +168,9 @@ extension PasteDataStore {
         let rows = await PasteReadStore.shared.search(filter: filter, limit: loaded)
         let list = await mapRows(rows)
         totalCount = await sqlManager.getTotalCount()
-        filteredCount = await PasteReadStore.shared.getCount(filter: filter)
-        setHasMoreData(rows.count == loaded)
+        let scanned = await PasteReadStore.shared.getCount(filter: filter, limit: Self.countScanLimit)
+        updateFilteredCount(scanned: scanned)
+        setHasMoreData(isFilteredCountCapped || rows.count == loaded)
         requestFocus(at: focusIndex(in: list, ids: restoredIds))
         updateData(with: list, changeType: .searchFilter)
     }
@@ -194,17 +195,23 @@ extension PasteDataStore {
                 offset: currentCount
             )
             let backfillItems = await mapRows(rows)
-            let filtered: Int =
+            let scanned: Int? =
                 if inFilter, let activeFilter {
-                    await PasteReadStore.shared.getCount(filter: activeFilter)
+                    await PasteReadStore.shared.getCount(filter: activeFilter, limit: Self.countScanLimit)
                 } else {
-                    count
+                    nil
                 }
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 totalCount = count
-                filteredCount = filtered
+                if let scanned {
+                    updateFilteredCount(scanned: scanned)
+                } else {
+                    filterState.filteredCount = count
+                    filterState.isCountCapped = false
+                    countUpdated.send()
+                }
 
                 var finalList = dataList.value
                 finalList.removeAll { item in
@@ -232,17 +239,23 @@ extension PasteDataStore {
         enqueueMutation { [weak self, sqlManager] in
             await sqlManager.delete(filter: deletedIds.contains(Col.id))
             let count = await sqlManager.getTotalCount()
-            let filtered: Int =
+            let scanned: Int? =
                 if inFilter, let activeFilter {
-                    await PasteReadStore.shared.getCount(filter: activeFilter)
+                    await PasteReadStore.shared.getCount(filter: activeFilter, limit: Self.countScanLimit)
                 } else {
-                    count
+                    nil
                 }
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 totalCount = count
-                filteredCount = filtered
+                if let scanned {
+                    updateFilteredCount(scanned: scanned)
+                } else {
+                    filterState.filteredCount = count
+                    filterState.isCountCapped = false
+                    countUpdated.send()
+                }
             }
         }
     }
@@ -255,17 +268,23 @@ extension PasteDataStore {
             await sqlManager.delete(filter: filter)
             let count = await sqlManager.getTotalCount()
 
-            let filtered: Int =
+            let scanned: Int? =
                 if inFilter, let activeFilter {
-                    await PasteReadStore.shared.getCount(filter: activeFilter)
+                    await PasteReadStore.shared.getCount(filter: activeFilter, limit: Self.countScanLimit)
                 } else {
-                    count
+                    nil
                 }
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 totalCount = count
-                filteredCount = filtered
+                if let scanned {
+                    updateFilteredCount(scanned: scanned)
+                } else {
+                    filterState.filteredCount = count
+                    filterState.isCountCapped = false
+                    countUpdated.send()
+                }
             }
         }
     }
@@ -340,12 +359,18 @@ extension PasteDataStore {
             let rows = await PasteReadStore.shared.search(filter: filter ?? (Col.hidden == 0), limit: pageSize)
             let list = await mapRows(rows)
             let count = await sqlManager.getTotalCount()
-            let filtered = if let filter { await PasteReadStore.shared.getCount(filter: filter) } else { count }
+            let scanned = if let filter { await PasteReadStore.shared.getCount(filter: filter, limit: Self.countScanLimit) } else { count }
             guard !Task.isCancelled else { return nil }
             guard revision == listRevision, filterVersion == filterRevision else { continue }
             totalCount = count
-            filteredCount = filtered
-            setHasMoreData(list.count < filtered)
+            if filter != nil {
+                updateFilteredCount(scanned: scanned)
+            } else {
+                filterState.filteredCount = count
+                filterState.isCountCapped = false
+                countUpdated.send()
+            }
+            setHasMoreData(isFilteredCountCapped || list.count < filteredCount)
             return list
         }
         return nil

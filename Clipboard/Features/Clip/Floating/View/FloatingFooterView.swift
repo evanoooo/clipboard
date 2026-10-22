@@ -87,8 +87,7 @@ final class FloatingFooterView: NSView {
     func updateCount() {
         let count = PasteDataStore.main.filteredCount
         if PasteDataStore.main.isInFilterMode && PasteDataStore.main.isFilteredCountCapped {
-            let base = String(localized: .itemCount(count))
-            countLabel.stringValue = base.replacingOccurrences(of: "\(count)", with: "\(count)+")
+            countLabel.stringValue = String(localized: .itemCountCapped(count))
         } else {
             countLabel.stringValue = String(localized: .itemCount(count))
         }

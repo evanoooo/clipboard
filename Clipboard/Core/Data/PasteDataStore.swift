@@ -15,6 +15,10 @@ typealias Expression = SQLite.Expression
 final class PasteDataStore {
     static let main = PasteDataStore()
     let pageSize = 50
+    /// 搜索模式下条目统计截断阈值（展示 500+）
+    static let filteredCountCap = 500
+    /// 截断扫描查询行数上限（达到 501 即可提前终止）
+    static let countScanLimit = filteredCountCap + 1
 
     private(set) var dataList = CurrentValueSubject<[PasteboardModel], Never>([])
 
@@ -49,6 +53,14 @@ final class PasteDataStore {
 
     /// 通知底部状态栏或外部视图刷新计数
     let countUpdated = PassthroughSubject<Void, Never>()
+
+    /// 统一收敛更新筛选模式下的条目计数与截断标记
+    func updateFilteredCount(scanned: Int) {
+        let isCapped = scanned > Self.filteredCountCap
+        filterState.filteredCount = isCapped ? Self.filteredCountCap : scanned
+        filterState.isCountCapped = isCapped
+        countUpdated.send()
+    }
 
     enum DataChangeType {
         case loadMore
@@ -397,30 +409,24 @@ extension PasteDataStore {
     ) {
         countTask = Task { [weak self] in
             guard let self else { return }
-            let countCapThreshold = 500
             let countStarted = ContinuousClock.now
 
-            // 上限 501 截断扫描：只要遇到第 501 条即终止扫描，耗时通常只需 1~3ms
-            let scannedCount = await PasteReadStore.shared.getCount(filter: filter, limit: countCapThreshold + 1)
+            // 截断扫描：只要遇到第 501 条即终止扫描，耗时通常只需 1~3ms
+            let scannedCount = await PasteReadStore.shared.getCount(filter: filter, limit: Self.countScanLimit)
             let countElapsed = countStarted.duration(to: .now)
 
             guard !Task.isCancelled,
                   self.filterState.revision == capturedFilterRev,
                   self.listRevision == capturedListRev else { return }
 
-            let total: Int
-            let isCapped: Bool
-            if scannedCount > countCapThreshold {
-                total = countCapThreshold
-                isCapped = true
-            } else {
-                total = scannedCount
-                isCapped = false
-            }
+            let isCapped = scannedCount > Self.filteredCountCap
+            let total = isCapped ? Self.filteredCountCap : scannedCount
 
             self.filterState.filteredCount = total
             self.filterState.isCountCapped = isCapped
-            self.hasMoreData = (rowCount == pageSize && (isCapped || rowCount < total))
+            // 依据当前已加载量动态核定翻页状态，避免覆盖中间滚动加载的分页状态
+            let currentLoaded = self.dataList.value.count
+            self.hasMoreData = (rowCount == self.pageSize && (isCapped || currentLoaded < total))
             self.countUpdated.send()
 
             let totalElapsed = started.duration(to: .now)
@@ -569,10 +575,12 @@ extension PasteDataStore {
         totalCount = count
 
         if isInFilterMode, let filter = currentFilter {
-            let scanned = await PasteReadStore.shared.getCount(filter: filter, limit: 501)
-            filterState.filteredCount = min(scanned, 500)
-            filterState.isCountCapped = scanned > 500
-            countUpdated.send()
+            if !isFilteredCountCapped {
+                let scanned = await PasteReadStore.shared.getCount(filter: filter, limit: Self.countScanLimit)
+                updateFilteredCount(scanned: scanned)
+            } else {
+                countUpdated.send()
+            }
             guard let id = model.id,
                   await PasteReadStore.shared.getCount(filter: filter && Col.id == id) > 0
             else { return }
@@ -641,14 +649,13 @@ extension PasteDataStore {
 
         totalCount = await sqlManager.getTotalCount()
         if isInFilterMode, let currentFilter {
-            let scanned = await PasteReadStore.shared.getCount(filter: currentFilter, limit: 501)
-            filterState.filteredCount = min(scanned, 500)
-            filterState.isCountCapped = scanned > 500
+            let scanned = await PasteReadStore.shared.getCount(filter: currentFilter, limit: Self.countScanLimit)
+            updateFilteredCount(scanned: scanned)
         } else {
             filterState.filteredCount = totalCount
             filterState.isCountCapped = false
+            countUpdated.send()
         }
-        countUpdated.send()
         let effectiveTotal = isInFilterMode ? filteredCount : totalCount
         hasMoreData = isFilteredCountCapped || list.count < effectiveTotal
         pageIndex = max(0, (list.count - 1) / pageSize)
@@ -681,10 +688,8 @@ extension PasteDataStore {
         let list = await mapRows(rows).map { model in
             model.id.flatMap { existing[$0] } ?? model
         }
-        let scanned = await PasteReadStore.shared.getCount(filter: currentFilter, limit: 501)
-        filterState.filteredCount = min(scanned, 500)
-        filterState.isCountCapped = scanned > 500
-        countUpdated.send()
+        let scanned = await PasteReadStore.shared.getCount(filter: currentFilter, limit: Self.countScanLimit)
+        updateFilteredCount(scanned: scanned)
         hasMoreData = isFilteredCountCapped || list.count < filteredCount
         pageIndex = max(0, (list.count - 1) / pageSize)
         lastRequestedPage = pageIndex
