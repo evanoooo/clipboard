@@ -145,7 +145,7 @@ struct StorageInspectorSheet: View {
 
                         // 内容摘要与来源
                         VStack(alignment: .leading, spacing: Const.space2) {
-                            Text(item.summary.isEmpty ? "[\(item.type.capitalized)]" : item.summary)
+                            Text(item.displaySummary)
                                 .font(.callout)
                                 .lineLimit(1)
                                 .truncationMode(.tail)

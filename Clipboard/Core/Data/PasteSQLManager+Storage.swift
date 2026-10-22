@@ -54,32 +54,9 @@ extension PasteSQLManager {
                 let typeStr = (row[0] as? String) ?? "unknown"
                 let count = Int((row[1] as? Int64) ?? 0)
                 let bytes = (row[2] as? Int64) ?? 0
+                guard bytes > 0 else { continue }
 
-                let displayName: String
-                let color: NSColor
-                switch typeStr {
-                case "image":
-                    displayName = String(localized: "Image")
-                    color = .systemPurple
-                case "rich":
-                    displayName = String(localized: "Rich Text", defaultValue: "富文本")
-                    color = .systemBlue
-                case "string":
-                    displayName = String(localized: "Text")
-                    color = .systemTeal
-                case "color":
-                    displayName = String(localized: "Color")
-                    color = .systemOrange
-                case "file":
-                    displayName = String(localized: "File")
-                    color = .systemYellow
-                case "link":
-                    displayName = String(localized: "Link")
-                    color = .systemGreen
-                default:
-                    displayName = typeStr.capitalized
-                    color = .systemGray
-                }
+                let (displayName, color) = Self.typeMetadata(for: typeStr)
 
                 list.append(StorageTypeProportion(
                     typeName: typeStr,
@@ -93,6 +70,34 @@ extension PasteSQLManager {
             log.error("Failed to query storage type proportions: \(error)")
         }
         return list
+    }
+
+    /// 类型友好名称与现代色谱映射
+    nonisolated static func typeMetadata(for typeStr: String) -> (displayName: String, color: NSColor) {
+        let lower = typeStr.lowercased()
+        if lower.contains("png") {
+            return ("PNG 图片", NSColor(red: 0.58, green: 0.32, blue: 0.88, alpha: 1.0)) // 现代紫
+        } else if lower.contains("tiff") {
+            return ("TIFF 截图", NSColor(red: 0.84, green: 0.22, blue: 0.72, alpha: 1.0)) // 亮品红
+        } else if lower.contains("jpeg") || lower.contains("jpg") {
+            return ("JPEG 照片", NSColor(red: 0.70, green: 0.38, blue: 0.98, alpha: 1.0)) // 兰花紫
+        } else if lower.contains("image") {
+            return ("图片", NSColor(red: 0.65, green: 0.30, blue: 0.85, alpha: 1.0))
+        } else if lower.contains("utf8") || lower.contains("text") || lower == "string" {
+            return ("纯文本", NSColor(red: 0.18, green: 0.68, blue: 0.78, alpha: 1.0)) // 活力青
+        } else if lower.contains("rtf") {
+            return ("RTF 富文本", NSColor(red: 0.12, green: 0.45, blue: 0.95, alpha: 1.0)) // 科技蓝
+        } else if lower.contains("html") {
+            return ("HTML 网页", NSColor(red: 0.22, green: 0.58, blue: 0.98, alpha: 1.0)) // 天蓝
+        } else if lower.contains("file") {
+            return ("文件路径", NSColor(red: 0.95, green: 0.62, blue: 0.10, alpha: 1.0)) // 琥珀金
+        } else if lower.contains("url") || lower.contains("link") {
+            return ("链接", NSColor(red: 0.20, green: 0.78, blue: 0.45, alpha: 1.0)) // 翠绿
+        } else if lower.contains("color") {
+            return ("颜色值", NSColor(red: 0.98, green: 0.35, blue: 0.48, alpha: 1.0)) // 珊瑚粉
+        } else {
+            return (typeStr.capitalized, NSColor(red: 0.55, green: 0.58, blue: 0.62, alpha: 1.0)) // 优雅雅灰
+        }
     }
 
     /// 获取占用空间最大的 Top N 条目
@@ -109,12 +114,12 @@ extension PasteSQLManager {
         case .all:
             break
         case .largeImages:
-            whereClause += " AND type = 'image' AND LENGTH(data) > 5242880"
+            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND LENGTH(data) > 5242880"
         case .oldUnstarredImages:
             // 兼容秒级 (10位) 或毫秒级 (13位) 时间戳，未加入任何分类标签或加星 (group == -1)
-            whereClause += " AND type = 'image' AND ((timestamp < \(thirtyDaysAgoSec) AND timestamp < 10000000000) OR timestamp < \(thirtyDaysAgoMs)) AND (`group` IS NULL OR `group` = -1)"
+            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND ((timestamp < \(thirtyDaysAgoSec) AND timestamp < 10000000000) OR timestamp < \(thirtyDaysAgoMs)) AND (`group` IS NULL OR `group` = -1)"
         case .largeRichText:
-            whereClause += " AND type = 'rich' AND LENGTH(data) > 1048576"
+            whereClause += " AND (tag = 'rich' OR type LIKE '%rtf%' OR type LIKE '%html%') AND LENGTH(data) > 1048576"
         }
 
         let sql = """

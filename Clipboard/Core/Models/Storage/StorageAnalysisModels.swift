@@ -94,22 +94,44 @@ struct StorageItemSummary: Sendable, Identifiable, Equatable {
         return formatter.string(from: date)
     }
 
+    var friendlyTypeName: String {
+        let lower = type.lowercased()
+        if lower.contains("png") { return "PNG 图片" }
+        if lower.contains("tiff") { return "TIFF 截图" }
+        if lower.contains("jpeg") || lower.contains("jpg") { return "JPEG 照片" }
+        if lower.contains("image") { return "图片" }
+        if lower.contains("rtf") { return "RTF 富文本" }
+        if lower.contains("html") { return "HTML 网页" }
+        if lower.contains("utf8") || lower.contains("text") || lower == "string" { return "纯文本" }
+        if lower.contains("file") { return "文件" }
+        if lower.contains("url") || lower.contains("link") { return "链接" }
+        return type.capitalized
+    }
+
+    var displaySummary: String {
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed.lowercased().starts(with: "[public.") {
+            return "[\(friendlyTypeName)]"
+        }
+        return trimmed
+    }
+
     var typeIconAndColor: (icon: String, color: Color) {
-        switch type {
-        case "image":
-            return ("photo", .purple)
-        case "rich":
-            return ("doc.richtext", .blue)
-        case "string":
-            return ("text.alignleft", .teal)
-        case "color":
-            return ("paintpalette", .orange)
-        case "file":
-            return ("folder", .yellow)
-        case "link":
-            return ("link", .green)
-        default:
-            return ("doc", .gray)
+        let lower = type.lowercased()
+        if lower.contains("png") || lower.contains("tiff") || lower.contains("jpeg") || lower.contains("image") {
+            return ("photo.fill", Color(nsColor: NSColor(red: 0.60, green: 0.35, blue: 0.90, alpha: 1.0)))
+        } else if lower.contains("rtf") || lower.contains("html") || lower == "rich" {
+            return ("doc.richtext.fill", Color(nsColor: NSColor(red: 0.15, green: 0.45, blue: 0.95, alpha: 1.0)))
+        } else if lower.contains("utf8") || lower.contains("text") || lower == "string" {
+            return ("text.alignleft", Color(nsColor: NSColor(red: 0.18, green: 0.68, blue: 0.78, alpha: 1.0)))
+        } else if lower.contains("file") {
+            return ("folder.fill", Color.orange)
+        } else if lower.contains("url") || lower.contains("link") {
+            return ("link", Color.green)
+        } else if lower.contains("color") {
+            return ("paintpalette.fill", Color.pink)
+        } else {
+            return ("doc.fill", Color.secondary)
         }
     }
 }

@@ -327,7 +327,7 @@ struct DataActionRow: View {
     }
 }
 
-// MARK: - 数据类型占比色条
+// MARK: - 现代化数据类型占比色条
 
 struct StorageBreakdownBarView: View {
     let proportions: [StorageTypeProportion]
@@ -337,35 +337,75 @@ struct StorageBreakdownBarView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Const.space8) {
-            Text("数据类型占用分布")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Const.space10) {
+            HStack {
+                Text("数据类型占用分布")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("共 \(proportions.count) 种类型")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
 
+            // 现代化分段胶囊轨道
             GeometryReader { geo in
+                let availableWidth = max(geo.size.width, 100)
+                let spacingTotal = CGFloat(max(proportions.count - 1, 0)) * 2.0
+                let barWidth = max(availableWidth - spacingTotal, 10)
+
                 HStack(spacing: 2) {
                     ForEach(proportions) { item in
-                        let ratio = max(CGFloat(item.totalBytes) / CGFloat(totalBytes), 0.03)
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(item.swiftUIColor)
-                            .frame(width: max((geo.size.width - CGFloat(proportions.count - 1) * 2) * ratio, 6))
-                            .help("\(item.displayName): \(item.formattedBytes) (\(item.count) 项)")
+                        let ratio = CGFloat(item.totalBytes) / CGFloat(totalBytes)
+                        let width = max(barWidth * ratio, 6)
+                        let percentStr = String(format: "%.1f%%", (Double(item.totalBytes) / Double(totalBytes)) * 100)
+
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(
+                                LinearGradient(
+                                    colors: [item.swiftUIColor, item.swiftUIColor.opacity(0.85)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(width: width)
+                            .help("\(item.displayName): \(item.formattedBytes) (\(percentStr) · \(item.count) 项)")
                     }
                 }
             }
-            .frame(height: 8)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .frame(height: 10)
+            .background(Color.secondary.opacity(0.12))
+            .clipShape(Capsule())
 
-            HStack(spacing: Const.space12) {
-                ForEach(proportions.prefix(4)) { item in
-                    HStack(spacing: 4) {
+            // 现代化图例徽标网格
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 120), spacing: Const.space8)],
+                alignment: .leading,
+                spacing: Const.space8
+            ) {
+                ForEach(proportions.prefix(6)) { item in
+                    let percent = Int(round((Double(item.totalBytes) / Double(totalBytes)) * 100))
+                    HStack(spacing: 6) {
                         Circle()
                             .fill(item.swiftUIColor)
                             .frame(width: 8, height: 8)
-                        Text("\(item.displayName) \(item.formattedBytes)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .shadow(color: item.swiftUIColor.opacity(0.45), radius: 2, y: 1)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.displayName)
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                            Text("\(item.formattedBytes) (\(percent)%)")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.secondary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .help("\(item.displayName): \(item.count) 项记录")
                 }
             }
         }
