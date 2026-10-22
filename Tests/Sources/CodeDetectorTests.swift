@@ -108,7 +108,42 @@ enum CodeDetectorTests {
         // 10. Short strings (< 4 chars) should return nil
         runner.assertTrue(CodeLanguageDetector.detect("hi") == nil, "Short text returns nil")
 
-        // 11. Display name verification
+        // 11. Shebang 直接定语言：脚本开头是注释/文档字符串时，靠头部信号也能命中
+        let pythonShebang = """
+        #!/usr/bin/env python3
+        \"\"\"导入 Paste (Core Data) 数据库。
+
+        兼容 Apple 全套格式：
+          - 解压: LZVN, LZFSE, LZ4, zlib/raw deflate
+          - 反序列化: Apple Binary plist (NSKeyedArchiver)
+        \"\"\"
+
+        \(String(repeating: "# 说明：这里的头部说明很长，覆盖到 2000 字符之后才出现函数定义。\n", count: 80))
+
+        def read_archive(path):
+            with open(path, "rb") as f:
+                return plistlib.load(f)
+        """
+        runner.assertEqual(CodeLanguageDetector.detect(pythonShebang), .python, "Python shebang must be detected even when def is far away")
+
+        let nodeShebang = """
+        #!/usr/bin/env node
+        console.log("ready")
+        """
+        runner.assertEqual(CodeLanguageDetector.detect(nodeShebang), .javascript, "Node shebang must be detected as JavaScript")
+
+        let rubyShebang = """
+        #!/usr/bin/env ruby
+        puts "ready"
+        """
+        runner.assertEqual(CodeLanguageDetector.detect(rubyShebang), .ruby, "Ruby shebang must be detected")
+
+        // 12. 超长源码：只解码开头，仍能识别
+        let longPython = "#!/usr/bin/env python3\n" + String(repeating: "# 注释填充\n", count: 6_000) + "def main():\n    pass\n"
+        runner.assertTrue(longPython.count > 20_000, "Long python source should exceed the previous 20k cap")
+        runner.assertEqual(CodeLanguageDetector.detect(Data(longPython.utf8)), .python, "Long python source must be detected from raw data")
+
+        // 13. Display name verification
         runner.assertEqual(CodeLanguage.bash.displayName, "Shell", "Bash display name should be Shell")
         runner.assertEqual(CodeLanguage.nginx.displayName, "Nginx", "Nginx display name should be Nginx")
         runner.assertEqual(CodeLanguage.swift.displayName, "Swift", "Swift display name should be Swift")

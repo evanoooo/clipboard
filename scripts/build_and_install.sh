@@ -74,7 +74,7 @@ fi
 
 # 2. Release 编译打包
 echo -e "${BLUE}[2/5] 正在构建 ${CONFIGURATION} 生产包 (xcodebuild)...${NC}"
-BUILD_LOG=$(mktemp /tmp/clipboard_build_XXXXXX.log)
+BUILD_LOG=$(mktemp /tmp/clipboard_build_XXXXXX)
 if xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" build > "$BUILD_LOG" 2>&1; then
     echo -e "${GREEN}✓ Release 编译成功！${NC}"
 else
@@ -150,5 +150,5 @@ echo -e "${GREEN}====================================================${NC}"
 echo -e "${GREEN}             🎉 本地覆盖升级圆满完成！              ${NC}"
 echo -e "${GREEN}====================================================${NC}"
 echo -e "版本信息: $(defaults read "${TARGET_APP_PATH}/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "未知") ($(defaults read "${TARGET_APP_PATH}/Contents/Info.plist" CFBundleVersion 2>/dev/null || echo "未知"))"
-echo -e "${CYAN}提示: 若快捷键自动粘贴未触发，请在「系统设置」➜「隐私与安全性」➜「辅助功能」中将 Clipboard 重新勾选一次即可刷新权限。${NC}"
+echo -e "${CYAN}提示: 若快捷键自动粘贴未触发，请在「系统设置」➔「隐私与安全性」➔「辅助功能」中将 Clipboard 重新勾选一次即可刷新权限。${NC}"
 echo ""

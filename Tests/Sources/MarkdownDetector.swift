@@ -1,0 +1,1 @@
+../../Clipboard/Core/Markdown/MarkdownDetector.swift

@@ -24,6 +24,14 @@ nonisolated enum CodeLanguageDetector {
     private static let threshold = 3
     /// 只分析开头若干字符：导入、包名、shebang 等判别信号集中在片段头部
     private static let analysisLimit = 2_000
+    /// 解码窗口：足以覆盖 `analysisLimit`（按 4 字节标量计），避免为识别解码整段超长文本
+    private static let sampleByteLimit = 8_192
+
+    /// 从 UTF-8 原文判定语言。
+    /// 只解码开头部分，调用方可以放心传入整段内容。
+    static func detect(_ data: Data) -> CodeLanguage? {
+        detect(String(decoding: data.prefix(sampleByteLimit), as: UTF8.self))
+    }
 
     /// 返回识别出的语言；无法确信时返回 nil（不高亮，保持纯文本）
     static func detect(_ text: String) -> CodeLanguage? {
@@ -76,6 +84,7 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"\b(?:String|Integer|Boolean|Double|Long)\s+\w+\s*=\s*[^=]"#, weight: 2)
         ],
         .javascript: [
+            .init(pattern: #"(?m)^#![^\n]*\bnode(?:js)?\b"#, weight: 8),
             .init(pattern: #"\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?::[^=\n]+)?=\s*.+"#, weight: 2),
             .init(pattern: #"=>\s*[{(A-Za-z_$`]"#, weight: 3),
             .init(pattern: #"\bfunction\s*\w*\s*\([^)]*\)\s*\{"#, weight: 3),
@@ -100,6 +109,7 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"<[A-Z]\w*(?:\[\])?>\s*\("#, weight: 1)
         ],
         .python: [
+            .init(pattern: #"(?m)^#![^\n]*\bpython[0-9.]*\b"#, weight: 8),
             .init(pattern: #"(?m)^\s*(?:async\s+)?def\s+\w+\s*\([^)]*\)\s*(?:->[^:]+)?:"#, weight: 5),
             .init(pattern: #"(?m)^\s*from\s+[\w.]+\s+import\s+"#, weight: 5),
             .init(pattern: #"(?m)^\s*class\s+\w+\s*(?:\([\w.,\s]*\))?\s*:"#, weight: 4),
@@ -178,6 +188,7 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"\bwhen\s*[({]"#, weight: 2)
         ],
         .ruby: [
+            .init(pattern: #"(?m)^#![^\n]*\bruby[0-9.]*\b"#, weight: 8),
             .init(pattern: #"(?m)^\s*def\s+\w+[!?]?\s*(\(|$|\s)"#, weight: 5),
             .init(pattern: #"\bputs\s+|\bp\s+\S|\bpp\s+\S"#, weight: 4),
             .init(pattern: ##"(?m)^\s*(?:require|require_relative|load)\s+['\"]"##, weight: 5),
@@ -188,6 +199,7 @@ nonisolated enum CodeLanguageDetector {
             .init(pattern: #"(?m)^\s*end\s*$"#, weight: 1)
         ],
         .php: [
+            .init(pattern: #"(?m)^#![^\n]*\bphp[0-9.]*\b"#, weight: 8),
             .init(pattern: #"<\?php|<\?="#, weight: 8),
             .init(pattern: #"\$\w+\s*="#, weight: 3),
             .init(pattern: #"\becho\s+|\bprint\s+\S"#, weight: 4),

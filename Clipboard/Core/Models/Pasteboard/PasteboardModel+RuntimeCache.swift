@@ -110,11 +110,13 @@ extension PasteboardModel {
         case .none:
             return nil
         case .uncomputed:
-            guard type == .string, length >= 10, length <= 20_000 else {
+            guard type == .string, length >= 10 else {
                 runtimeCache.codeDetectionState = .none
                 return nil
             }
-            if let lang = CodeLanguageDetector.detect(attributeString.string) {
+            // 用完整原文判定：`attributeString` 只有 300 字符预览，
+            // docstring / 头部注释之后的 `def`、`import` 等信号会被截断。
+            if let lang = CodeLanguageDetector.detect(data) {
                 runtimeCache.codeDetectionState = .detected(lang)
                 return lang
             } else {
