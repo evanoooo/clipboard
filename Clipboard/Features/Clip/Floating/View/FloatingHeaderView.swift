@@ -105,7 +105,11 @@ final class FloatingHeaderView: NSView {
                         self?.confirmDeleteChip(chip)
                     },
                     onColorChange: { [weak self] colorIndex in
-                        topVM.updateChip(chip, colorIndex: colorIndex)
+                        topVM.updateChip(chip, colorIndex: colorIndex, clearCustomColor: true)
+                        self?.reloadChips()
+                    },
+                    onCustomColorChange: { [weak self] hex in
+                        topVM.updateChip(chip, customHexColor: hex)
                         self?.reloadChips()
                     },
                     onEditingNameChange: { text in

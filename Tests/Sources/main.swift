@@ -45,6 +45,7 @@ final class TestRunner {
         CodeDetectorTests.run(runner: TestRunner.self)
         CodeHighlighterTests.run(runner: TestRunner.self)
         CodePerformanceTests.run(runner: TestRunner.self)
+        CategoryChipTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")

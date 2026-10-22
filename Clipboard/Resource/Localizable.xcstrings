@@ -6323,6 +6323,24 @@
           }
         }
       }
+    },
+    "customColor": {
+      "comment": "Custom color option in category color palette",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom Color"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义颜色"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

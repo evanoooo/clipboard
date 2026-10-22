@@ -193,7 +193,12 @@ final class TopBarChipController {
     }
 
     private func updateChipColor(_ chip: CategoryChip, colorIndex: Int) {
-        topVM?.updateChip(chip, colorIndex: colorIndex)
+        topVM?.updateChip(chip, colorIndex: colorIndex, clearCustomColor: true)
+        onReloadNeeded?()
+    }
+
+    private func updateChipCustomColor(_ chip: CategoryChip, hex: String) {
+        topVM?.updateChip(chip, customHexColor: hex)
         onReloadNeeded?()
     }
 
@@ -277,6 +282,9 @@ final class TopBarChipController {
             },
             onColorChange: { [weak self] colorIndex in
                 self?.updateChipColor(chip, colorIndex: colorIndex)
+            },
+            onCustomColorChange: { [weak self] hex in
+                self?.updateChipCustomColor(chip, hex: hex)
             },
             onEditingNameChange: { [weak self] text in
                 self?.topVM?.editingChipName = text

@@ -129,9 +129,17 @@ final class TopBarViewModel {
     func updateChip(
         _ chip: CategoryChip,
         name: String? = nil,
-        colorIndex: Int? = nil
+        colorIndex: Int? = nil,
+        customHexColor: String? = nil,
+        clearCustomColor: Bool = false
     ) {
-        chipStore.updateChip(chip, name: name, colorIndex: colorIndex)
+        chipStore.updateChip(
+            chip,
+            name: name,
+            colorIndex: colorIndex,
+            customHexColor: customHexColor,
+            clearCustomColor: clearCustomColor
+        )
     }
 
     func removeChip(_ chip: CategoryChip) {
@@ -296,7 +304,7 @@ final class TopBarViewModel {
 
     private func addTagForGroup(_ chip: CategoryChip) {
         let tag = InputTag(
-            icon: makeColorDotImage(colorIndex: chip.colorIndex),
+            icon: CategoryDotRenderer.image(color: chip.displayNSColor),
             label: chip.name,
             type: .filterGroup,
             associatedValue: String(chip.id)

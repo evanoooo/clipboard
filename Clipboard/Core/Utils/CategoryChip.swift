@@ -10,8 +10,10 @@ import SwiftUI
 struct CategoryChip: Identifiable, Equatable, Codable {
     let id: Int
     var name: String
-    var colorIndex: Int // 存储颜色在调色板中的索引
+    var colorIndex: Int // 存储颜色在调色板中的索引（当 customHexColor 为 nil 时生效）
     var isSystem: Bool
+    /// 自定义 HEX 颜色代码（如 "#FF5500"）；若为 nil 则使用 colorIndex 对应色
+    var customHexColor: String? = nil
 
     private static let semanticPalette: [Color] = [
         .gray,
@@ -42,17 +44,26 @@ struct CategoryChip: Identifiable, Equatable, Codable {
         return paletteNSColors[index]
     }
 
+    /// 解析并提供展示用的 NSColor：优先读取 customHexColor，缺省或解析失败回退到 colorIndex 预设色
+    var displayNSColor: NSColor {
+        if let customHexColor, !customHexColor.isEmpty {
+            let hex = customHexColor.trimmingCharacters(in: .whitespacesAndNewlines)
+            let color = NSColor(hex: hex)
+            return color
+        }
+        return Self.nsColor(at: colorIndex)
+    }
+
     var color: Color {
         get {
-            guard colorIndex >= 0, colorIndex < CategoryChip.palette.count
-            else {
-                return .gray
-            }
-            return CategoryChip.palette[colorIndex]
+            Color(nsColor: displayNSColor)
         }
         set {
-            if let index = CategoryChip.semanticPalette.firstIndex(of: newValue)
-                ?? CategoryChip.palette.firstIndex(of: newValue) {
+            // 当赋新预设颜色时，清除自定义颜色，恢复使用预设色
+            customHexColor = nil
+            if let index = Self.palette.firstIndex(of: newValue) {
+                colorIndex = index
+            } else if let index = Self.semanticPalette.firstIndex(of: newValue) {
                 colorIndex = index
             } else {
                 colorIndex = 0
@@ -60,54 +71,42 @@ struct CategoryChip: Identifiable, Equatable, Codable {
         }
     }
 
-    var typeFilter: [String]? {
-        guard isSystem else { return nil }
-
-        switch id {
-        case -1:
-            return nil
-        case -2:
-            return [
-                PasteboardType.string.rawValue,
-                PasteboardType.rtf.rawValue,
-                PasteboardType.rtfd.rawValue,
-            ]
-        case -3:
-            return [
-                PasteboardType.png.rawValue,
-                PasteboardType.tiff.rawValue,
-            ]
-        case -4:
-            return [PasteboardType.fileURL.rawValue]
-        default:
-            return nil
-        }
-    }
-
-    init(id: Int, name: String, color: Color, isSystem: Bool) {
-        self.id = id
-        self.name = name
-        self.isSystem = isSystem
-
-        if let index = CategoryChip.semanticPalette.firstIndex(of: color)
-            ?? CategoryChip.palette.firstIndex(of: color) {
-            colorIndex = index
-        } else {
-            colorIndex = 0
-        }
-    }
-
-    init(id: Int, name: String, colorIndex: Int, isSystem: Bool) {
+    init(
+        id: Int,
+        name: String,
+        colorIndex: Int,
+        isSystem: Bool = false,
+        customHexColor: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.colorIndex = colorIndex
         self.isSystem = isSystem
+        self.customHexColor = customHexColor
+    }
+
+    init(
+        id: Int,
+        name: String,
+        color: Color,
+        isSystem: Bool = false,
+        customHexColor: String? = nil
+    ) {
+        let index: Int
+        if let found = Self.palette.firstIndex(of: color) {
+            index = found
+        } else if let found = Self.semanticPalette.firstIndex(of: color) {
+            index = found
+        } else {
+            index = 0
+        }
+        self.init(id: id, name: name, colorIndex: index, isSystem: isSystem, customHexColor: customHexColor)
     }
 
     static let systemChips: [CategoryChip] = [
         .init(
             id: -1,
-            name: String(localized: .clipboard),
+            name: String(localized: "clipboard"),
             color: .gray,
             isSystem: true
         ),

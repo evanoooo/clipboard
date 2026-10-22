@@ -68,7 +68,9 @@ final class CategoryChipStore {
     func updateChip(
         _ chip: CategoryChip,
         name: String? = nil,
-        colorIndex: Int? = nil
+        colorIndex: Int? = nil,
+        customHexColor: String? = nil,
+        clearCustomColor: Bool = false
     ) {
         guard !chip.isSystem,
               let index = chips.firstIndex(where: { $0.id == chip.id })
@@ -81,6 +83,11 @@ final class CategoryChipStore {
         }
         if let newColorIndex = colorIndex {
             chips[index].colorIndex = newColorIndex
+        }
+        if let customHex = customHexColor {
+            chips[index].customHexColor = customHex
+        } else if clearCustomColor {
+            chips[index].customHexColor = nil
         }
         saveUserCategories()
     }

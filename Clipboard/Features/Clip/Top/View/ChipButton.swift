@@ -25,6 +25,7 @@ final class ChipButton: NSView, NSTextFieldDelegate {
         var onEdit: (() -> Void)?
         var onDelete: (() -> Void)?
         var onColorChange: ((Int) -> Void)?
+        var onCustomColorChange: ((String) -> Void)?
         var onEditingNameChange: ((String) -> Void)?
         var onEditingSubmit: (() -> Void)?
         var onEditingCancel: (() -> Void)?
@@ -275,6 +276,14 @@ final class ChipButton: NSView, NSTextFieldDelegate {
     }
 
     private func configureDot(colorIndex: Int) {
+        if let customHex = config.chip.customHexColor, !customHex.isEmpty, !config.isEditing {
+            CategoryDotRenderer.configure(
+                dotView,
+                color: config.chip.displayNSColor,
+                diameter: config.dotRadius * 2
+            )
+            return
+        }
         let index = min(max(colorIndex, 0), CategoryChip.palette.count - 1)
         CategoryDotRenderer.configure(
             dotView,
@@ -371,7 +380,7 @@ final class ChipButton: NSView, NSTextFieldDelegate {
     private func compactChipColor() -> NSColor {
         config.chip.id == -1
             ? .controlAccentColor
-            : CategoryChip.nsColor(at: config.chip.colorIndex)
+            : config.chip.displayNSColor
     }
 
     private func resolvedForegroundColor() -> NSColor {
@@ -448,10 +457,14 @@ final class ChipButton: NSView, NSTextFieldDelegate {
 
         let colorItem = NSMenuItem()
         colorItem.view = ChipColorPaletteMenuView(
-            currentColorIndex: config.chip.colorIndex,
+            chip: config.chip,
             onColorChange: { [weak self, weak menu] index in
                 menu?.cancelTracking()
                 self?.config.onColorChange?(index)
+            },
+            onCustomColorChange: { [weak self, weak menu] hex in
+                menu?.cancelTracking()
+                self?.config.onCustomColorChange?(hex)
             }
         )
         menu.addItem(colorItem)
@@ -747,8 +760,16 @@ private final class ChipTextField: NSTextField {
 
 private final class ChipColorPaletteMenuView: NSView {
     private let stack = NSStackView()
+    private let chip: CategoryChip
+    private let onCustomColorChange: (String) -> Void
 
-    init(currentColorIndex: Int, onColorChange: @escaping (Int) -> Void) {
+    init(
+        chip: CategoryChip,
+        onColorChange: @escaping (Int) -> Void,
+        onCustomColorChange: @escaping (String) -> Void
+    ) {
+        self.chip = chip
+        self.onCustomColorChange = onCustomColorChange
         super.init(frame: .zero)
         stack.orientation = .horizontal
         stack.alignment = .centerY
@@ -759,16 +780,31 @@ private final class ChipColorPaletteMenuView: NSView {
             make.edges.equalToSuperview().inset(16)
         }
 
+        let isUsingCustom = chip.customHexColor != nil && !chip.customHexColor!.isEmpty
+
         for (index, color) in CategoryChip.palette.enumerated() {
             let circle = ChipColorCircleView(
                 color: NSColor(color),
-                isSelected: index == currentColorIndex,
+                isSelected: !isUsingCustom && index == chip.colorIndex,
                 onTap: { onColorChange(index) }
             )
             stack.addArrangedSubview(circle)
             circle.snp.makeConstraints { make in
                 make.width.height.equalTo(24)
             }
+        }
+
+        // 自定义颜色入口按钮（色轮/调色盘）
+        let customButton = ChipCustomColorButton(
+            currentColor: chip.displayNSColor,
+            isCustomActive: isUsingCustom,
+            onTap: { [weak self] in
+                self?.openSystemColorPanel()
+            }
+        )
+        stack.addArrangedSubview(customButton)
+        customButton.snp.makeConstraints { make in
+            make.width.height.equalTo(24)
         }
 
         layoutSubtreeIfNeeded()
@@ -778,6 +814,136 @@ private final class ChipColorPaletteMenuView: NSView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError()
+    }
+
+    private func openSystemColorPanel() {
+        let panel = NSColorPanel.shared
+        panel.color = chip.displayNSColor
+        panel.isContinuous = true
+        panel.showsAlpha = false
+        panel.setTarget(self)
+        panel.setAction(#selector(handleColorPanelChange(_:)))
+        panel.orderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: panel)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleColorPanelClosed),
+            name: NSWindow.willCloseNotification,
+            object: panel
+        )
+    }
+
+    @objc private func handleColorPanelChange(_ sender: NSColorPanel) {
+        if let hex = sender.color.toHexString(includeAlpha: false) {
+            onCustomColorChange(hex)
+        }
+    }
+
+    @objc private func handleColorPanelClosed() {
+        let panel = NSColorPanel.shared
+        if let hex = panel.color.toHexString(includeAlpha: false) {
+            onCustomColorChange(hex)
+        }
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: panel)
+    }
+}
+
+private final class ChipCustomColorButton: NSView {
+    private let currentColor: NSColor
+    private let isCustomActive: Bool
+    private let onTap: () -> Void
+    private var isHovering = false
+
+    init(currentColor: NSColor, isCustomActive: Bool, onTap: @escaping () -> Void) {
+        self.currentColor = currentColor
+        self.isCustomActive = isCustomActive
+        self.onTap = onTap
+        super.init(frame: .zero)
+        wantsLayer = true
+        toolTip = String(localized: .customColor)
+
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+
+        let click = NSClickGestureRecognizer(
+            target: self,
+            action: #selector(handleTap)
+        )
+        addGestureRecognizer(click)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func mouseEntered(with _: NSEvent) {
+        isHovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with _: NSEvent) {
+        isHovering = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let isActive = isCustomActive || isHovering
+
+        if isActive {
+            if isCustomActive {
+                let gapPath = NSBezierPath(ovalIn: bounds.insetBy(dx: 1.5, dy: 1.5))
+                NSColor.controlBackgroundColor.withAlphaComponent(0.6).setFill()
+                gapPath.fill()
+            }
+
+            let ringPath = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.75, dy: 0.75))
+            NSColor.secondaryLabelColor.withAlphaComponent(0.15).setStroke()
+            ringPath.lineWidth = 1.5
+            ringPath.stroke()
+        }
+
+        let innerRect = bounds.insetBy(dx: 4.0, dy: 4.0)
+
+        if isCustomActive {
+            // 当前使用的是自定义颜色：内圈直接绘制该自选色
+            CategoryDotRenderer.draw(in: innerRect, color: currentColor)
+        } else {
+            // 绘制调色盘 / 彩虹渐变 / 加号 图标
+            let bgPath = NSBezierPath(ovalIn: innerRect)
+            NSColor.controlAccentColor.withAlphaComponent(0.12).setFill()
+            bgPath.fill()
+
+            let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+            if let icon = NSImage(systemSymbolName: "paintpalette.fill", accessibilityDescription: nil)?.withSymbolConfiguration(symbolConfig) {
+                let iconSize = icon.size
+                let iconRect = NSRect(
+                    x: bounds.midX - iconSize.width / 2,
+                    y: bounds.midY - iconSize.height / 2,
+                    width: iconSize.width,
+                    height: iconSize.height
+                )
+                icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.85)
+            }
+        }
+    }
+
+    @objc private func handleTap() {
+        onTap()
     }
 }
 
