@@ -42,8 +42,11 @@ final class StorageAnalysisService: ObservableObject {
 
     func deleteItems(ids: [Int64]) async throws -> Int64 {
         let freed = await sqlManager.deleteStorageItems(ids: ids)
-        // 刷新列表与用量
+        // 刷新存储统计与主界面列表
         await refreshDiskUsage()
+        await PasteDataStore.main.resetDefaultList()
+        let count = await sqlManager.getTotalCount()
+        PasteDataStore.main.totalCount = count
         return freed
     }
 
@@ -52,6 +55,9 @@ final class StorageAnalysisService: ObservableObject {
         defer { isVacuuming = false }
         let result = try await sqlManager.vacuumDatabase()
         await refreshDiskUsage()
+        await PasteDataStore.main.resetDefaultList()
+        let count = await sqlManager.getTotalCount()
+        PasteDataStore.main.totalCount = count
         return result
     }
 }
