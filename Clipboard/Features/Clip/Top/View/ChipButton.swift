@@ -462,9 +462,12 @@ final class ChipButton: NSView, NSTextFieldDelegate {
                 menu?.cancelTracking()
                 self?.config.onColorChange?(index)
             },
-            onCustomColorChange: { [weak self, weak menu] hex in
+            onOpenCustomColor: { [weak self, weak menu] in
                 menu?.cancelTracking()
-                self?.config.onCustomColorChange?(hex)
+                guard let self else { return }
+                CategoryCustomColorCoordinator.shared.pickColor(for: self.config.chip) { [weak self] hex in
+                    self?.config.onCustomColorChange?(hex)
+                }
             }
         )
         menu.addItem(colorItem)
@@ -761,15 +764,13 @@ private final class ChipTextField: NSTextField {
 private final class ChipColorPaletteMenuView: NSView {
     private let stack = NSStackView()
     private let chip: CategoryChip
-    private let onCustomColorChange: (String) -> Void
 
     init(
         chip: CategoryChip,
         onColorChange: @escaping (Int) -> Void,
-        onCustomColorChange: @escaping (String) -> Void
+        onOpenCustomColor: @escaping () -> Void
     ) {
         self.chip = chip
-        self.onCustomColorChange = onCustomColorChange
         super.init(frame: .zero)
         stack.orientation = .horizontal
         stack.alignment = .centerY
@@ -798,9 +799,7 @@ private final class ChipColorPaletteMenuView: NSView {
         let customButton = ChipCustomColorButton(
             currentColor: chip.displayNSColor,
             isCustomActive: isUsingCustom,
-            onTap: { [weak self] in
-                self?.openSystemColorPanel()
-            }
+            onTap: onOpenCustomColor
         )
         stack.addArrangedSubview(customButton)
         customButton.snp.makeConstraints { make in
@@ -814,39 +813,6 @@ private final class ChipColorPaletteMenuView: NSView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError()
-    }
-
-    private func openSystemColorPanel() {
-        let panel = NSColorPanel.shared
-        panel.color = chip.displayNSColor
-        panel.isContinuous = true
-        panel.showsAlpha = false
-        panel.setTarget(self)
-        panel.setAction(#selector(handleColorPanelChange(_:)))
-        panel.orderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-
-        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: panel)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleColorPanelClosed),
-            name: NSWindow.willCloseNotification,
-            object: panel
-        )
-    }
-
-    @objc private func handleColorPanelChange(_ sender: NSColorPanel) {
-        if let hex = sender.color.toHexString(includeAlpha: false) {
-            onCustomColorChange(hex)
-        }
-    }
-
-    @objc private func handleColorPanelClosed() {
-        let panel = NSColorPanel.shared
-        if let hex = panel.color.toHexString(includeAlpha: false) {
-            onCustomColorChange(hex)
-        }
-        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: panel)
     }
 }
 
