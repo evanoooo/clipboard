@@ -66,9 +66,17 @@ struct StorageItemSummary: Sendable, Identifiable, Equatable {
     let byteSize: Int64
     let summary: String
 
+    public static let standardTypeTags: Set<String> = [
+        "string", "image", "rich", "color", "file", "link", "unknown"
+    ]
+
     /// 是否受机制级保护（加星收藏或绑定分类标签）
     var isProtected: Bool {
-        group != -1 || (tag != nil && !tag!.isEmpty)
+        if group != -1 { return true }
+        if let tag, !tag.isEmpty, !Self.standardTypeTags.contains(tag.lowercased()) {
+            return true
+        }
+        return false
     }
 
     var formattedSize: String {
@@ -76,7 +84,10 @@ struct StorageItemSummary: Sendable, Identifiable, Equatable {
     }
 
     var formattedDate: String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)
+        let interval: TimeInterval = timestamp > 10_000_000_000
+            ? TimeInterval(timestamp) / 1000.0
+            : TimeInterval(timestamp)
+        let date = Date(timeIntervalSince1970: interval)
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short

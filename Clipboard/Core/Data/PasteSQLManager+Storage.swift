@@ -101,8 +101,9 @@ extension PasteSQLManager {
         var list: [StorageItemSummary] = []
 
         var whereClause = "WHERE 1=1"
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let thirtyDaysAgoMs = nowMs - (30 * 24 * 60 * 60 * 1000)
+        let nowSec = Int64(Date().timeIntervalSince1970)
+        let thirtyDaysAgoSec = nowSec - (30 * 24 * 60 * 60)
+        let thirtyDaysAgoMs = thirtyDaysAgoSec * 1000
 
         switch filter {
         case .all:
@@ -110,7 +111,8 @@ extension PasteSQLManager {
         case .largeImages:
             whereClause += " AND type = 'image' AND LENGTH(data) > 5242880"
         case .oldUnstarredImages:
-            whereClause += " AND type = 'image' AND timestamp < \(thirtyDaysAgoMs) AND (`group` IS NULL OR `group` = -1) AND (tag IS NULL OR tag = '')"
+            // 兼容秒级 (10位) 或毫秒级 (13位) 时间戳，未加入任何分类标签或加星 (group == -1)
+            whereClause += " AND type = 'image' AND ((timestamp < \(thirtyDaysAgoSec) AND timestamp < 10000000000) OR timestamp < \(thirtyDaysAgoMs)) AND (`group` IS NULL OR `group` = -1)"
         case .largeRichText:
             whereClause += " AND type = 'rich' AND LENGTH(data) > 1048576"
         }

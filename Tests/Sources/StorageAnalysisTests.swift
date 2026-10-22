@@ -23,7 +23,7 @@ enum StorageAnalysisTests {
         // 1. group != -1 (加星或分类) 必须受保护
         let starredItem = StorageItemSummary(
             id: 1, uniqueId: "1", type: "image", timestamp: 1000,
-            appID: 1, appName: "Safari", tag: nil, group: 1,
+            appID: 1, appName: "Safari", tag: "image", group: 1,
             byteSize: 10_000_000, summary: "Starred Photo"
         )
         runner.assertTrue(starredItem.isProtected, "Starred items (group > -1) must be protected")
@@ -36,13 +36,13 @@ enum StorageAnalysisTests {
         )
         runner.assertTrue(taggedItem.isProtected, "Tagged items must be protected")
 
-        // 3. 既无 group 也无 tag 的普通项可以被勾选清理
+        // 3. 既无 group 也无自定义 tag（标准 tag 如 image）的普通项可以被勾选清理
         let regularItem = StorageItemSummary(
             id: 3, uniqueId: "3", type: "image", timestamp: 1000,
-            appID: 1, appName: "Chrome", tag: nil, group: -1,
+            appID: 1, appName: "Chrome", tag: "image", group: -1,
             byteSize: 8_000_000, summary: "Regular Screenshot"
         )
-        runner.assertFalse(regularItem.isProtected, "Ordinary items must NOT be protected")
+        runner.assertFalse(regularItem.isProtected, "Ordinary items must NOT be protected even if tag is 'image'")
     }
 
     private static func testStorageDiskUsageFormatting(runner: TestRunner.Type) {

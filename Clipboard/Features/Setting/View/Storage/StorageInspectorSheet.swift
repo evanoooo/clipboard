@@ -56,11 +56,12 @@ struct StorageInspectorSheet: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, Const.space20)
-            .padding(.vertical, Const.space16)
+            .padding(.top, Const.space16)
+            .padding(.bottom, Const.space12)
 
             Divider()
 
-            // MARK: - 预设建议筛选条
+            // MARK: - 预设快速筛选 Chip 栏
             HStack(spacing: Const.space8) {
                 ForEach(StoragePresetFilter.allCases) { filter in
                     Button {
@@ -71,7 +72,7 @@ struct StorageInspectorSheet: View {
                         }
                     } label: {
                         Text(filter.rawValue)
-                            .font(.subheadline)
+                            .font(.callout)
                             .padding(.horizontal, Const.space12)
                             .padding(.vertical, Const.space6)
                             .background(
@@ -156,10 +157,11 @@ struct StorageInspectorSheet: View {
                                 Text(item.formattedDate)
 
                                 if item.group != -1 {
-                                    Label("已收藏", systemImage: "star.fill")
+                                    let chipName = CategoryChipStore.shared.chips.first(where: { $0.id == item.group })?.name ?? "已收藏"
+                                    Label(chipName, systemImage: "star.fill")
                                         .foregroundStyle(.orange)
                                 }
-                                if let tag = item.tag, !tag.isEmpty {
+                                if let tag = item.tag, !tag.isEmpty, !StorageItemSummary.standardTypeTags.contains(tag.lowercased()) {
                                     Label(tag, systemImage: "tag.fill")
                                         .foregroundStyle(.blue)
                                 }
