@@ -53,11 +53,24 @@ enum ClipContentRenderer {
         } else {
             if let language = model.detectedCodeLanguage {
                 let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-                return CodeHighlighter.highlight(
-                    model.attributeString.string,
-                    language: language,
-                    keyword: trimmedKeyword.isEmpty ? nil : trimmedKeyword
-                )
+                if trimmedKeyword.isEmpty {
+                    if let cached = model.cachedHighlightedCode {
+                        return cached
+                    }
+                    let highlighted = CodeHighlighter.highlight(
+                        model.attributeString.string,
+                        language: language,
+                        keyword: nil
+                    )
+                    model.cachedHighlightedCode = highlighted
+                    return highlighted
+                } else {
+                    return CodeHighlighter.highlight(
+                        model.attributeString.string,
+                        language: language,
+                        keyword: trimmedKeyword
+                    )
+                }
             }
             return keyword.isEmpty
                 ? model.plainTextAttributedString

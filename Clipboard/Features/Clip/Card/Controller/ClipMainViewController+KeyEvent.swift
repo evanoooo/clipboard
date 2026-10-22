@@ -84,7 +84,13 @@ extension ClipMainViewController {
 
         if focusRegion == .popover {
             if event.keyCode == KeyCode.escape {
+                let now = CACurrentMediaTime()
+                let isDoubleTap = (now - lastEscapeTime) < 0.35
+                lastEscapeTime = now
                 closePreviewPopover()
+                if isDoubleTap {
+                    WindowManager.shared.dismiss()
+                }
                 return nil
             }
             return event
@@ -92,8 +98,14 @@ extension ClipMainViewController {
 
         switch event.keyCode {
         case KeyCode.escape:
+            let now = CACurrentMediaTime()
+            let isDoubleTap = (now - lastEscapeTime) < 0.35
+            lastEscapeTime = now
             topBarView.cancelKeyboardEditing()
             setFocusRegion(.collection)
+            if isDoubleTap {
+                WindowManager.shared.dismiss()
+            }
             return nil
         case KeyCode.return:
             topBarView.commitKeyboardEditing()
@@ -140,10 +152,27 @@ extension ClipMainViewController {
     }
 
     private func escapeKeyDown(_: NSEvent) -> NSEvent? {
-        let field = topBarView.searchField
+        let now = CACurrentMediaTime()
+        let isDoubleTap = (now - lastEscapeTime) < 0.35
+        lastEscapeTime = now
+
+        // 快速双击 Esc：无论当前处于何种聚焦/输入/弹窗状态，立即强制隐藏面板
+        if isDoubleTap {
+            if topBarView.searchField.isFirstResponder {
+                topBarView.searchField.clearAllContent()
+                topBarView.deactivateSearch()
+            }
+            _ = topBarView.dismissFilterPopoverIfVisible()
+            closePreviewPopover()
+            WindowManager.shared.dismiss()
+            return nil
+        }
+
+        // 单按 Esc：精细化层级逐级退出
         if topBarView.dismissFilterPopoverIfVisible() {
             return nil
         }
+        let field = topBarView.searchField
         if field.isFirstResponder {
             if field.suggestionWindow.isVisible {
                 field.suggestionWindow.hide()
@@ -157,7 +186,7 @@ extension ClipMainViewController {
                 setFocusRegion(.collection)
             }
         } else {
-            WindowManager.shared.toggleWindow()
+            WindowManager.shared.dismiss()
         }
         return nil
     }
@@ -258,7 +287,7 @@ extension ClipMainViewController {
             copy(items[0])
         } else {
             ClipActionService.shared.copyMultiple(items)
-            WindowManager.shared.toggleWindow()
+            WindowManager.shared.dismiss()
         }
         return nil
     }

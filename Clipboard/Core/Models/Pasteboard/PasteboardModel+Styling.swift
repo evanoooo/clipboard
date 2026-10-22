@@ -49,7 +49,7 @@ extension PasteboardModel {
         return max(lightContrast, darkContrast) >= 4.5 ? candidate : nil
     }
 
-    /// 完整预览首次加载后分析；空数组也缓存，避免反复扫描无适配需求的文本
+    /// 完整预览首次加载后分析；空数组也缓存，避免反复扫描无适配需求 warmer 的文本
     func cachePreviewColors(_ content: NSAttributedString) {
         guard cachedPreviewForegrounds == nil else { return }
         cachedPreviewForegrounds = hasBgColor && safeBgColor == nil
@@ -131,6 +131,9 @@ extension PasteboardModel {
     }
 
     var plainTextAttributedString: NSAttributedString {
+        if let cached = cachedPlainTextAttributedString {
+            return cached
+        }
         let source = attributeString.string
         let mutable = NSMutableAttributedString(string: source)
         attributeString.enumerateAttributes(
@@ -140,6 +143,7 @@ extension PasteboardModel {
         }
         let fullRange = NSRange(location: 0, length: mutable.length)
         mutable.addAttribute(.foregroundColor, value: NSColor.labelColor, range: fullRange)
+        cachedPlainTextAttributedString = mutable
         return mutable
     }
 
@@ -203,27 +207,20 @@ extension PasteboardModel {
 private func textContrast(_ foreground: NSColor, on background: NSColor) -> CGFloat {
     func luminance(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) -> CGFloat {
         func linear(_ value: CGFloat) -> CGFloat {
-            value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
         }
         return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
     }
 
-    let alpha = foreground.alphaComponent
-    let back = luminance(background.redComponent, background.greenComponent, background.blueComponent)
-    let front = luminance(
-        foreground.redComponent * alpha + background.redComponent * (1 - alpha),
-        foreground.greenComponent * alpha + background.greenComponent * (1 - alpha),
-        foreground.blueComponent * alpha + background.blueComponent * (1 - alpha)
-    )
-    return (max(front, back) + 0.05) / (min(front, back) + 0.05)
+    let l1 = luminance(foreground.redComponent, foreground.greenComponent, foreground.blueComponent)
+    let l2 = luminance(background.redComponent, background.greenComponent, background.blueComponent)
+    let lighter = max(l1, l2)
+    let darker = min(l1, l2)
+    return (lighter + 0.05) / (darker + 0.05)
 }
 
-func contrastingNSColor(for color: NSColor) -> NSColor {
-    let c = color.usingColorSpace(.sRGB) ?? color
-    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-    c.getRed(&r, green: &g, blue: &b, alpha: &a)
-    let brightness = 0.299 * r + 0.587 * g + 0.114 * b
-    return brightness > 0.5
-        ? NSColor.black.withAlphaComponent(0.8)
-        : NSColor.white.withAlphaComponent(0.8)
+func contrastingNSColor(for background: NSColor) -> NSColor {
+    guard let rgb = background.usingColorSpace(.sRGB) else { return .labelColor }
+    let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+    return luminance > 0.5 ? .black : .white
 }

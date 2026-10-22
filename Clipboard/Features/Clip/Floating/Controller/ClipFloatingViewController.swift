@@ -14,6 +14,7 @@ final class ClipFloatingViewController: NSViewController {
     lazy var floatingContentView = FloatingWindowContentView()
     private var monitorToken: Any?
     private var flagsMonitorToken: Any?
+    var lastEscapeTime: TimeInterval = 0
 
     // MARK: - Preview
 
@@ -105,6 +106,7 @@ final class ClipFloatingViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        lastEscapeTime = 0
         if monitorToken == nil {
             monitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: keyDownEvent(_:))
         }
@@ -117,6 +119,7 @@ final class ClipFloatingViewController: NSViewController {
 
     override func viewDidDisappear() {
         super.viewDidDisappear()
+        lastEscapeTime = 0
         if let token = monitorToken {
             NSEvent.removeMonitor(token)
             monitorToken = nil

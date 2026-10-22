@@ -15,6 +15,7 @@ final class ClipFloatingWindowController: NSWindowController {
     }
 
     var isPinned = false
+    private var isDismissing = false
 
     private let clipVC = ClipFloatingViewController()
     private let db = PasteDataStore.main
@@ -231,6 +232,7 @@ final class ClipFloatingWindowController: NSWindowController {
 
     func show(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
         guard let win = window else { return }
+        isDismissing = false
         guard !win.isVisible else {
             win.makeKey()
             completionHandler?()
@@ -254,10 +256,11 @@ final class ClipFloatingWindowController: NSWindowController {
     }
 
     func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
-        guard let win = window, win.isVisible else {
+        guard let win = window, win.isVisible, !isDismissing else {
             completionHandler?()
             return
         }
+        isDismissing = true
         CategoryCustomColorCoordinator.shared.closePanelIfOpen()
 
         // 窗口一隐藏就丢弃撤销记录：下次唤出不应再能恢复上一次的删除。
@@ -269,6 +272,7 @@ final class ClipFloatingWindowController: NSWindowController {
         }) { [weak self] in
             Task { @MainActor in
                 guard let self, let win = self.window else { return }
+                self.isDismissing = false
                 win.setIsVisible(false)
                 win.alphaValue = 1
                 win.orderOut(nil)

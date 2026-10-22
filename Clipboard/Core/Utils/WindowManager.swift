@@ -49,6 +49,16 @@ final class WindowManager {
         }
     }
 
+    /// 幂等隐藏窗口，用于 Esc 退出、点击外部或操作完成关闭场景（避免 toggleWindow 造成竞态反向打开）
+    func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
+        switch displayMode {
+        case .drawer:
+            drawerController.dismiss(completionHandler)
+        case .floating:
+            floatingController.dismiss(completionHandler)
+        }
+    }
+
     var isVisible: Bool {
         drawerController.isVisible || floatingController.isVisible
     }

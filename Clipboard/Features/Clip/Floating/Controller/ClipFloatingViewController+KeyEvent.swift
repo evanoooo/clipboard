@@ -82,14 +82,26 @@ extension ClipFloatingViewController {
         switch focusRegion {
         case .popover:
             if event.keyCode == KeyCode.escape {
+                let now = CACurrentMediaTime()
+                let isDoubleTap = (now - lastEscapeTime) < 0.35
+                lastEscapeTime = now
                 closePreview()
+                if isDoubleTap {
+                    WindowManager.shared.dismiss()
+                }
                 return nil
             }
         case .chipEditing:
             switch event.keyCode {
             case KeyCode.escape:
+                let now = CACurrentMediaTime()
+                let isDoubleTap = (now - lastEscapeTime) < 0.35
+                lastEscapeTime = now
                 floatingContentView.headerView.cancelKeyboardEditing()
                 focusCollection()
+                if isDoubleTap {
+                    WindowManager.shared.dismiss()
+                }
                 return nil
             case KeyCode.return:
                 floatingContentView.headerView.commitKeyboardEditing()
@@ -131,6 +143,16 @@ extension ClipFloatingViewController {
     }
 
     private func searchEscapeKeyDown() -> NSEvent? {
+        let now = CACurrentMediaTime()
+        let isDoubleTap = (now - lastEscapeTime) < 0.35
+        lastEscapeTime = now
+
+        if isDoubleTap {
+            floatingContentView.headerView.clearSearch()
+            WindowManager.shared.dismiss()
+            return nil
+        }
+
         let searchField = floatingContentView.headerView.searchField
         if !searchField.stringValue.isEmpty {
             floatingContentView.headerView.clearSearch()
@@ -143,10 +165,22 @@ extension ClipFloatingViewController {
     }
 
     private func escapeKeyDown() -> NSEvent? {
+        let now = CACurrentMediaTime()
+        let isDoubleTap = (now - lastEscapeTime) < 0.35
+        lastEscapeTime = now
+
+        if isDoubleTap {
+            if previewPopover != nil {
+                closePreview()
+            }
+            WindowManager.shared.dismiss()
+            return nil
+        }
+
         if previewPopover != nil {
             closePreview()
         } else {
-            ClipFloatingWindowController.shared.toggleWindow()
+            WindowManager.shared.dismiss()
         }
         return nil
     }
@@ -193,7 +227,7 @@ extension ClipFloatingViewController {
                 historyView.copyItem(at: historyView.selectedIndex)
             } else {
                 ClipActionService.shared.copyMultiple(items)
-                ClipFloatingWindowController.shared.toggleWindow()
+                WindowManager.shared.dismiss()
             }
             return nil
         case KeyCode.e:

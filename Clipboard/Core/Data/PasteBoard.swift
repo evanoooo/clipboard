@@ -164,6 +164,10 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
     // MARK: - 辅助事件加速（⌘+C / ⌘+X 监视）
 
+    func refreshPermissions() {
+        registerEventMonitors()
+    }
+
     private func registerEventMonitors() {
         unregisterEventMonitors()
 

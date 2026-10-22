@@ -12,6 +12,7 @@ final class ClipMainWindowController: NSWindowController {
     static let shared = ClipMainWindowController()
 
     private var targetVisible = false
+    private var isDismissing = false
 
     private var slideAnimationGeneration = 0
 
@@ -80,23 +81,30 @@ final class ClipMainWindowController: NSWindowController {
 
 extension ClipMainWindowController {
     func dismiss(_ completionHandler: (@MainActor () -> Void)? = nil) {
-        guard targetVisible, let window, window.isVisible else { return }
+        guard targetVisible, let window, window.isVisible, !isDismissing else {
+            completionHandler?()
+            return
+        }
         targetVisible = false
+        isDismissing = true
         CategoryCustomColorCoordinator.shared.closePanelIfOpen()
         // 窗口一隐藏就丢弃撤销记录：下次唤出不应再能恢复上一次的删除。
         ClipUndoStore.shared.removeAll()
         animateContent(visible: false) { [weak self] in
-            self?.window?.setIsVisible(false)
+            guard let self else { return }
+            self.isDismissing = false
+            self.window?.setIsVisible(false)
             if #unavailable(macOS 15.0) {
                 AppEnvironment.shared.previousApp?.activate(options: [])
             }
-            self?.window?.orderOut(nil)
+            self.window?.orderOut(nil)
             completionHandler?()
         }
     }
 
     func show(in frame: NSRect?) {
         guard let window else { return }
+        isDismissing = false
         targetVisible = true
         let initiallyHidden = !window.isVisible
 

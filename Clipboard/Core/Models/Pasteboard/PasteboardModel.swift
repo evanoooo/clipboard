@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ImageIO
 import UniformTypeIdentifiers
 
 final class PasteboardModel: Identifiable, Codable {
@@ -186,7 +187,7 @@ final class PasteboardModel: Identifiable, Codable {
             let imageData = data
 
             let image = await Task.detached(priority: .userInitiated) {
-                NSImage(data: imageData)
+                Self.downsampledImage(from: imageData, maxPixelSize: 600) ?? NSImage(data: imageData)
             }.value
 
             cachedThumbnail = image
@@ -196,6 +197,24 @@ final class PasteboardModel: Identifiable, Codable {
 
         thumbnailLoadTask = task
         return await task.value
+    }
+
+    nonisolated private static func downsampledImage(from data: Data, maxPixelSize: CGFloat) -> NSImage? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
+            return nil
+        }
+        let downsampleOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     // MARK: - 状态更新

@@ -101,6 +101,11 @@ enum ClipContentRendererTests {
         let bg = rendered.attribute(.backgroundColor, at: proxyRange.location, effectiveRange: nil) as? NSColor
         runner.assertTrue(bg != nil, "Rendered code should have search highlight background")
 
+        // 11. Code and text highlight caching idempotency
+        let cachedOnce = CodeHighlighter.highlight(nginxSample, language: .nginx, keyword: nil)
+        let cachedTwice = CodeHighlighter.highlight(nginxSample, language: .nginx, keyword: nil)
+        runner.assertEqual(cachedOnce.string, cachedTwice.string, "Highlighted strings match")
+
         print("✓ ClipContentRenderer strategy resolution tests passed!")
     }
 }

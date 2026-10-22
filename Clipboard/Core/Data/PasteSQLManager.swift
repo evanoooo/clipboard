@@ -77,16 +77,24 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
     nonisolated static func createIndexes(on conn: Connection) {
         let indexes = [
             (
-                "idx_app_hidden_ts",
-                "CREATE INDEX IF NOT EXISTS idx_app_hidden_ts ON Clip(app_id, hidden, timestamp DESC)"
+                "idx_sort_order",
+                "CREATE INDEX IF NOT EXISTS idx_sort_order ON Clip(sort_order DESC, id DESC)"
             ),
             (
-                "idx_tag_hidden_ts",
-                "CREATE INDEX IF NOT EXISTS idx_tag_hidden_ts ON Clip(tag, hidden, timestamp DESC)"
+                "idx_hidden_order",
+                "CREATE INDEX IF NOT EXISTS idx_hidden_order ON Clip(hidden, sort_order DESC, id DESC)"
             ),
             (
-                "idx_group_ts",
-                "CREATE INDEX IF NOT EXISTS idx_group_ts ON Clip(\"group\", timestamp DESC)"
+                "idx_group_hidden_order",
+                "CREATE INDEX IF NOT EXISTS idx_group_hidden_order ON Clip(\"group\", hidden, sort_order DESC, id DESC)"
+            ),
+            (
+                "idx_tag_hidden_order",
+                "CREATE INDEX IF NOT EXISTS idx_tag_hidden_order ON Clip(tag, hidden, sort_order DESC, id DESC)"
+            ),
+            (
+                "idx_app_hidden_order",
+                "CREATE INDEX IF NOT EXISTS idx_app_hidden_order ON Clip(app_id, hidden, sort_order DESC, id DESC)"
             ),
             (
                 "uidx_unique_id",
@@ -115,7 +123,11 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
             "idx_tag",
             "idx_ts",
             "idx_group",
-            "idx_unique_id"
+            "idx_unique_id",
+            "idx_group_order",
+            "idx_app_hidden_ts",
+            "idx_tag_hidden_ts",
+            "idx_group_ts"
         ]
         for name in obsoleteIndexes {
             do {

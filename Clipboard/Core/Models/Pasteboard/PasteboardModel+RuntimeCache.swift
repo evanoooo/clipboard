@@ -28,6 +28,8 @@ struct PasteboardModelRuntimeCache {
     var thumbnailLoadTask: Task<NSImage?, Never>?
     var linkMetadata: LinkPreviewMetadata?
     var codeDetectionState: CodeDetectionState = .uncomputed
+    var plainTextAttributedString: NSAttributedString?
+    var highlightedCode: NSAttributedString?
 }
 
 extension PasteboardModel {
@@ -94,6 +96,16 @@ extension PasteboardModel {
     var cachedLinkMetadata: LinkPreviewMetadata? {
         get { runtimeCache.linkMetadata }
         set { runtimeCache.linkMetadata = newValue }
+    }
+
+    var cachedPlainTextAttributedString: NSAttributedString? {
+        get { runtimeCache.plainTextAttributedString }
+        set { runtimeCache.plainTextAttributedString = newValue }
+    }
+
+    var cachedHighlightedCode: NSAttributedString? {
+        get { runtimeCache.highlightedCode }
+        set { runtimeCache.highlightedCode = newValue }
     }
 
     /// 嗅探并缓存纯文本代码语言（如 Nginx、Swift、JSON 等）

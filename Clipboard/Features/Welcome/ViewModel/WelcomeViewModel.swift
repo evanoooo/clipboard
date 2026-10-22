@@ -5,6 +5,7 @@
 
 import AppKit
 import ApplicationServices
+import Combine
 import Observation
 
 @MainActor
@@ -12,10 +13,19 @@ import Observation
 final class WelcomeViewModel {
     private(set) var currentPage: WelcomePage = .introduction
     private(set) var isMovingForward = true
-    private(set) var hasAccessibilityPermission = AXIsProcessTrusted()
+    var hasAccessibilityPermission: Bool = AccessibilityPermissionObserver.shared.isTrusted
+
+    @ObservationIgnored
+    private var cancellables = Set<AnyCancellable>()
 
     init(currentPage: WelcomePage = .introduction) {
         self.currentPage = currentPage
+        AccessibilityPermissionObserver.shared.permissionDidChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] trusted in
+                self?.hasAccessibilityPermission = trusted
+            }
+            .store(in: &cancellables)
     }
 
     func select(_ page: WelcomePage) {
@@ -34,7 +44,7 @@ final class WelcomeViewModel {
     }
 
     func refreshAccessibilityPermission() {
-        hasAccessibilityPermission = AXIsProcessTrusted()
+        hasAccessibilityPermission = AccessibilityPermissionObserver.shared.checkPermission()
     }
 
     func openAccessibilitySettings() {
@@ -43,6 +53,7 @@ final class WelcomeViewModel {
         ) else {
             return
         }
+        AccessibilityPermissionObserver.shared.startPollingIfUntrusted()
         NSWorkspace.shared.open(url)
     }
 }

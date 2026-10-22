@@ -110,14 +110,38 @@ final class CardContentView: NSView, PassthroughMouseEvents {
     }
 
     private func replaceContentView(for model: PasteboardModel, keyword: String) {
+        let kind = ClipContentRenderer.resolveKind(for: model)
+        if tryInPlaceReuse(for: model, kind: kind, keyword: keyword) {
+            return
+        }
+
         cancelCurrentLoad()
         currentContentView?.removeFromSuperview()
         currentContentView = nil
 
-        let view = makeContentView(for: model, keyword: keyword)
+        let view = makeContentView(for: model, kind: kind, keyword: keyword)
         addSubview(view)
         view.snp.makeConstraints { $0.edges.equalToSuperview() }
         currentContentView = view
+    }
+
+    private func tryInPlaceReuse(for model: PasteboardModel, kind: ClipContentKind, keyword: String) -> Bool {
+        guard let current = currentContentView else { return false }
+        switch kind {
+        case .code, .plainText:
+            if let stringView = current as? CardStringContentView {
+                stringView.updateKeyword(keyword, model: model)
+                return true
+            }
+        case .richText:
+            if let richView = current as? CardRichContentView {
+                richView.update(with: model, keyword: keyword)
+                return true
+            }
+        default:
+            break
+        }
+        return false
     }
 
     private func updateKeyword(_ keyword: String, in view: NSView?) {
@@ -146,8 +170,8 @@ final class CardContentView: NSView, PassthroughMouseEvents {
         }
     }
 
-    private func makeContentView(for model: PasteboardModel, keyword: String) -> NSView {
-        switch ClipContentRenderer.resolveKind(for: model) {
+    private func makeContentView(for model: PasteboardModel, kind: ClipContentKind, keyword: String) -> NSView {
+        switch kind {
         case .empty:
             return NSView()
         case .color:
@@ -209,7 +233,7 @@ private final class PassthroughTextView: NSTextView {
 
 final class CardRichContentView: NSView, PassthroughMouseEvents {
     private lazy var textView: PassthroughTextView = makeCardTextView()
-    private let model: PasteboardModel
+    private var model: PasteboardModel
 
     init(model: PasteboardModel, keyword: String) {
         self.model = model
@@ -228,6 +252,12 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
         textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
+    }
+
+    func update(with model: PasteboardModel, keyword: String) {
+        self.model = model
+        textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
+        updateBackground()
     }
 
     override func viewDidChangeEffectiveAppearance() {

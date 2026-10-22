@@ -39,7 +39,7 @@ final class CardHeadView: NSView {
         return field
     }()
 
-    /// 副标题行：默认分组显示「类型 · 时间」，置顶分组显示类型。
+    /// 副标题行：默认分组显示时间。一旦有别名或在自定义分类下，不再出现干瘪的类型文字。
     private lazy var subtitleField: NSTextField = {
         let field = NSTextField(labelWithString: "")
         field.font = .systemFont(ofSize: NSFont.systemFontSize)
@@ -60,7 +60,7 @@ final class CardHeadView: NSView {
     private lazy var iconView: NSImageView = {
         let view = NSImageView()
         view.imageScaling = .scaleProportionallyUpOrDown
-        view.isHidden = true
+        view.isHidden = false
         return view
     }()
 
@@ -79,7 +79,6 @@ final class CardHeadView: NSView {
     // MARK: - Configure
 
     func configure(with model: PasteboardModel) {
-        let isDefault = model.group == -1
         self.model = model
 
         let color = AppColorService.shared.color(for: model)
@@ -93,15 +92,14 @@ final class CardHeadView: NSView {
             applyDisplay(alias: model.alias)
         }
 
-        iconView.isHidden = !isDefault
-        if isDefault {
-            iconView.image = AppIconCache.shared.getCachedIcon(forAppID: model.appID, path: model.appPath)
-            iconLoadTask?.cancel()
-            iconLoadTask = Task { @MainActor [weak self] in
-                let icon = await AppIconCache.shared.loadIcon(forAppID: model.appID, path: model.appPath)
-                guard !Task.isCancelled else { return }
-                self?.iconView.image = icon
-            }
+        // 置顶/分类到标签后仍保留来源应用图标，与默认分组、悬浮窗、预览保持一致
+        iconView.isHidden = false
+        iconView.image = AppIconCache.shared.getCachedIcon(forAppID: model.appID, path: model.appPath)
+        iconLoadTask?.cancel()
+        iconLoadTask = Task { @MainActor [weak self] in
+            let icon = await AppIconCache.shared.loadIcon(forAppID: model.appID, path: model.appPath)
+            guard !Task.isCancelled else { return }
+            self?.iconView.image = icon
         }
     }
 
@@ -117,6 +115,13 @@ final class CardHeadView: NSView {
         subtitleField.stringValue = ""
         subtitleField.isHidden = false
         backgroundView.layer?.backgroundColor = nil
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard let model else { return }
+        let color = AppColorService.shared.color(for: model)
+        backgroundView.layer?.backgroundColor = color.cgColor
     }
 
     func refreshTimestamp(for model: PasteboardModel) {
@@ -180,15 +185,19 @@ final class CardHeadView: NSView {
 
         switch (isDefault, hasAlias) {
         case (true, true):
+            // 默认分组 + 有别名：副标题清晰展示时间，类型转由底部图标承载
             subtitleField.isHidden = false
-            subtitleField.stringValue = "\(type) · \(time)"
+            subtitleField.stringValue = time
         case (true, false):
+            // 默认分组 + 无别名：主标题为类型名，副标题展示时间
             subtitleField.isHidden = false
             subtitleField.stringValue = time
         case (false, true):
-            subtitleField.isHidden = false
-            subtitleField.stringValue = type
+            // 自定义分组 + 有别名：主标题单行聚焦别名，隐藏冗余的纯类型文本
+            subtitleField.isHidden = true
+            subtitleField.stringValue = ""
         case (false, false):
+            // 自定义分组 + 无别名：主标题展示类型名，副标题隐藏
             subtitleField.isHidden = true
             subtitleField.stringValue = ""
         }
@@ -216,7 +225,6 @@ extension CardHeadView: NSTextFieldDelegate {
     }
 
     func controlTextDidEndEditing(_: Notification) {
-        // 点击其它区域失焦时按提交处理。
         finishAliasEditing(commit: true)
     }
 }

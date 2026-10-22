@@ -122,6 +122,16 @@ final class FloatingWindowContentView: NSView {
             }
             .store(in: &cancellables)
 
+        CategoryChipStore.shared.chipsContentDidChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                headerView.reloadChips()
+                historyView.applySnapshot(animating: false)
+                historyView.restoreSelection()
+            }
+            .store(in: &cancellables)
+
         layoutSubviews()
     }
 

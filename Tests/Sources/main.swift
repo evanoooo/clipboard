@@ -30,6 +30,15 @@ final class TestRunner {
         testsPassed += 1
     }
 
+    static func assertFalse(_ condition: Bool, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+        testsRun += 1
+        if condition {
+            print("❌ Assertion failed: expected false, got true. \(message) at \(file):\(line)")
+            exit(1)
+        }
+        testsPassed += 1
+    }
+
     static func main() {
         print("=== Running Clipboard Unit Tests ===")
 
@@ -47,6 +56,7 @@ final class TestRunner {
         CodePerformanceTests.run(runner: TestRunner.self)
         CategoryChipTests.run(runner: TestRunner.self)
         PasteboardMonitoringTests.run(runner: TestRunner.self)
+        EscapeHandlingTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")

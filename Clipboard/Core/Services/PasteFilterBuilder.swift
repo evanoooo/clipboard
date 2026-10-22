@@ -56,7 +56,7 @@ enum PasteFilterBuilder {
             clauses.append(Col.hidden == 0)
         }
 
-        // 类型筛选
+        // 类型筛选：生成纯净的 tag = ? 条件，使 SQLite 直接命中复合覆盖索引 idx_tag_hidden_order
         if !criteria.selectedTypes.isEmpty {
             var tagValues: [String] = []
             for type in criteria.selectedTypes {
@@ -65,7 +65,7 @@ enum PasteFilterBuilder {
                     tagValues.append(value)
                 }
             }
-            if let tagCondition = orJoined(tagValues.sorted().map { (Col.tag ?? "") == $0 }) {
+            if let tagCondition = orJoined(tagValues.sorted().map { Expression<Bool>("tag = ?", [$0]) }) {
                 clauses.append(tagCondition)
             }
         }

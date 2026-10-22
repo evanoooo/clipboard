@@ -19,7 +19,7 @@ enum PasteOrder {
             }
             try database.run("CREATE INDEX IF NOT EXISTS idx_sort_order ON Clip(sort_order DESC, id DESC)")
             try database.run("CREATE INDEX IF NOT EXISTS idx_hidden_order ON Clip(hidden, sort_order DESC, id DESC)")
-            try database.run("CREATE INDEX IF NOT EXISTS idx_group_order ON Clip(\"group\", sort_order DESC, id DESC)")
+            try database.run("CREATE INDEX IF NOT EXISTS idx_group_hidden_order ON Clip(\"group\", hidden, sort_order DESC, id DESC)")
         }
     }
 

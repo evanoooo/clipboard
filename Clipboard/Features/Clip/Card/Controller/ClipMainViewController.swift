@@ -28,6 +28,7 @@ final class ClipMainViewController: NSViewController {
     var draggedIDs: [Int64] = []
     var dragFilterRevision = 0
     var restoringSelection = false
+    var lastEscapeTime: TimeInterval = 0
 
     // MARK: - Pause Indicator
 
@@ -219,6 +220,7 @@ extension ClipMainViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        lastEscapeTime = 0
 
         if topBarView.isSearching, !topVM.hasInput {
             topBarView.deactivateSearch()
@@ -259,6 +261,7 @@ extension ClipMainViewController {
 
     override func viewDidDisappear() {
         super.viewDidDisappear()
+        lastEscapeTime = 0
         PasteDataStore.main.clearExpiredData()
         if let token = monitorToken {
             NSEvent.removeMonitor(token)

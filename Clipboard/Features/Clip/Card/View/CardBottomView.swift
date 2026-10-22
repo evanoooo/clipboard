@@ -101,9 +101,18 @@ private final class CardImageBottomView: NSView, PassthroughMouseEvents {
         return view
     }()
 
+    private lazy var iconView: NSImageView = {
+        let view = NSImageView()
+        view.imageScaling = .scaleProportionallyUpOrDown
+        if let img = NSImage(systemSymbolName: "photo", accessibilityDescription: nil) {
+            view.image = img
+        }
+        return view
+    }()
+
     private lazy var label: PaddedTextField = {
         let field = PaddedTextField(padding: NSEdgeInsets(
-            top: 2, left: Const.space6,
+            top: 2, left: Const.space4,
             bottom: 2, right: Const.space6
         ))
         field.font = .preferredFont(forTextStyle: .callout)
@@ -112,12 +121,21 @@ private final class CardImageBottomView: NSView, PassthroughMouseEvents {
         return field
     }()
 
+    private lazy var stack: NSStackView = {
+        let sv = NSStackView(views: [iconView, label])
+        sv.orientation = .horizontal
+        sv.alignment = .centerY
+        sv.spacing = 2
+        sv.distribution = .fill
+        return sv
+    }()
+
     init(introString: String) {
         super.init(frame: .zero)
         label.stringValue = introString
 
         addSubview(labelBg)
-        labelBg.addSubview(label)
+        labelBg.addSubview(stack)
 
         labelBg.snp.makeConstraints { make in
             make.bottom.equalToSuperview().inset(Const.space8)
@@ -125,8 +143,11 @@ private final class CardImageBottomView: NSView, PassthroughMouseEvents {
             make.leading.greaterThanOrEqualToSuperview()
             make.trailing.lessThanOrEqualToSuperview()
         }
-        label.snp.makeConstraints { make in
+        stack.snp.makeConstraints { make in
             make.edges.equalToSuperview()
+        }
+        iconView.snp.makeConstraints { make in
+            make.width.height.equalTo(12)
         }
 
         updateLabelBackground()
@@ -146,6 +167,7 @@ private final class CardImageBottomView: NSView, PassthroughMouseEvents {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             labelBg.layer?.backgroundColor = NSColor.unemphasizedSelectedContentBackgroundColor
                 .withAlphaComponent(0.8).cgColor
+            iconView.contentTintColor = .secondaryLabelColor
         }
     }
 }
@@ -273,12 +295,27 @@ private final class CardFileBottomView: NSView, PassthroughMouseEvents {
 final class CardCommonBottomView: NSView, PassthroughMouseEvents {
     private lazy var gradientLayer = CAGradientLayer()
 
+    private lazy var iconView: NSImageView = {
+        let view = NSImageView()
+        view.imageScaling = .scaleProportionallyUpOrDown
+        return view
+    }()
+
     private lazy var label: NSTextField = {
         let field = NSTextField(labelWithString: "")
         field.font = .preferredFont(forTextStyle: .callout)
         field.alignment = .center
         field.lineBreakMode = .byTruncatingTail
         return field
+    }()
+
+    private lazy var contentStack: NSStackView = {
+        let stack = NSStackView(views: [iconView, label])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.distribution = .fill
+        return stack
     }()
 
     private var needsMask: Bool = false
@@ -290,30 +327,63 @@ final class CardCommonBottomView: NSView, PassthroughMouseEvents {
         super.init(frame: .zero)
         wantsLayer = true
 
-        label.stringValue = model.introString()
+        setupContent()
 
         needsMask = model.needsBottomMask {
             ContentMaskCalculator.needsMask(for: model)
         }
 
         if needsMask {
-            label.drawsBackground = true
             layer?.addSublayer(gradientLayer)
         }
 
         updateColors()
-        addSubview(label)
-        label.snp.makeConstraints { make in
+        addSubview(contentStack)
+        contentStack.snp.makeConstraints { make in
             make.centerX.equalToSuperview()
             make.leading.greaterThanOrEqualToSuperview().inset(Const.space12)
             make.trailing.lessThanOrEqualToSuperview().inset(Const.space12)
             make.bottom.equalToSuperview().inset(Const.space8)
+        }
+        iconView.snp.makeConstraints { make in
+            make.width.height.equalTo(12)
         }
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError()
+    }
+
+    private func setupContent() {
+        let (symbolName, introText) = resolveContentMeta()
+        if let symbolName, let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+            iconView.image = image
+            iconView.isHidden = false
+        } else {
+            iconView.isHidden = true
+        }
+        label.stringValue = introText
+    }
+
+    private func resolveContentMeta() -> (symbolName: String?, text: String) {
+        if let lang = model.detectedCodeLanguage {
+            return ("chevron.left.forwardslash.chevron.right", "\(lang.displayName) · \(model.introString())")
+        }
+        switch model.type {
+        case .string:
+            return ("text.alignleft", model.introString())
+        case .rich:
+            return ("doc.richtext", model.introString())
+        case .link:
+            return ("link", model.introString())
+        case .file:
+            return ("doc", model.introString())
+        case .color:
+            return ("paintpalette.fill", model.introString())
+        default:
+            return (nil, model.introString())
+        }
     }
 
     override func layout() {
@@ -331,7 +401,7 @@ final class CardCommonBottomView: NSView, PassthroughMouseEvents {
             let (background, foreground) = model.colors()
             baseColor = background
             label.textColor = foreground
-            label.backgroundColor = background
+            iconView.contentTintColor = foreground
             if needsMask { updateGradient() }
         }
     }
