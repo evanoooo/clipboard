@@ -2,7 +2,7 @@
 //  SyncEngine.swift
 //  Clipboard
 //
-//  WebDAV 增量同步调度引擎：Diff 比对、LWW 冲突裁决、15s 防抖与并发传输管线
+//  WebDAV 增量同步调度引擎：Diff 比对、LWW 冲突裁决、15s 防抖与受控并发传输管线
 //
 
 import Combine
@@ -32,6 +32,24 @@ enum SyncState: Sendable, Equatable {
     }
 }
 
+// MARK: - 实时同步日志模型
+
+nonisolated struct SyncLogItem: Identifiable, Sendable {
+    let id: UUID
+    let timestamp: String
+    let message: String
+    let isError: Bool
+
+    init(message: String, isError: Bool = false) {
+        self.id = UUID()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        self.timestamp = formatter.string(from: Date())
+        self.message = message
+        self.isError = isError
+    }
+}
+
 @MainActor
 final class SyncEngine: ObservableObject {
     static let shared = SyncEngine()
@@ -41,6 +59,8 @@ final class SyncEngine: ObservableObject {
     @Published private(set) var isRestoring: Bool = false
     @Published private(set) var restoreMessage: String?
     @Published private(set) var isFetchingSummary: Bool = false
+    @Published private(set) var syncProgress: String?
+    @Published private(set) var syncLogs: [SyncLogItem] = []
 
     private var lastRemoteETag: String?
     private var isDirty = false
@@ -48,6 +68,25 @@ final class SyncEngine: ObservableObject {
 
     private init() {
         loadCachedSummary()
+    }
+
+    // MARK: - 日志记录
+
+    func addLog(_ message: String, isError: Bool = false) {
+        let item = SyncLogItem(message: message, isError: isError)
+        syncLogs.append(item)
+        if syncLogs.count > 100 {
+            syncLogs.removeFirst(syncLogs.count - 100)
+        }
+        if isError {
+            Log.sync.error("[Sync] \(message)")
+        } else {
+            Log.sync.info("[Sync] \(message)")
+        }
+    }
+
+    func clearLogs() {
+        syncLogs.removeAll()
     }
 
     // MARK: - 缓存摘要
@@ -87,7 +126,6 @@ final class SyncEngine: ObservableObject {
             Col.showData, Col.group, Col.tag, Col.alias
         ]
 
-        // 若仅同步收藏和分组，查询全部分组（通常数百条）；若同步全量流水，设定 5000 条上限
         let rows = await PasteReadStore.shared.search(
             filter: filter,
             select: sel,
@@ -131,7 +169,7 @@ final class SyncEngine: ObservableObject {
         isDirty = true
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15秒防抖
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
             guard !Task.isCancelled else { return }
             await self?.triggerSync()
         }
@@ -144,6 +182,7 @@ final class SyncEngine: ObservableObject {
         guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return nil }
         guard !isFetchingSummary else { return syncSummary }
         isFetchingSummary = true
+        addLog("正在从云端读取资产看板索引...")
         defer { isFetchingSummary = false }
 
         do {
@@ -153,34 +192,39 @@ final class SyncEngine: ObservableObject {
                   let password = SyncKeychainManager.shared.loadWebDAVPassword(),
                   let passphrase = SyncKeychainManager.shared.loadSyncPassphrase(),
                   !passphrase.isEmpty else {
+                addLog("获取看板失败: 配置未完整设置", isError: true)
                 return nil
             }
 
             let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
             let saltPath = "ClipboardSync/vault.meta.enc"
-            guard let salt = try? await client.download(from: saltPath) else { return nil }
+            guard let salt = try? await client.download(from: saltPath) else {
+                addLog("云端尚未初始化密钥元数据", isError: true)
+                return nil
+            }
             let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
 
             let indexPath = "ClipboardSync/index.json.enc"
             guard let encIndexData = try? await client.download(from: indexPath),
                   let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
                   let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
+                addLog("云端索引下载或解密失败", isError: true)
                 return nil
             }
 
             let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
             self.syncSummary = summary
             saveSummaryCache(summary)
+            addLog("云端资产概览更新完成: 共 \(summary.totalCount) 条记录")
             return summary
         } catch {
+            addLog("获取看板异常: \(error.localizedDescription)", isError: true)
             return nil
         }
     }
 
     // MARK: - 从云端还原
 
-    /// 从云端拉取还原数据
-    /// - Parameter overwriteLocal: 若为 false，进行智能安全合并（仅补充本地缺失或陈旧条目，保留本地一切新增）；若为 true，先清空本地，完全由云端镜像覆盖。
     @discardableResult
     func restoreFromCloud(overwriteLocal: Bool = false) async -> (success: Bool, message: String) {
         guard UserDefaults.standard.bool(forKey: "sync_enabled") else {
@@ -192,7 +236,11 @@ final class SyncEngine: ObservableObject {
 
         isRestoring = true
         restoreMessage = nil
-        defer { isRestoring = false }
+        addLog("开始从云端拉取还原数据 (模式: \(overwriteLocal ? "完全覆盖" : "智能安全合并"))...")
+        defer {
+            isRestoring = false
+            syncProgress = nil
+        }
 
         do {
             guard let serverURLString = UserDefaults.standard.string(forKey: "sync_webdav_url"),
@@ -203,41 +251,40 @@ final class SyncEngine: ObservableObject {
                   !passphrase.isEmpty else {
                 let msg = "WebDAV 账号或同步密码未配置完整"
                 restoreMessage = msg
+                addLog(msg, isError: true)
                 return (false, msg)
             }
 
             let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
 
-            // 1. 获取 salt 与派生主密钥
             let saltPath = "ClipboardSync/vault.meta.enc"
             guard let salt = try? await client.download(from: saltPath) else {
                 let msg = "未找到云端密钥元数据，云端可能尚未进行过备份"
                 restoreMessage = msg
+                addLog(msg, isError: true)
                 return (false, msg)
             }
             let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
 
-            // 2. 下载并解密云端索引
             let indexPath = "ClipboardSync/index.json.enc"
             guard let encIndexData = try? await client.download(from: indexPath),
                   let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
                   let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
                 let msg = "读取或解密云端索引失败，请检查同步密码是否正确"
                 restoreMessage = msg
+                addLog(msg, isError: true)
                 return (false, msg)
             }
 
             let activeEntries = remoteIndex.entries.values.filter { !$0.isDeleted }
-
-            // 3. 计算需要拉取的条目 ID
             var toDownloadIds: [String] = []
 
             if overwriteLocal {
-                // 完全覆盖模式：清空本地历史
+                addLog("清空本地所有记录以准备完全覆盖...")
                 _ = try await PasteSQLManager.manager.clearHistory(includePinnedAndGrouped: true)
                 toDownloadIds = activeEntries.map(\.uniqueId)
             } else {
-                // 智能安全合并模式：查询 SQLite 数据库全量条目比对，保留本地所有已有和新增！
+                addLog("查询本地数据库全量条目以执行差集比对...")
                 let localRows = await PasteReadStore.shared.search(
                     select: [Col.uniqueId, Col.timestamp],
                     limit: nil
@@ -260,28 +307,38 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
-            // 4. 并发拉取并写入本地数据库
+            addLog("需拉取还原 \(toDownloadIds.count) 条数据，开始受控并发下载...")
             var restoredCount = 0
-            try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
-                for id in toDownloadIds {
-                    group.addTask {
-                        guard let encData = try? await client.download(from: "ClipboardSync/items/\(id).enc"),
-                              let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
-                              let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
-                            return nil
+            let maxConcurrency = 3
+            let total = toDownloadIds.count
+
+            for chunk in toDownloadIds.chunked(into: maxConcurrency) {
+                let downloadedModels = try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
+                    for id in chunk {
+                        group.addTask {
+                            guard let encData = try? await client.download(from: "ClipboardSync/items/\(id).enc"),
+                                  let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                                  let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                return nil
+                            }
+                            return await MainActor.run { blob.toPasteboardModel() }
                         }
-                        return await MainActor.run { blob.toPasteboardModel() }
                     }
-                }
-                for try await model in group {
-                    if let model {
-                        await PasteDataStore.main.insertModel(model)
-                        restoredCount += 1
+                    var models: [PasteboardModel] = []
+                    for try await model in group {
+                        if let model { models.append(model) }
                     }
+                    return models
                 }
+
+                for model in downloadedModels {
+                    await PasteDataStore.main.insertModel(model)
+                    restoredCount += 1
+                }
+                syncProgress = "正在还原 (\(restoredCount)/\(total))..."
+                addLog("还原进度: \(restoredCount)/\(total)")
             }
 
-            // 5. 刷新历史列表与更新资产概览
             await PasteDataStore.main.reloadHistory()
             let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
             self.syncSummary = summary
@@ -291,11 +348,13 @@ final class SyncEngine: ObservableObject {
                 ? "完全覆盖完成：已从云端拉取 \(restoredCount) 条记录并完全覆盖本地。"
                 : "智能合并完成：已拉取恢复 \(restoredCount) 条云端记录，本地现有数据均已完好保留。"
             self.restoreMessage = msg
+            addLog(msg)
             return (true, msg)
 
         } catch {
             let errorMsg = "还原失败: \(error.localizedDescription)"
             self.restoreMessage = errorMsg
+            addLog(errorMsg, isError: true)
             return (false, errorMsg)
         }
     }
@@ -311,6 +370,12 @@ final class SyncEngine: ObservableObject {
         }
         guard currentState != .syncing else { return currentState }
         currentState = .syncing
+        syncProgress = "准备连接服务器..."
+        addLog("====== 开始增量同步流程 ======")
+
+        defer {
+            syncProgress = nil
+        }
 
         do {
             // 1. 检查凭据配置
@@ -322,102 +387,149 @@ final class SyncEngine: ObservableObject {
                   !passphrase.isEmpty else {
                 let state: SyncState = .failed(message: "同步配置或密码未完整设置")
                 currentState = state
+                addLog("同步配置或主密码未完整设置", isError: true)
                 return state
             }
 
+            addLog("目标服务器: \(serverURL.host ?? serverURL.absoluteString)，用户: \(username)")
             let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
 
-            // 2. 确保远端同步目录存在
+            // 2. 探测连通性与测量延迟
+            syncProgress = "正在连接服务器..."
+            let (_, latency) = try await client.testConnection()
+            addLog(String(format: "服务器连通性正常，网络往返延迟: %.0f ms", latency))
+
+            // 3. 确保远端同步目录存在
+            syncProgress = "验证云端目录结构..."
             try await client.makeDirectory(path: "ClipboardSync")
             try await client.makeDirectory(path: "ClipboardSync/items")
 
-            // 3. 读取或生成加密 Salt 与派生主密钥
+            // 4. 读取或生成加密 Salt 与派生主密钥
+            syncProgress = "正在派生加密主密钥..."
             let saltPath = "ClipboardSync/vault.meta.enc"
             var salt: Data
             if let existingSaltEnc = try? await client.download(from: saltPath) {
                 salt = existingSaltEnc
+                addLog("已获取云端现有 Salt 元数据")
             } else {
                 salt = SyncCryptoEngine.generateSalt()
                 try? await client.upload(data: salt, to: saltPath)
+                addLog("为全新云端空间初始化加密 Salt 元数据")
             }
 
             let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
 
-            // 4. ETag 极速预检 (若远端索引未变且本地无新脏数据，百毫秒内退出)
+            // 5. ETag 极速预检
             let indexPath = "ClipboardSync/index.json.enc"
             let currentETag = try? await client.getETag(path: indexPath)
             if !isDirty, let currentETag, let lastRemoteETag, currentETag == lastRemoteETag {
-                let state: SyncState = .success(lastSyncTime: Int64(Date().timeIntervalSince1970 * 1000))
+                let finishTime = Int64(Date().timeIntervalSince1970 * 1000)
+                let state: SyncState = .success(lastSyncTime: finishTime)
                 currentState = state
+                addLog("ETag 一致且本地无脏数据，极速预检完成（0 传输开销）")
                 return state
             }
 
-            // 5. 下载远端索引 (若尚无则初始化空白索引)
+            // 6. 下载远端索引
+            syncProgress = "获取云端索引清单..."
             var remoteIndex = SyncIndex()
             if let encIndexData = try? await client.download(from: indexPath) {
                 if let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
                    let decoded = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) {
                     remoteIndex = decoded
+                    addLog("已解析云端索引: 现有记录 \(remoteIndex.entries.count) 条")
                 }
+            } else {
+                addLog("云端尚无索引文件，将初始化全新清单")
             }
 
-            // 6. 从 SQLite 数据库全量收集本地数据并执行 Diff
+            // 7. 从 SQLite 数据库全量收集本地数据并执行 Diff
+            syncProgress = "扫描本地数据库并比对差异..."
             let onlySyncPinned = UserDefaults.standard.bool(forKey: "sync_only_pinned")
             let localBlobs = await fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
+            addLog("本地 SQLite 扫描完成: 共有 \(localBlobs.count) 条待比对记录 (仅同步收藏: \(onlySyncPinned))")
 
             let diff = Self.calculateDiff(localItems: localBlobs, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
+            addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理 \(diff.toDeleteRemote.count) 条")
 
-            // 7. 并发传输管线：下载需拉取条目
-            try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
-                for id in diff.toDownload {
-                    group.addTask {
-                        guard let encData = try? await client.download(from: "ClipboardSync/items/\(id).enc"),
-                              let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
-                              let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
-                            return nil
+            // 8. 受控并发传输管线：下载需拉取条目 (限制并发为 3)
+            if !diff.toDownload.isEmpty {
+                let maxConcurrency = 3
+                var downloadedCount = 0
+                for chunk in diff.toDownload.chunked(into: maxConcurrency) {
+                    let models = try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
+                        for id in chunk {
+                            group.addTask {
+                                guard let encData = try? await client.download(from: "ClipboardSync/items/\(id).enc"),
+                                      let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                                      let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                    return nil
+                                }
+                                return await MainActor.run { blob.toPasteboardModel() }
+                            }
                         }
-                        return await MainActor.run { blob.toPasteboardModel() }
+                        var list: [PasteboardModel] = []
+                        for try await model in group {
+                            if let model { list.append(model) }
+                        }
+                        return list
                     }
-                }
-                for try await model in group {
-                    if let model {
-                        await PasteDataStore.main.insertModel(model)
+                    for m in models {
+                        await PasteDataStore.main.insertModel(m)
+                        downloadedCount += 1
                     }
+                    syncProgress = "正在下载云端条目 (\(downloadedCount)/\(diff.toDownload.count))..."
+                    addLog("下载进度: \(downloadedCount)/\(diff.toDownload.count)")
                 }
             }
 
-            // 8. 并发传输管线：上传本地条目
-            try await withThrowingTaskGroup(of: (String, SyncIndexEntry)?.self) { group in
-                for blob in diff.toUpload {
-                    group.addTask {
-                        guard let rawData = try? JSONEncoder().encode(blob),
-                              let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
-                            return nil
+            // 9. 受控并发传输管线：加密上传本地条目 (限制并发为 3，消除跨洋高延时网络下的连接拥塞与超时)
+            if !diff.toUpload.isEmpty {
+                let maxConcurrency = 3
+                var uploadedCount = 0
+                let totalUploads = diff.toUpload.count
+
+                for chunk in diff.toUpload.chunked(into: maxConcurrency) {
+                    let chunkResults = try await withThrowingTaskGroup(of: (String, SyncIndexEntry)?.self) { group in
+                        for blob in chunk {
+                            group.addTask {
+                                guard let rawData = try? JSONEncoder().encode(blob),
+                                      let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
+                                    return nil
+                                }
+                                try await client.upload(data: encData, to: "ClipboardSync/items/\(blob.uniqueId).enc")
+                                let checksum = SyncCryptoEngine.checksum(for: blob.payloadData ?? Data())
+                                let estimatedSize = (blob.payloadData?.count ?? 0) + (blob.showData?.count ?? 0)
+                                let entry = SyncIndexEntry(
+                                    uniqueId: blob.uniqueId,
+                                    updatedAt: blob.timestamp,
+                                    checksum: checksum,
+                                    isDeleted: false,
+                                    group: blob.group,
+                                    type: blob.pasteboardType,
+                                    tag: blob.tag,
+                                    size: estimatedSize
+                                )
+                                return (blob.uniqueId, entry)
+                            }
                         }
-                        try await client.upload(data: encData, to: "ClipboardSync/items/\(blob.uniqueId).enc")
-                        let checksum = SyncCryptoEngine.checksum(for: blob.payloadData ?? Data())
-                        let estimatedSize = (blob.payloadData?.count ?? 0) + (blob.showData?.count ?? 0)
-                        let entry = SyncIndexEntry(
-                            uniqueId: blob.uniqueId,
-                            updatedAt: blob.timestamp,
-                            checksum: checksum,
-                            isDeleted: false,
-                            group: blob.group,
-                            type: blob.pasteboardType,
-                            tag: blob.tag,
-                            size: estimatedSize
-                        )
-                        return (blob.uniqueId, entry)
+                        var results: [(String, SyncIndexEntry)] = []
+                        for try await res in group {
+                            if let res { results.append(res) }
+                        }
+                        return results
                     }
-                }
-                for try await result in group {
-                    if let (id, entry) = result {
+
+                    for (id, entry) in chunkResults {
                         remoteIndex.entries[id] = entry
+                        uploadedCount += 1
                     }
+                    syncProgress = "正在加密上传 (\(uploadedCount)/\(totalUploads))..."
+                    addLog("上传进度: \(uploadedCount)/\(totalUploads)")
                 }
             }
 
-            // 9. 远端删除实体文件并写入墓碑
+            // 10. 远端删除实体文件并写入墓碑
             for id in diff.toDeleteRemote {
                 try? await client.delete(path: "ClipboardSync/items/\(id).enc")
                 remoteIndex.entries[id] = SyncIndexEntry(
@@ -432,7 +544,7 @@ final class SyncEngine: ObservableObject {
                 )
             }
 
-            // 10. 智能元数据回填：若远端索引某些活跃条目缺失 type 或 size，利用本地匹配补全
+            // 11. 智能元数据回填：补全历史条目的类型与估算大小
             let localBlobMap = Dictionary(localBlobs.map { ($0.uniqueId, $0) }, uniquingKeysWith: { first, _ in first })
             for (id, var entry) in remoteIndex.entries where !entry.isDeleted {
                 var modified = false
@@ -455,7 +567,8 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
-            // 11. 加密上传最新索引清单并更新状态与资产看板
+            // 12. 加密上传最新索引清单并更新状态与资产看板
+            syncProgress = "保存云端索引清单..."
             remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
             let updatedIndexData = try JSONEncoder().encode(remoteIndex)
             let encUpdatedIndex = try SyncCryptoEngine.encrypt(data: updatedIndexData, using: masterKey)
@@ -472,12 +585,25 @@ final class SyncEngine: ObservableObject {
             let finishTime = Int64(Date().timeIntervalSince1970 * 1000)
             let state: SyncState = .success(lastSyncTime: finishTime)
             self.currentState = state
+            addLog("====== 同步圆满成功 (云端总条目: \(summary.totalCount)) ======")
             return state
 
         } catch {
             let state: SyncState = .failed(message: error.localizedDescription)
             self.currentState = state
+            addLog("同步失败: \(error.localizedDescription)", isError: true)
             return state
+        }
+    }
+}
+
+// MARK: - Array Chunking 扩展
+
+extension Array {
+    fileprivate func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
 }

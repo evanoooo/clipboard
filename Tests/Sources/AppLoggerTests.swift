@@ -30,7 +30,7 @@ enum AppLoggerTests {
 
     private static func testLogCategoryCoverage(runner: TestRunner.Type) {
         let expectedCategories: Set<String> = [
-            "General", "Pasteboard", "Database", "Storage", "UI", "Hotkey", "Monitor"
+            "General", "Pasteboard", "Database", "Storage", "UI", "Hotkey", "Monitor", "Sync"
         ]
         let actualCategories = Set(LogCategory.allCases.map(\.rawValue))
         runner.assertEqual(actualCategories, expectedCategories, "All predefined categories must be covered")

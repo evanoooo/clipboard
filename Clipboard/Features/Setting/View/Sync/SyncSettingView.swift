@@ -50,6 +50,7 @@ struct SyncSettingView: View {
     @State private var testResult: String?
     @State private var testSuccess: Bool?
     @State private var showOverwriteConfirmation = false
+    @State private var showLogSheet = false
 
     var body: some View {
         let content = ScrollView(.vertical) {
@@ -241,33 +242,63 @@ struct SyncSettingView: View {
                         Divider()
 
                         // 当前状态与手动同步
-                        HStack {
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(statusColor)
-                                    .frame(width: 8, height: 8)
-                                Text(engine.currentState.displayText)
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button(action: {
-                                Task {
-                                    await engine.triggerSync()
-                                }
-                            }) {
-                                HStack(spacing: 4) {
-                                    if case .syncing = engine.currentState {
-                                        ProgressView().controlSize(.small)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(statusColor)
+                                        .frame(width: 8, height: 8)
+                                    if case .syncing = engine.currentState, let progress = engine.syncProgress {
+                                        Text(progress)
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
                                     } else {
-                                        Image(systemName: "arrow.triangle.2.circlepath")
+                                        Text(engine.currentState.displayText)
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
                                     }
-                                    Text("立即同步")
+                                }
+
+                                Spacer()
+
+                                Button(action: {
+                                    showLogSheet = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "list.bullet.rectangle")
+                                        Text("同步日志")
+                                    }
+                                    .font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+
+                                Button(action: {
+                                    Task {
+                                        await engine.triggerSync()
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        if case .syncing = engine.currentState {
+                                            ProgressView().controlSize(.small)
+                                        } else {
+                                            Image(systemName: "arrow.triangle.2.circlepath")
+                                        }
+                                        Text("立即同步")
+                                    }
+                                }
+                                .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.currentState == .syncing)
+                            }
+
+                            if let lastLog = engine.syncLogs.last, engine.currentState != .idle {
+                                HStack(spacing: 4) {
+                                    Image(systemName: lastLog.isError ? "exclamationmark.circle.fill" : "info.circle")
+                                        .foregroundStyle(lastLog.isError ? .red : .secondary)
+                                    Text(lastLog.message)
+                                        .font(.caption2)
+                                        .foregroundStyle(lastLog.isError ? .red : .secondary)
+                                        .lineLimit(1)
                                 }
                             }
-                            .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.currentState == .syncing)
                         }
                     }
                     .padding(Const.space16)
@@ -472,6 +503,9 @@ struct SyncSettingView: View {
         } message: {
             Text("此操作将完全抹掉本地所有剪贴板记录，并以云端备份为准重新导入。本地任何尚未同步的新增内容都将永久丢失。")
         }
+        .sheet(isPresented: $showLogSheet) {
+            SyncLogSheetView(engine: engine, isPresented: $showLogSheet)
+        }
         .onAppear {
             loadCredentials()
         }
@@ -534,5 +568,96 @@ struct SyncSettingView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 同步日志查看弹窗
+
+private struct SyncLogSheetView: View {
+    @ObservedObject var engine: SyncEngine
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 顶栏
+            HStack {
+                Label("WebDAV 同步实时日志", systemImage: "terminal.fill")
+                    .font(.headline)
+                    .bold()
+                Spacer()
+
+                Button("复制全部") {
+                    let fullText = engine.syncLogs.map { "[\($0.timestamp)] \($0.message)" }.joined(separator: "\n")
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(fullText, forType: .string)
+                }
+                .disabled(engine.syncLogs.isEmpty)
+
+                Button("清空") {
+                    engine.clearLogs()
+                }
+                .disabled(engine.syncLogs.isEmpty)
+
+                Button("完成") {
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(NSColor.windowBackgroundColor))
+
+            Divider()
+
+            // 日志内容控制台
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        if engine.syncLogs.isEmpty {
+                            Text("暂无同步日志记录，触发同步后将在此处实时滚动打印。")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .padding(16)
+                        } else {
+                            ForEach(engine.syncLogs) { log in
+                                HStack(alignment: .top, spacing: 6) {
+                                    Text("[\(log.timestamp)]")
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                    Text(log.message)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(log.isError ? .red : Color.primary)
+                                        .textSelection(.enabled)
+                                }
+                                .id(log.id)
+                            }
+                        }
+                    }
+                    .padding(12)
+                }
+                .background(Color(NSColor.textBackgroundColor))
+                .onChange(of: engine.syncLogs.count) { _, _ in
+                    if let last = engine.syncLogs.last {
+                        proxy.scrollTo(last.id, anchor: .bottom)
+                    }
+                }
+            }
+
+            Divider()
+
+            // 底部安全提示
+            HStack {
+                Image(systemName: "lock.shield")
+                    .foregroundStyle(.secondary)
+                Text("所有条目内容离开本地前均经过端到端加密；日志仅追踪传输协议进度与异常诊断，不输出任何敏感明文。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color(NSColor.windowBackgroundColor))
+        }
+        .frame(width: 580, height: 420)
     }
 }

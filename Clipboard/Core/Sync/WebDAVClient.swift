@@ -42,7 +42,11 @@ actor WebDAVClient {
     private let session: URLSession
 
     init(baseURL: URL, username: String? = nil, password: String? = nil) {
-        self.baseURL = baseURL
+        var normalizedString = baseURL.absoluteString
+        if !normalizedString.hasSuffix("/") {
+            normalizedString += "/"
+        }
+        self.baseURL = URL(string: normalizedString) ?? baseURL
 
         if let username, !username.isEmpty, let password {
             let credential = "\(username):\(password)".data(using: .utf8)?.base64EncodedString() ?? ""
@@ -52,8 +56,9 @@ actor WebDAVClient {
         }
 
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 30
-        config.waitsForConnectivity = false
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 120
+        config.waitsForConnectivity = true
         self.session = URLSession(configuration: config)
     }
 
@@ -86,7 +91,6 @@ actor WebDAVClient {
         guard let http = response as? HTTPURLResponse else {
             throw WebDAVError.unexpectedResponse
         }
-        // 201 Created 或 405 Method Not Allowed (目录已存在) 均为合规状态
         if (200...299).contains(http.statusCode) || http.statusCode == 405 {
             return
         }
@@ -113,26 +117,51 @@ actor WebDAVClient {
         var request = makeRequest(path: path, method: "PUT")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
 
-        let (_, response) = try await session.upload(for: request, from: data)
-        guard let http = response as? HTTPURLResponse else {
-            throw WebDAVError.unexpectedResponse
+        var attempts = 0
+        while true {
+            attempts += 1
+            do {
+                let (_, response) = try await session.upload(for: request, from: data)
+                guard let http = response as? HTTPURLResponse else {
+                    throw WebDAVError.unexpectedResponse
+                }
+                if (200...299).contains(http.statusCode) { return }
+                if http.statusCode == 401 { throw WebDAVError.unauthorized }
+                throw WebDAVError.serverError(code: http.statusCode)
+            } catch {
+                if attempts < 2 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    continue
+                }
+                throw error
+            }
         }
-        if (200...299).contains(http.statusCode) { return }
-        if http.statusCode == 401 { throw WebDAVError.unauthorized }
-        throw WebDAVError.serverError(code: http.statusCode)
     }
 
     /// 下载数据 (GET)
     func download(from path: String) async throws -> Data {
         let request = makeRequest(path: path, method: "GET")
-        let (data, response) = try await perform(request)
-        guard let http = response as? HTTPURLResponse else {
-            throw WebDAVError.unexpectedResponse
+
+        var attempts = 0
+        while true {
+            attempts += 1
+            do {
+                let (data, response) = try await perform(request)
+                guard let http = response as? HTTPURLResponse else {
+                    throw WebDAVError.unexpectedResponse
+                }
+                if http.statusCode == 200 { return data }
+                if http.statusCode == 404 { throw WebDAVError.notFound }
+                if http.statusCode == 401 { throw WebDAVError.unauthorized }
+                throw WebDAVError.serverError(code: http.statusCode)
+            } catch {
+                if attempts < 2 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    continue
+                }
+                throw error
+            }
         }
-        if http.statusCode == 200 { return data }
-        if http.statusCode == 404 { throw WebDAVError.notFound }
-        if http.statusCode == 401 { throw WebDAVError.unauthorized }
-        throw WebDAVError.serverError(code: http.statusCode)
     }
 
     /// 物理删除资源 (DELETE)
@@ -142,7 +171,6 @@ actor WebDAVClient {
         guard let http = response as? HTTPURLResponse else {
             throw WebDAVError.unexpectedResponse
         }
-        // 200/204/404 均视为删除完成
         if (200...299).contains(http.statusCode) || http.statusCode == 404 {
             return
         }

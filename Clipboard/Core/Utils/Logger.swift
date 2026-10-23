@@ -61,6 +61,7 @@ nonisolated enum LogCategory: String, CaseIterable, Sendable {
     case ui = "UI"
     case hotkey = "Hotkey"
     case monitor = "Monitor"
+    case sync = "Sync"
 }
 
 // MARK: - 诊断日志条目 (用于内存诊断缓冲区与脱敏报告)
@@ -465,6 +466,7 @@ nonisolated enum Log {
     nonisolated static let ui = CategoryLogger(category: .ui)
     nonisolated static let hotkey = CategoryLogger(category: .hotkey)
     nonisolated static let monitor = CategoryLogger(category: .monitor)
+    nonisolated static let sync = CategoryLogger(category: .sync)
 }
 
 // MARK: - 全局向后兼容单例
