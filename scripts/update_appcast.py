@@ -38,15 +38,6 @@ def main():
 
     pubdate = formatdate(timeval=None, localtime=False, usegmt=True)
 
-    enclosures_xml = ""
-    for enc in enclosures:
-        arch_attr = f'\n                sparkle:arch="{enc["arch"]}"' if enc.get("arch") else ""
-        enclosures_xml += f"""            <enclosure
-                url="https://github.com/{repo}/releases/download/v{version}/{enc['name']}"{arch_attr}
-                sparkle:edSignature="{enc['signature']}"
-                length="{enc['length']}"
-                type="application/octet-stream" />\n"""
-
     if version == "2.4.0":
         release_notes = """## Version 2.4.0
 
@@ -63,7 +54,65 @@ def main():
 - 独立提供 Apple Silicon (arm64)、Intel (x86_64) 与 Universal 原生架构安装包；
 - 现代化标准化 DMG 与 ZIP 双格式制品分发。"""
 
-    item_xml = f"""        <!-- Version {version} -->
+    # Check if multiple architecture enclosures are provided
+    arm_enc = next((e for e in enclosures if e.get("arch") == "arm64" or "-arm64" in e.get("name", "")), None)
+    x86_enc = next((e for e in enclosures if e.get("arch") == "x86_64" or "-x86_64" in e.get("name", "")), None)
+    uni_enc = next((e for e in enclosures if not e.get("arch") and ("-universal" in e.get("name", "") or "universal" in e.get("name", ""))), None)
+
+    if arm_enc and (x86_enc or uni_enc):
+        # Generate separate items: Apple Silicon first with hardwareRequirements, then Intel/Universal
+        items_list = []
+        items_list.append(f"""        <!-- Version {version} (Apple Silicon) -->
+        <item>
+            <title>Version {version} (Apple Silicon)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+{release_notes}
+]]>
+            </description>
+            <pubDate>{pubdate}</pubDate>
+            <sparkle:version>{build_version}</sparkle:version>
+            <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure
+                url="https://github.com/{repo}/releases/download/v{version}/{arm_enc['name']}"
+                sparkle:edSignature="{arm_enc['signature']}"
+                length="{arm_enc['length']}"
+                type="application/octet-stream" />
+        </item>""")
+
+        fallback_enc = x86_enc or uni_enc
+        arch_title = "Intel" if fallback_enc == x86_enc else "Universal"
+        items_list.append(f"""        <!-- Version {version} ({arch_title}) -->
+        <item>
+            <title>Version {version} ({arch_title})</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+{release_notes}
+]]>
+            </description>
+            <pubDate>{pubdate}</pubDate>
+            <sparkle:version>{build_version}</sparkle:version>
+            <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/{repo}/releases/download/v{version}/{fallback_enc['name']}"
+                sparkle:edSignature="{fallback_enc['signature']}"
+                length="{fallback_enc['length']}"
+                type="application/octet-stream" />
+        </item>""")
+        item_xml = "\n\n".join(items_list)
+    else:
+        enclosures_xml = ""
+        for enc in enclosures:
+            enclosures_xml += f"""            <enclosure
+                url="https://github.com/{repo}/releases/download/v{version}/{enc['name']}"
+                sparkle:edSignature="{enc['signature']}"
+                length="{enc['length']}"
+                type="application/octet-stream" />\n"""
+
+        item_xml = f"""        <!-- Version {version} -->
         <item>
             <title>Version {version}</title>
             <description sparkle:format="markdown">

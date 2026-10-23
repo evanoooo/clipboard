@@ -5,9 +5,60 @@
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
 
-        <!-- Version 2.3.0 -->
+        <!-- Version 2.4.0 (Apple Silicon) -->
         <item>
-            <title>Version 2.3.0</title>
+            <title>Version 2.4.0 (Apple Silicon)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.0
+
+- 新增 Paste.app 剪贴板历史数据一键迁移功能 (Beta)；
+- 支持自动扫描与手动选取 Paste 本地数据库，全版本兼容（LZFSE / Raw Deflate / bplist / 外部大文件）；
+- 严格基于 SHA-256 指纹智能去重，自动保护已有分组、标签与别名；
+- 采用真实时间线重序算法，历史记录无缝融入而不干扰最新记录；
+- 迁移修改前自动创建本地完整数据库快照备份，安全零风险。
+]]>
+            </description>
+            <pubDate>Fri, 23 Oct 2026 11:45:00 GMT</pubDate>
+            <sparkle:version>916</sparkle:version>
+            <sparkle:shortVersionString>2.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.0/Clipboard-2.4.0-arm64.zip"
+                sparkle:edSignature="sig_arm"
+                length="4800000"
+                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.4.0 (Universal) -->
+        <item>
+            <title>Version 2.4.0 (Universal / Intel)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.0
+
+- 新增 Paste.app 剪贴板历史数据一键迁移功能 (Beta)；
+- 支持自动扫描与手动选取 Paste 本地数据库，全版本兼容（LZFSE / Raw Deflate / bplist / 外部大文件）；
+- 严格基于 SHA-256 指纹智能去重，自动保护已有分组、标签与别名；
+- 采用真实时间线重序算法，历史记录无缝融入而不干扰最新记录；
+- 迁移修改前自动创建本地完整数据库快照备份，安全零风险。
+]]>
+            </description>
+            <pubDate>Fri, 23 Oct 2026 11:45:00 GMT</pubDate>
+            <sparkle:version>916</sparkle:version>
+            <sparkle:shortVersionString>2.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.0/Clipboard-2.4.0-universal.zip"
+                sparkle:edSignature="sig_uni"
+                length="8700000"
+                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.3.0 (Apple Silicon) -->
+        <item>
+            <title>Version 2.3.0 (Apple Silicon)</title>
             <description sparkle:format="markdown">
                 <![CDATA[
 ## Version 2.3.0
@@ -22,18 +73,31 @@
             <sparkle:version>888</sparkle:version>
             <sparkle:shortVersionString>2.3.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure
                 url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-arm64.zip"
-                sparkle:arch="arm64"
                 sparkle:edSignature="sig_arm"
                 length="4200000"
                 type="application/octet-stream" />
-            <enclosure
-                url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-x86_64.zip"
-                sparkle:arch="x86_64"
-                sparkle:edSignature="sig_x86"
-                length="4400000"
-                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.3.0 (Universal) -->
+        <item>
+            <title>Version 2.3.0 (Universal / Intel)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.3.0
+
+- 架构增强与底层数据增量同步优化；
+- Sparkle 2 自动更新与独立 Ed25519 签名体系；
+- 独立提供 Apple Silicon (arm64)、Intel (x86_64) 与 Universal 原生架构安装包；
+- 现代化标准化 DMG 与 ZIP 双格式制品分发。
+]]>
+            </description>
+            <pubDate>Fri, 23 Oct 2026 09:57:51 GMT</pubDate>
+            <sparkle:version>888</sparkle:version>
+            <sparkle:shortVersionString>2.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <enclosure
                 url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-universal.zip"
                 sparkle:edSignature="sig_uni"
