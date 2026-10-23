@@ -11,6 +11,14 @@
 
 下载最新版本发布包：[Releases](https://github.com/evanoooo/clipboard/releases/latest)
 
+- **Apple Silicon (M系列)**：推荐下载 `Clipboard-*-arm64.dmg`（仅约 4.8MB，原生极致性能）
+- **Intel 处理器**：推荐下载 `Clipboard-*-x86_64.dmg`（约 5.0MB，纯 x86 原生切片）
+- **全架构通用**：提供 `Clipboard-*-universal.dmg`（双架构合一，适合全机型）
+
+## 🔄 数据迁移 (Migration)
+
+- **从 Paste.app 迁移**：支持将 Paste.app 的历史剪贴板记录、图片、外部媒体和来源应用安全完整导入至本软件。详细步骤请参考：[Paste.app 迁移指南](docs/paste_migration_guide.md)。
+
 ---
 
 ## ✨ 核心功能与技术特性

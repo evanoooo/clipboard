@@ -11,6 +11,14 @@
 
 Download the latest version from [Releases](https://github.com/evanoooo/clipboard/releases/latest)
 
+- **Apple Silicon (M-series)**: Recommended to download `Clipboard-*-arm64.dmg` (~4.8MB, optimized for Apple Silicon)
+- **Intel Processor**: Recommended to download `Clipboard-*-x86_64.dmg` (~5.0MB, native x86_64 slice)
+- **Universal**: Available as `Clipboard-*-universal.dmg` (Universal binary for all Macs)
+
+## 🔄 Data Migration
+
+- **Migrating from Paste.app**: Seamlessly and safely import your clipboard history, images, and source applications from Paste.app. See the [Paste.app Migration Guide](docs/paste_migration_guide.md).
+
 ---
 
 ## ✨ Features & Architecture
