@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
+        <item>
+            <title>Version 2.3.0</title>
+            <pubDate>Fri, 23 Oct 2026 09:38:16 GMT</pubDate>
+            <sparkle:shortVersionString>2.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-arm64.zip"
+                sparkle:arch="arm64"
+                sparkle:edSignature="WPbVqRy6HMZ0qiutXUuGy6iEZQS9fvA8CuAyEp2VH6480Nj6U/WOuQanmbR4VF1mwe4sywRF5tabaEB9LvPPBA=="
+                length="4806785"
+                type="application/octet-stream" />
+        </item>
         <title>Clipboard 更新</title>
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
