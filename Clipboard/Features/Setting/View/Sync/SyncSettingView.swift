@@ -136,6 +136,7 @@ struct SyncSettingView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .onChange(of: passwordInput) { _, newValue in
                                     try? SyncKeychainManager.shared.saveWebDAVPassword(newValue)
+                                    SyncEngine.shared.invalidateClientAndKeyCache()
                                 }
                         }
 
@@ -190,6 +191,7 @@ struct SyncSettingView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .onChange(of: passphraseInput) { _, newValue in
                                     try? SyncKeychainManager.shared.saveSyncPassphrase(newValue)
+                                    SyncEngine.shared.invalidateClientAndKeyCache()
                                 }
                         }
 

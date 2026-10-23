@@ -67,6 +67,15 @@ enum SyncDiffTests {
         runner.assertEqual(diff6.toDeleteLocal.count, 1, "Remote tombstone must trigger local delete")
         runner.assertEqual(diff6.toDeleteLocal.first, "id-006", "Delete ID mismatch")
 
+        // 6.1 Local newer than Remote Tombstone -> ToUpload (LWW Resurrection)
+        let localResurrected = SyncItemBlob(uniqueId: "id-006-resurrect", pasteboardType: "text", payloadData: data1, timestamp: 3000, group: -1)
+        var remoteIndex61 = SyncIndex()
+        remoteIndex61.entries["id-006-resurrect"] = SyncIndexEntry(uniqueId: "id-006-resurrect", updatedAt: 2000, checksum: "", isDeleted: true, group: -1)
+        let diff61 = SyncDiffEngine.calculateDiff(localItems: [localResurrected], remoteIndex: remoteIndex61, onlySyncPinned: false)
+        runner.assertEqual(diff61.toDeleteLocal.count, 0, "Newer local item must NOT be deleted by older tombstone")
+        runner.assertEqual(diff61.toUpload.count, 1, "Newer local item must be queued for upload to resurrect")
+        runner.assertEqual(diff61.toUpload.first?.uniqueId, "id-006-resurrect", "Resurrect item ID mismatch")
+
         // 7. OnlySyncPinned filter mode
         let normalItem = SyncItemBlob(uniqueId: "id-normal", pasteboardType: "text", payloadData: data1, timestamp: 1000, group: -1)
         let pinnedItem = SyncItemBlob(uniqueId: "id-pinned", pasteboardType: "text", payloadData: data1, timestamp: 1000, group: 2)

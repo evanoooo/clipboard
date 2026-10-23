@@ -32,17 +32,28 @@ enum SyncDiffEngine: Sendable {
             }
 
             if remoteEntry.isDeleted {
-                // 远端为墓碑：若本地尚存活，本地需同步删除
-                if localMap[id] != nil {
-                    diff.toDeleteLocal.append(id)
+                // 远端为墓碑：严格遵循 LWW (Last-Write-Wins) 准则
+                if let local = localMap[id] {
+                    if local.timestamp > remoteEntry.updatedAt {
+                        // 本地更新时间晚于远端删除时间（删后本地又进行了复制或更新）：本地胜出，复活该项并重新上传
+                        diff.toUpload.append(local)
+                    } else {
+                        // 远端删除时间更新或相当：同步删除本地
+                        diff.toDeleteLocal.append(id)
+                    }
                 }
             } else if let local = localMap[id] {
                 // 双端均存在：比对修改时间戳与内容哈希
-                let localChecksum = SyncCryptoEngine.checksum(for: local.payloadData ?? Data())
-                if remoteEntry.updatedAt > local.timestamp && remoteEntry.checksum != localChecksum {
-                    diff.toDownload.append(id)
-                } else if local.timestamp > remoteEntry.updatedAt && remoteEntry.checksum != localChecksum {
-                    diff.toUpload.append(local)
+                if remoteEntry.updatedAt > local.timestamp {
+                    let localChecksum = local.payloadData != nil ? SyncCryptoEngine.checksum(for: local.payloadData!) : nil
+                    if localChecksum == nil || localChecksum != remoteEntry.checksum {
+                        diff.toDownload.append(id)
+                    }
+                } else if local.timestamp > remoteEntry.updatedAt {
+                    let localChecksum = local.payloadData != nil ? SyncCryptoEngine.checksum(for: local.payloadData!) : nil
+                    if localChecksum == nil || localChecksum != remoteEntry.checksum {
+                        diff.toUpload.append(local)
+                    }
                 }
             } else {
                 // 远端存在且非墓碑，本地缺失：加入下载队列

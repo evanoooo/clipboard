@@ -98,10 +98,9 @@ actor WebDAVClient {
         throw WebDAVError.serverError(code: http.statusCode)
     }
 
-    /// 获取远端资源的 ETag / 修改摘要 (PROPFIND Depth: 0)
+    /// 获取远端资源的 ETag / 修改指纹 (优先采用 HEAD 请求以获得通用 WebDAV 服务器响应头)
     func getETag(path: String) async throws -> String? {
-        var request = makeRequest(path: path, method: "PROPFIND")
-        request.setValue("0", forHTTPHeaderField: "Depth")
+        let request = makeRequest(path: path, method: "HEAD")
 
         let (_, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse else {
@@ -109,7 +108,14 @@ actor WebDAVClient {
         }
         if http.statusCode == 404 { return nil }
         if http.statusCode == 401 { throw WebDAVError.unauthorized }
-        return http.value(forHTTPHeaderField: "ETag")
+
+        if let etag = http.value(forHTTPHeaderField: "ETag") {
+            return etag.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        }
+        if let lastMod = http.value(forHTTPHeaderField: "Last-Modified") {
+            return lastMod
+        }
+        return nil
     }
 
     /// 上传数据 (PUT)
