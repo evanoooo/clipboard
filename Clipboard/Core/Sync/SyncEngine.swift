@@ -64,6 +64,23 @@ final class SyncEngine: ObservableObject {
 
     private var lastRemoteETag: String?
     private var isDirty = false
+    private var activeSyncTask: Task<SyncState, Never>?
+
+    var isOnlySyncPinned: Bool {
+        if UserDefaults.standard.object(forKey: "sync_only_pinned") == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: "sync_only_pinned")
+    }
+
+    func cancelSync() {
+        guard currentState == .syncing else { return }
+        activeSyncTask?.cancel()
+        activeSyncTask = nil
+        currentState = .idle
+        syncProgress = nil
+        addLog("已手动取消当前同步任务")
+    }
     private var debounceTask: Task<Void, Never>?
 
     private init() {
@@ -445,7 +462,7 @@ final class SyncEngine: ObservableObject {
 
             // 7. 从 SQLite 数据库全量收集本地数据并执行 Diff
             syncProgress = "扫描本地数据库并比对差异..."
-            let onlySyncPinned = UserDefaults.standard.bool(forKey: "sync_only_pinned")
+            let onlySyncPinned = self.isOnlySyncPinned
             let localBlobs = await fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
             addLog("本地 SQLite 扫描完成: 共有 \(localBlobs.count) 条待比对记录 (仅同步收藏: \(onlySyncPinned))")
 
@@ -490,6 +507,12 @@ final class SyncEngine: ObservableObject {
                 let totalUploads = diff.toUpload.count
 
                 for chunk in diff.toUpload.chunked(into: maxConcurrency) {
+                    if Task.isCancelled {
+                        addLog("同步任务已被取消")
+                        let state: SyncState = .idle
+                        self.currentState = state
+                        return state
+                    }
                     let chunkResults = try await withThrowingTaskGroup(of: (String, SyncIndexEntry)?.self) { group in
                         for blob in chunk {
                             group.addTask {

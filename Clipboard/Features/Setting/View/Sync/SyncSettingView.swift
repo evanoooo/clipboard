@@ -272,21 +272,24 @@ struct SyncSettingView: View {
                                 }
                                 .buttonStyle(.borderless)
 
-                                Button(action: {
-                                    Task {
-                                        await engine.triggerSync()
+                                if case .syncing = engine.currentState {
+                                    Button("取消同步") {
+                                        engine.cancelSync()
                                     }
-                                }) {
-                                    HStack(spacing: 4) {
-                                        if case .syncing = engine.currentState {
-                                            ProgressView().controlSize(.small)
-                                        } else {
-                                            Image(systemName: "arrow.triangle.2.circlepath")
+                                    .foregroundStyle(.red)
+                                } else {
+                                    Button(action: {
+                                        Task {
+                                            await engine.triggerSync()
                                         }
-                                        Text("立即同步")
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.triangle.2.circlepath")
+                                            Text("立即同步")
+                                        }
                                     }
+                                    .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty)
                                 }
-                                .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.currentState == .syncing)
                             }
 
                             if let lastLog = engine.syncLogs.last, engine.currentState != .idle {
@@ -538,6 +541,10 @@ struct SyncSettingView: View {
     }
 
     private func loadCredentials() {
+        if UserDefaults.standard.object(forKey: "sync_only_pinned") == nil {
+            onlySyncPinned = true
+            UserDefaults.standard.set(true, forKey: "sync_only_pinned")
+        }
         passwordInput = SyncKeychainManager.shared.loadWebDAVPassword() ?? ""
         passphraseInput = SyncKeychainManager.shared.loadSyncPassphrase() ?? ""
     }
