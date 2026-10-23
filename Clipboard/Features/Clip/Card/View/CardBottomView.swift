@@ -37,7 +37,6 @@ final class CardBottomView: NSView, PassthroughMouseEvents {
     }
 
     func reset() {
-        clearCurrentView()
         currentModel = nil
         currentKeyword = ""
     }
@@ -57,11 +56,42 @@ final class CardBottomView: NSView, PassthroughMouseEvents {
     }
 
     private func replaceBottomView(for model: PasteboardModel, keyword: String) {
+        if tryInPlaceReuse(for: model, keyword: keyword) {
+            return
+        }
+
         clearCurrentView()
         guard let view = makeBottomView(for: model, keyword: keyword) else { return }
         addSubview(view)
         view.snp.makeConstraints { $0.edges.equalToSuperview() }
         currentView = view
+    }
+
+    private func tryInPlaceReuse(for model: PasteboardModel, keyword: String) -> Bool {
+        guard let current = currentView else { return false }
+        switch model.type {
+        case .image:
+            if let imageView = current as? CardImageBottomView {
+                imageView.update(introString: model.introString())
+                return true
+            }
+        case .link:
+            if PasteUserDefaults.enableLinkPreview {
+                return false
+            }
+            if let commonView = current as? CardCommonBottomView {
+                commonView.update(with: model)
+                return true
+            }
+        case .color, .file:
+            return false
+        default:
+            if let commonView = current as? CardCommonBottomView {
+                commonView.update(with: model)
+                return true
+            }
+        }
+        return false
     }
 
     private func clearCurrentView() {
@@ -156,6 +186,11 @@ private final class CardImageBottomView: NSView, PassthroughMouseEvents {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError()
+    }
+
+    func update(introString: String) {
+        label.stringValue = introString
+        updateLabelBackground()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -320,7 +355,7 @@ final class CardCommonBottomView: NSView, PassthroughMouseEvents {
 
     private var needsMask: Bool = false
     private var baseColor: NSColor = .controlBackgroundColor
-    private let model: PasteboardModel
+    private var model: PasteboardModel
 
     init(model: PasteboardModel) {
         self.model = model
@@ -348,6 +383,28 @@ final class CardCommonBottomView: NSView, PassthroughMouseEvents {
         iconView.snp.makeConstraints { make in
             make.width.height.equalTo(12)
         }
+    }
+
+    func update(with model: PasteboardModel) {
+        self.model = model
+        setupContent()
+
+        let currentNeedsMask = model.needsBottomMask {
+            ContentMaskCalculator.needsMask(for: model)
+        }
+
+        if currentNeedsMask != needsMask {
+            needsMask = currentNeedsMask
+            if needsMask {
+                if gradientLayer.superlayer == nil {
+                    layer?.addSublayer(gradientLayer)
+                }
+            } else {
+                gradientLayer.removeFromSuperlayer()
+            }
+        }
+
+        updateColors()
     }
 
     @available(*, unavailable)
