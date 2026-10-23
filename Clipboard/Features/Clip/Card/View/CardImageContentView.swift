@@ -76,6 +76,20 @@ final class CardImageContentView: NSView, PassthroughMouseEvents {
         // 卡片缩略图专注于极速渲染，不再执行耗时的二次实时 Vision OCR 识别
     }
 
+    func update(with model: PasteboardModel, keyword: String = "") {
+        load(model: model, keyword: keyword)
+    }
+
+    func reset() {
+        cancelLoad()
+        currentModelId = ""
+        imageView.image = nil
+        imageView.isHidden = true
+        placeholderImageView.isHidden = true
+        loadingIndicator.stopAnimation(nil)
+        loadingIndicator.isHidden = true
+    }
+
     private func setupViews() {
         addSubview(checkerboardView)
         addSubview(imageContainerView)

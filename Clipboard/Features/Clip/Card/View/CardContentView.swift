@@ -71,10 +71,18 @@ final class CardContentView: NSView, PassthroughMouseEvents {
 
     func resetContent() {
         cancelCurrentLoad()
-        currentContentView?.removeFromSuperview()
-        currentContentView = nil
         currentModel = nil
         currentKeyword = ""
+        if let stringView = currentContentView as? CardStringContentView {
+            stringView.reset()
+        } else if let richView = currentContentView as? CardRichContentView {
+            richView.reset()
+        } else if let imageView = currentContentView as? CardImageContentView {
+            imageView.reset()
+        } else {
+            currentContentView?.removeFromSuperview()
+            currentContentView = nil
+        }
         needsDisplay = true
     }
 
@@ -136,6 +144,11 @@ final class CardContentView: NSView, PassthroughMouseEvents {
         case .richText:
             if let richView = current as? CardRichContentView {
                 richView.update(with: model, keyword: keyword)
+                return true
+            }
+        case .image:
+            if let imageView = current as? CardImageContentView {
+                imageView.update(with: model, keyword: keyword)
                 return true
             }
         default:
@@ -215,6 +228,10 @@ final class CardStringContentView: NSView, PassthroughMouseEvents {
             textView.font = .preferredFont(forTextStyle: .body)
         }
     }
+
+    func reset() {
+        textView.textStorage?.setAttributedString(NSAttributedString())
+    }
 }
 
 // MARK: - PassthroughTextView
@@ -258,6 +275,10 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
         self.model = model
         textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
         updateBackground()
+    }
+
+    func reset() {
+        textView.textStorage?.setAttributedString(NSAttributedString())
     }
 
     override func viewDidChangeEffectiveAppearance() {
