@@ -130,8 +130,6 @@ final class FloatingCardRowView: NSView {
             // 取消子视图后台任务
             (sub as? AnyObject)?.perform(Selector(("cancelLoad")))
         }
-        contentSubview?.removeFromSuperview()
-        contentSubview = nil
         currentModel = nil
         currentKeyword = ""
     }
@@ -177,7 +175,7 @@ final class FloatingCardRowView: NSView {
         }
 
         if modelChanged || modeChanged {
-            replaceContentSubview(for: model, keyword: keyword)
+            replaceContentSubview(for: model, keyword: keyword, modeChanged: modeChanged)
         } else {
             updateKeywordInContentSubview(keyword: keyword, model: model)
         }
@@ -288,7 +286,11 @@ final class FloatingCardRowView: NSView {
 
     // MARK: - Content Subview
 
-    private func replaceContentSubview(for model: PasteboardModel, keyword: String) {
+    private func replaceContentSubview(for model: PasteboardModel, keyword: String, modeChanged: Bool = false) {
+        if !modeChanged, tryInPlaceReuse(for: model, keyword: keyword) {
+            return
+        }
+
         contentLoadTask?.cancel()
         contentSubview?.removeFromSuperview()
         contentSubview = nil
@@ -297,6 +299,26 @@ final class FloatingCardRowView: NSView {
         contentView.addSubview(view)
         view.snp.makeConstraints { $0.edges.equalToSuperview() }
         contentSubview = view
+    }
+
+    private func tryInPlaceReuse(for model: PasteboardModel, keyword: String) -> Bool {
+        guard let current = contentSubview else { return false }
+        let kind = ClipContentRenderer.resolveKind(for: model)
+        switch kind {
+        case .code, .plainText:
+            if let textView = current as? FloatingTextContentView {
+                textView.update(keyword: keyword, model: model)
+                return true
+            }
+        case .richText:
+            if let richView = current as? FloatingRichContentView {
+                richView.update(keyword: keyword, model: model)
+                return true
+            }
+        default:
+            break
+        }
+        return false
     }
 
     private func updateKeywordInContentSubview(keyword: String, model: PasteboardModel) {
