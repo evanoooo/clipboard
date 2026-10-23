@@ -5,7 +5,7 @@
 	<key>SUAllowsAutomaticUpdates</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/Ineffable919/clipboard/master/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/evanoooo/clipboard/master/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>CAP3GXFFFntAVTx9VWI2Et88CyifKSHOOfgt2sQ68Eg=</string>
 	<key>SUScheduledCheckInterval</key>

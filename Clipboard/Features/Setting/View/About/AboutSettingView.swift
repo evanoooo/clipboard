@@ -9,6 +9,8 @@ import Sparkle
 import SwiftUI
 
 struct AboutSettingView: View {
+    @State private var copiedVersionFeedback = false
+
     private var appName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? "Clipboard"
@@ -16,12 +18,20 @@ struct AboutSettingView: View {
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-            as? String ?? "1.0"
+            as? String ?? "2.3.0"
     }
 
     private var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-            ?? "1"
+            ?? "888"
+    }
+
+    private var commitHash: String {
+        Bundle.main.object(forInfoDictionaryKey: "GitCommitHash") as? String ?? "13cff85"
+    }
+
+    private var versionDisplay: String {
+        "\(appVersion) (\(buildNumber) · \(commitHash))"
     }
 
     private let currentYear = Calendar.current.component(.year, from: Date())
@@ -43,20 +53,38 @@ struct AboutSettingView: View {
                             .draggable(Bundle.main.bundleURL)
                             .onHover { isHovered in
                                 if isHovered {
-                                NSCursor.openHand.set()
-                            } else {
-                                NSCursor.arrow.set()
+                                    NSCursor.openHand.set()
+                                } else {
+                                    NSCursor.arrow.set()
+                                }
                             }
-                        }
                     }
                     Text(appName)
                         .font(
                             .system(size: 24, weight: .medium, design: .default)
                         )
 
-                    Text("\(appVersion) (\(buildNumber))")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Button(action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(versionDisplay, forType: .string)
+                        copiedVersionFeedback = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            copiedVersionFeedback = false
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Text(copiedVersionFeedback ? "已复制版本号" : versionDisplay)
+                                .font(.subheadline)
+                                .foregroundStyle(copiedVersionFeedback ? Color.accentColor : .secondary)
+                            if !copiedVersionFeedback {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("点击复制完整版本与 Commit 信息")
                 }
                 .padding(.top, Const.space16)
 
@@ -107,6 +135,9 @@ struct AboutSettingView: View {
                     }
                 }
                 VStack(spacing: Const.space4) {
+                    Text("基于 evanoooo/clipboard 进行架构增强 · 遵循 CC BY-NC 4.0 许可")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                     Text(.aboutMadeForMac)
                         .font(.caption)
                         .foregroundStyle(.secondary)
