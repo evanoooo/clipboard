@@ -18,14 +18,14 @@
 - 提供 DMG 与 ZIP 双格式分发。
 ]]>
             </description>
-            <pubDate>Fri, 23 Oct 2026 09:45:21 GMT</pubDate>
+            <pubDate>Fri, 23 Oct 2026 09:51:26 GMT</pubDate>
             <sparkle:version>888</sparkle:version>
             <sparkle:shortVersionString>2.3.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <enclosure
                 url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0.zip"
-                sparkle:edSignature="WPbVqRy6HMZ0qiutXUuGy6iEZQS9fvA8CuAyEp2VH6480Nj6U/WOuQanmbR4VF1mwe4sywRF5tabaEB9LvPPBA=="
-                length="4806785"
+                sparkle:edSignature="4CJFTdP+gFg0Dt1QwZRfOyw5oVIpSnG7yngskySmPhIP9SOpwU9+SyR3qfyYeR6Z0AAumNzJYHZtql0o5/+0CQ=="
+                length="7957674"
                 type="application/octet-stream" />
         </item>
     </channel>
