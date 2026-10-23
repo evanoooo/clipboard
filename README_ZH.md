@@ -2,14 +2,14 @@
     <div align="center"><img src="Clipboard/Resource/Assets.xcassets/AppIcon.appiconset/icon-256.png" width="135" /></div>
     <h2 align="center">Clipboard</h2>
     <div align="center">一款现代化、极速、低功耗、端到端加密的 macOS 原生剪贴板管理工具。</div>
-    <div align="center"><a href="https://github.com/Ineffable919/clipboard/blob/master/README.md">English</a> | <strong>中文</strong></div>
+    <div align="center"><a href="README.md">English</a> | <strong>中文</strong></div>
 </p>
 
 <img src="examples.png">
 
 ## 📥 下载与安装
 
-下载最新版本发布包：[Releases](https://github.com/Ineffable919/clipboard/releases/latest)
+下载最新版本发布包：[Releases](https://github.com/evanoooo/clipboard/releases/latest)
 
 ---
 
@@ -117,7 +117,8 @@ sudo codesign --force --deep --sign - /Applications/Clipboard.app
 
 ---
 
-## 📄 许可证说明 (License)
+## 📄 许可证与开源致谢 (License & Attribution)
 
 本项目遵循 **Creative Commons Attribution-NonCommercial 4.0 International Public License (CC BY-NC 4.0)** 开源协议。
+本项目基于 [Ineffable919/clipboard](https://github.com/Ineffable919/clipboard) 开源项目演进开发，感谢原作者的开源贡献。
 详情请参阅 [LICENSE](LICENSE) 文件。

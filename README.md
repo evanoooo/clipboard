@@ -2,14 +2,14 @@
     <div align="center"><img src="Clipboard/Resource/Assets.xcassets/AppIcon.appiconset/icon-256.png" width="135" /></div>
     <h2 align="center">Clipboard</h2>
     <div align="center">A modern, ultra-fast, battery-efficient, and end-to-end encrypted clipboard manager for macOS.</div>
-    <div align="center"><strong>English</strong> | <a href="https://github.com/Ineffable919/clipboard/blob/master/README_ZH.md">中文</a></div>
+    <div align="center"><strong>English</strong> | <a href="README_ZH.md">中文</a></div>
 </p>
 
 <img src="examples.png">
 
 ## 📥 Download
 
-Download the latest version from [Releases](https://github.com/Ineffable919/clipboard/releases/latest)
+Download the latest version from [Releases](https://github.com/evanoooo/clipboard/releases/latest)
 
 ---
 
@@ -117,7 +117,8 @@ Any standard WebDAV provider is supported natively, including:
 
 ---
 
-## 📄 License
+## 📄 License & Attribution
 
 This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International Public License (CC BY-NC 4.0)**.
+Based on the original open-source project [Ineffable919/clipboard](https://github.com/Ineffable919/clipboard).
 See the [LICENSE](LICENSE) file for details.
