@@ -53,61 +53,57 @@ jobs:
             exit 1
           }
 
-      - name: Archive Artifacts (Universal DMG & ZIP)
+      - name: Archive Artifacts (arm64, x86_64, Universal)
         id: archive
         run: |
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG_NAME#v}"
           
-          mkdir -p dist
           APP_DIR=$(ls -d /Users/runner/Library/Developer/Xcode/DerivedData/Clipboard-*/Build/Products/Release | tail -n 1)
+          chmod +x scripts/package_release.sh
+          ./scripts/package_release.sh "${VERSION}" "${APP_DIR}" "dist"
 
-          ZIP_NAME="Clipboard-${VERSION}.zip"
-          DMG_NAME="Clipboard-${VERSION}.dmg"
-
-          # 1. 生成 Universal ZIP（供 Sparkle 自动更新使用）
-          cd "${APP_DIR}"
-          ditto -c -k --keepParent Clipboard.app "${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
-
-          # 2. 生成 Universal DMG（带 Applications 快捷方式，供用户直接安装）
-          DMG_TEMP="${GITHUB_WORKSPACE}/dmg_temp"
-          mkdir -p "${DMG_TEMP}"
-          cp -R Clipboard.app "${DMG_TEMP}/"
-          ln -s /Applications "${DMG_TEMP}/Applications"
-          hdiutil create -volname "Clipboard" -srcfolder "${DMG_TEMP}" -ov -format UDZO "${GITHUB_WORKSPACE}/dist/${DMG_NAME}"
-          rm -rf "${DMG_TEMP}"
-
-          cd "${GITHUB_WORKSPACE}"
-
-          echo "ZIP_PATH=dist/${ZIP_NAME}" >> $GITHUB_OUTPUT
-          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_OUTPUT
-          echo "DMG_PATH=dist/${DMG_NAME}" >> $GITHUB_OUTPUT
-          echo "DMG_NAME=${DMG_NAME}" >> $GITHUB_OUTPUT
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Sign Update with Sparkle Private Key
+      - name: Sign Updates with Sparkle Private Key
         id: sign
         run: |
-          ZIP_PATH="${{ steps.archive.outputs.ZIP_PATH }}"
+          VERSION="${{ steps.archive.outputs.VERSION }}"
           PRIV_KEY="${{ secrets.SPARKLE_PRIVATE_KEY }}"
           
           if [ -z "$PRIV_KEY" ]; then
             echo "::warning::SPARKLE_PRIVATE_KEY secret is not set. Skipping Sparkle signature."
-            echo "SIGNATURE=" >> $GITHUB_OUTPUT
-            echo "LENGTH=0" >> $GITHUB_OUTPUT
+            echo "ENCLOSURES_JSON=[]" >> $GITHUB_OUTPUT
           else
-            OUTPUT=$(swift scripts/sign_update.swift "$ZIP_PATH" "$PRIV_KEY")
-            LENGTH=$(echo "$OUTPUT" | grep "^LENGTH:" | cut -d ' ' -f2)
-            SIGNATURE=$(echo "$OUTPUT" | grep "^ED_SIGNATURE:" | cut -d ' ' -f2)
-            echo "SIGNATURE=${SIGNATURE}" >> $GITHUB_OUTPUT
-            echo "LENGTH=${LENGTH}" >> $GITHUB_OUTPUT
+            ENCLOSURES="[]"
+
+            for arch in arm64 x86_64 universal; do
+              ZIP_NAME="Clipboard-${VERSION}-${arch}.zip"
+              ZIP_PATH="dist/${ZIP_NAME}"
+              
+              if [ -f "$ZIP_PATH" ]; then
+                OUTPUT=$(swift scripts/sign_update.swift "$ZIP_PATH" "$PRIV_KEY")
+                LENGTH=$(echo "$OUTPUT" | grep "^LENGTH:" | cut -d ' ' -f2)
+                SIGNATURE=$(echo "$OUTPUT" | grep "^ED_SIGNATURE:" | cut -d ' ' -f2)
+                
+                if [ "$arch" = "universal" ]; then
+                  SPARKLE_ARCH=""
+                else
+                  SPARKLE_ARCH="$arch"
+                fi
+                
+                ENCLOSURES=$(echo "$ENCLOSURES" | python3 -c "import sys, json; data=json.load(sys.stdin); data.append({'name': '$ZIP_NAME', 'arch': '$SPARKLE_ARCH', 'length': '$LENGTH', 'signature': '$SIGNATURE'}); print(json.dumps(data))")
+              fi
+            done
+
+            echo "ENCLOSURES_JSON=${ENCLOSURES}" >> $GITHUB_OUTPUT
           fi
 
       - name: Update appcast.xml
-        if: steps.sign.outputs.SIGNATURE != ''
+        if: steps.sign.outputs.ENCLOSURES_JSON != '[]' && steps.sign.outputs.ENCLOSURES_JSON != ''
         run: |
           BUILD_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" Clipboard/Info.plist 2>/dev/null || echo "888")
-          python3 scripts/update_appcast.py "${{ steps.archive.outputs.VERSION }}" "${{ steps.archive.outputs.ZIP_NAME }}" "${{ steps.sign.outputs.LENGTH }}" "${{ steps.sign.outputs.SIGNATURE }}" "${{ github.repository }}" "${BUILD_VERSION}"
+          python3 scripts/update_appcast.py "${{ steps.archive.outputs.VERSION }}" "${{ github.repository }}" "${BUILD_VERSION}" '${{ steps.sign.outputs.ENCLOSURES_JSON }}'
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add appcast.xml
@@ -117,9 +113,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            ${{ steps.archive.outputs.DMG_PATH }}
-            ${{ steps.archive.outputs.ZIP_PATH }}
+          files: dist/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

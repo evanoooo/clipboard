@@ -14,18 +14,30 @@
 
 - 架构增强与底层数据增量同步优化；
 - Sparkle 2 自动更新与独立 Ed25519 签名体系；
-- 原生 Universal 架构支持（Apple Silicon 与 Intel x86_64）；
-- 提供 DMG 与 ZIP 双格式分发。
+- 独立提供 Apple Silicon (arm64)、Intel (x86_64) 与 Universal 原生架构安装包；
+- 现代化标准化 DMG 与 ZIP 双格式制品分发。
 ]]>
             </description>
-            <pubDate>Fri, 23 Oct 2026 09:51:26 GMT</pubDate>
+            <pubDate>Fri, 23 Oct 2026 09:57:51 GMT</pubDate>
             <sparkle:version>888</sparkle:version>
             <sparkle:shortVersionString>2.3.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <enclosure
-                url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0.zip"
-                sparkle:edSignature="4CJFTdP+gFg0Dt1QwZRfOyw5oVIpSnG7yngskySmPhIP9SOpwU9+SyR3qfyYeR6Z0AAumNzJYHZtql0o5/+0CQ=="
-                length="7957674"
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-arm64.zip"
+                sparkle:arch="arm64"
+                sparkle:edSignature="sig_arm"
+                length="4200000"
+                type="application/octet-stream" />
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-x86_64.zip"
+                sparkle:arch="x86_64"
+                sparkle:edSignature="sig_x86"
+                length="4400000"
+                type="application/octet-stream" />
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-universal.zip"
+                sparkle:edSignature="sig_uni"
+                length="7600000"
                 type="application/octet-stream" />
         </item>
     </channel>
