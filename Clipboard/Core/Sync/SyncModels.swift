@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - 单条索引条目（轻量元数据摘要）
 
-struct SyncIndexEntry: Codable, Equatable, Sendable {
+nonisolated struct SyncIndexEntry: Codable, Equatable, Sendable {
     /// 全局唯一 UUID（对应 PasteboardModel.uniqueId）
     let uniqueId: String
     /// 更新/创建时间戳（毫秒）
@@ -24,7 +24,7 @@ struct SyncIndexEntry: Codable, Equatable, Sendable {
 
 // MARK: - 全量索引清单（存放于云端 index.json.enc）
 
-struct SyncIndex: Codable, Sendable {
+nonisolated struct SyncIndex: Codable, Sendable {
     /// 索引 Schema 版本号
     let version: Int
     /// 索引最近修改时间戳（毫秒）
@@ -41,7 +41,7 @@ struct SyncIndex: Codable, Sendable {
 
 // MARK: - 单条完整数据实体（存放于云端 items/<uniqueId>.enc）
 
-struct SyncItemBlob: Codable, Equatable, Sendable {
+nonisolated struct SyncItemBlob: Codable, Equatable, Sendable {
     let uniqueId: String
     let pasteboardType: String
     let payloadData: Data?
@@ -77,7 +77,7 @@ struct SyncItemBlob: Codable, Equatable, Sendable {
 
 // MARK: - 同步差异比对结果
 
-struct SyncDiffResult: Sendable {
+nonisolated struct SyncDiffResult: Sendable {
     /// 云端有较新版本，需下载到本地的 uniqueId 清单
     var toDownload: [String] = []
     /// 本地有较新版本，需加密上传到云端的 Blob 清单

@@ -1,0 +1,60 @@
+//
+//  SyncDiffEngine.swift
+//  Clipboard
+//
+//  增量同步 3-Way 差异计算与 LWW (Last-Write-Wins) 冲突解决纯算法引擎
+//
+
+import Foundation
+
+enum SyncDiffEngine: Sendable {
+    /// 纯函数：计算本地与远端索引的增量差异矩阵
+    static func calculateDiff(
+        localItems: [SyncItemBlob],
+        remoteIndex: SyncIndex,
+        onlySyncPinned: Bool = false
+    ) -> SyncDiffResult {
+        var diff = SyncDiffResult()
+        var localMap = [String: SyncItemBlob]()
+
+        for item in localItems {
+            // 若开启“仅同步收藏/分组”，则过滤掉普通流水 (group == -1)
+            if onlySyncPinned && item.group == -1 {
+                continue
+            }
+            localMap[item.uniqueId] = item
+        }
+
+        // 1. 遍历远端索引项
+        for (id, remoteEntry) in remoteIndex.entries {
+            if onlySyncPinned && remoteEntry.group == -1 {
+                continue
+            }
+
+            if remoteEntry.isDeleted {
+                // 远端为墓碑：若本地尚存活，本地需同步删除
+                if localMap[id] != nil {
+                    diff.toDeleteLocal.append(id)
+                }
+            } else if let local = localMap[id] {
+                // 双端均存在：比对修改时间戳与内容哈希
+                let localChecksum = SyncCryptoEngine.checksum(for: local.payloadData ?? Data())
+                if remoteEntry.updatedAt > local.timestamp && remoteEntry.checksum != localChecksum {
+                    diff.toDownload.append(id)
+                } else if local.timestamp > remoteEntry.updatedAt && remoteEntry.checksum != localChecksum {
+                    diff.toUpload.append(local)
+                }
+            } else {
+                // 远端存在且非墓碑，本地缺失：加入下载队列
+                diff.toDownload.append(id)
+            }
+        }
+
+        // 2. 检查本地独有项（远端尚不存在）：加入上传队列
+        for item in localMap.values where remoteIndex.entries[item.uniqueId] == nil {
+            diff.toUpload.append(item)
+        }
+
+        return diff
+    }
+}

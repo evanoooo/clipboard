@@ -64,6 +64,7 @@ final class TestRunner {
         AppLoggerTests.run(runner: TestRunner.self)
         SyncCryptoTests.run(runner: TestRunner.self)
         SyncModelTests.run(runner: TestRunner.self)
+        SyncDiffTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")
