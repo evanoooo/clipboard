@@ -174,7 +174,7 @@ struct SettingToggleRow: View {
 // MARK: - 帮助中心按钮
 
 struct HelpCenterButton: View {
-    private static let helpURL = URL(string: "https://github.com/Ineffable919/clipboard/blob/master/README.md")!
+    private static let helpURL = URL(string: "https://github.com/evanoooo/clipboard/blob/main/README.md")!
 
     var body: some View {
         Button(action: {

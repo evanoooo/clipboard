@@ -416,7 +416,7 @@ extension FloatingHeaderView: TopBarMenuActions {
     }
 
     func invokeHelpAction() {
-        if let url = URL(string: "https://github.com/Ineffable919/clipboard/blob/master/README.md") {
+        if let url = URL(string: "https://github.com/evanoooo/clipboard/blob/main/README.md") {
             NSWorkspace.shared.open(url)
         }
     }

@@ -127,17 +127,26 @@ struct AboutSettingView: View {
                     UpdaterSettingsView(updater: updater)
                 }
                 HStack(spacing: 20) {
-                    if let github = URL(string: "https://github.com/Ineffable919/clipboard") {
+                    if let github = URL(string: "https://github.com/evanoooo/clipboard") {
                         Link(String(localized: .aboutGithub), destination: github)
                     }
-                    if let issues = URL(string: "https://github.com/Ineffable919/clipboard/issues") {
+                    if let issues = URL(string: "https://github.com/evanoooo/clipboard/issues") {
                         Link(String(localized: .aboutFeedback), destination: issues)
                     }
                 }
                 VStack(spacing: Const.space4) {
-                    Text("基于 Ineffable919/clipboard 进行架构增强 · 遵循 CC BY-NC 4.0 许可")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 4) {
+                        Text("基于")
+                        if let upstream = URL(string: "https://github.com/Ineffable919/clipboard") {
+                            Link("Ineffable919/clipboard", destination: upstream)
+                                .underline()
+                        } else {
+                            Text("Ineffable919/clipboard")
+                        }
+                        Text("进行架构增强 · 遵循 CC BY-NC 4.0 许可")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                     Text(.aboutMadeForMac)
                         .font(.caption)
                         .foregroundStyle(.secondary)

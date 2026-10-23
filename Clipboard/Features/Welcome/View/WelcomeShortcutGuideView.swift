@@ -31,7 +31,7 @@ struct WelcomeShortcutGuideView: View {
             previewRow(
                 systemImage: "link",
                 tint: Color(nsColor: .systemTeal),
-                title: "https://github.com/Ineffable919/clipboard"
+                title: "https://github.com/evanoooo/clipboard"
             )
 
             Divider()
