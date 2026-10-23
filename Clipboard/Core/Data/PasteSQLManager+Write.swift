@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import SQLite
 
-/// 批量同步纯净数据载荷（避免跨 Actor 访问 PasteboardModel）
+/// 批量同步纯净数据负载（避免跨 Actor 访问 PasteboardModel）
 struct SyncIngestionRecord: Sendable {
     let uniqueId: String
     let type: String
@@ -86,6 +86,26 @@ extension PasteSQLManager {
             await refreshAppCache()
         } catch {
             log.error("批量同步入库失败：\(error)")
+        }
+    }
+
+    /// 批量同步删除条目（单事务执行，避免多次写锁与触发器开销）
+    func deleteByUniqueIds(_ uniqueIds: [String]) async {
+        guard let connection, !uniqueIds.isEmpty else { return }
+        do {
+            try connection.transaction {
+                let chunkSize = 500
+                for start in stride(from: 0, to: uniqueIds.count, by: chunkSize) {
+                    let end = Swift.min(start + chunkSize, uniqueIds.count)
+                    let chunk = Array(uniqueIds[start..<end])
+                    let query = table.filter(chunk.contains(Col.uniqueId))
+                    _ = try connection.run(query.delete())
+                }
+            }
+            await refreshAppCache()
+            log.info("批量同步删除本地条目成功，共 \(uniqueIds.count) 条")
+        } catch {
+            log.error("批量同步删除本地条目失败：\(error)")
         }
     }
 
@@ -323,7 +343,7 @@ extension PasteSQLManager {
         }
     }
 
-    /// 只更新别名，不触碰内容、类型与分组。
+    /// 只更新别名，不碰触内容、类型与分组。
     func updateItemAlias(id: Int64, alias: String) async -> Bool {
         guard let database = connection else { return false }
         do {

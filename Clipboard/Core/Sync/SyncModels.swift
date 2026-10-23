@@ -2,37 +2,33 @@
 //  SyncModels.swift
 //  Clipboard
 //
-//  WebDAV 端到端加密增量同步模型协议与轻量索引结构
+//  WebDAV 端到端加密同步协议数据模型：清单索引、分片路径规范、加密载荷与差异结果
 //
 
 import Foundation
 
-// MARK: - 单条索引条目（轻量元数据摘要）
+// MARK: - 远端云端索引清单中的单条元数据条目
 
 nonisolated struct SyncIndexEntry: Codable, Equatable, Sendable {
-    /// 全局唯一 UUID（对应 PasteboardModel.uniqueId）
     let uniqueId: String
-    /// 更新/创建时间戳（毫秒）
     let updatedAt: Int64
-    /// 数据内容 SHA-256 前 16 位 Hex 哈希，用于快速比对内容是否有变动
     let checksum: String
-    /// 墓碑标记：true 表示已被删除，用于多端协同删除（防幽灵复活）
-    let isDeleted: Bool
-    /// 分组 ID：-1 为普通流水，>= 0 为收藏/自定义分组
+    var isDeleted: Bool
     var group: Int
-    /// 媒体类型（如 text, image 等）
-    var type: String? = nil
-    /// 标签名称（如有）
-    var tag: String? = nil
-    /// 数据估算大小（字节数）
-    var size: Int? = nil
+    var type: String?
+    var tag: String?
+    var size: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case uniqueId, updatedAt, checksum, isDeleted, group, type, tag, size
+    }
 
     init(
         uniqueId: String,
         updatedAt: Int64,
         checksum: String,
-        isDeleted: Bool,
-        group: Int,
+        isDeleted: Bool = false,
+        group: Int = -1,
         type: String? = nil,
         tag: String? = nil,
         size: Int? = nil
@@ -46,23 +42,21 @@ nonisolated struct SyncIndexEntry: Codable, Equatable, Sendable {
         self.tag = tag
         self.size = size
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.uniqueId = try container.decode(String.self, forKey: .uniqueId)
+        self.updatedAt = try container.decode(Int64.self, forKey: .updatedAt)
+        self.checksum = try container.decode(String.self, forKey: .checksum)
+        self.isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        self.group = try container.decodeIfPresent(Int.self, forKey: .group) ?? -1
+        self.type = try container.decodeIfPresent(String.self, forKey: .type)
+        self.tag = try container.decodeIfPresent(String.self, forKey: .tag)
+        self.size = try container.decodeIfPresent(Int.self, forKey: .size)
+    }
 }
 
-// MARK: - 云端资产统计细分模型
-
-nonisolated struct SyncGroupCount: Codable, Identifiable, Equatable, Sendable {
-    var id: String { "\(groupId)_\(name)" }
-    let groupId: Int
-    let name: String
-    let count: Int
-    let colorHex: String?
-}
-
-nonisolated struct SyncTypeCount: Codable, Identifiable, Equatable, Sendable {
-    var id: String { typeName }
-    let typeName: String
-    let count: Int
-}
+// MARK: - 资产看板统计结构体
 
 nonisolated struct SyncSummary: Codable, Equatable, Sendable {
     let totalCount: Int
@@ -71,34 +65,64 @@ nonisolated struct SyncSummary: Codable, Equatable, Sendable {
     let typeCounts: [SyncTypeCount]
     let lastUpdated: Int64
 
+    var totalSizeBytes: Int64 { totalBytes }
+    var lastSyncTime: Int64 { lastUpdated }
+
     var formattedStorageSize: String {
         ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
     }
+
+    var formattedTotalSize: String { formattedStorageSize }
+
+    var formattedLastUpdated: String {
+        let date = Date(timeIntervalSince1970: Double(lastUpdated) / 1000.0)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: date)
+    }
+
+    var formattedLastSyncTime: String { formattedLastUpdated }
 }
 
-// MARK: - 全量索引清单（存放于云端 index.json.enc）
+nonisolated struct SyncGroupCount: Codable, Equatable, Identifiable, Sendable {
+    var id: Int { groupId }
+    let groupId: Int
+    let name: String
+    let count: Int
+    let colorHex: String?
+}
+
+nonisolated struct SyncTypeCount: Codable, Equatable, Identifiable, Sendable {
+    var id: String { typeName }
+    let typeName: String
+    let count: Int
+}
+
+// MARK: - 远端全局索引文件结构（对应 index.json.enc）
 
 nonisolated struct SyncIndex: Codable, Sendable {
-    /// 索引 Schema 版本号
-    let version: Int
-    /// 索引最近修改时间戳（毫秒）
+    var version: Int
     var lastModified: Int64
-    /// 所有条目的字典表，Key 为 uniqueId
     var entries: [String: SyncIndexEntry]
 
-    init(version: Int = 1, lastModified: Int64 = Int64(Date().timeIntervalSince1970 * 1000), entries: [String: SyncIndexEntry] = [:]) {
+    init(
+        version: Int = 1,
+        lastModified: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+        entries: [String: SyncIndexEntry] = [:]
+    ) {
         self.version = version
         self.lastModified = lastModified
         self.entries = entries
     }
 
-    /// 毫秒级生成云端资产概览摘要（过滤墓碑，按分组和类型细分）
-    func generateSummary(chips: [CategoryChip]) -> SyncSummary {
+    /// 根据当前索引元数据即时计算统计看板摘要（无需下载实体数据）
+    @MainActor
+    func generateSummary(chips: [CategoryChip] = []) -> SyncSummary {
         let activeEntries = entries.values.filter { !$0.isDeleted }
         let totalCount = activeEntries.count
         var totalBytes: Int64 = 0
 
-        // 1. 按分组统计
+        // 1. 按分组统计（匹配本地 Chip 名称与颜色）
         var groupMap: [Int: Int] = [:]
         for entry in activeEntries {
             groupMap[entry.group, default: 0] += 1
@@ -106,7 +130,6 @@ nonisolated struct SyncIndex: Codable, Sendable {
         }
 
         let chipDict = Dictionary(chips.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-
         var groupCounts: [SyncGroupCount] = []
         for (groupId, count) in groupMap {
             if groupId == -1 {
@@ -165,8 +188,8 @@ nonisolated struct SyncIndex: Codable, Sendable {
             typeMap[typeName, default: 0] += 1
         }
 
-        var typeCounts = typeMap.map { SyncTypeCount(typeName: $0.key, count: $0.value) }
-        typeCounts.sort { $0.count > $1.count }
+        let typeCounts = typeMap.map { SyncTypeCount(typeName: $0.key, count: $0.value) }
+            .sorted { $0.count > $1.count }
 
         return SyncSummary(
             totalCount: totalCount,
@@ -178,9 +201,25 @@ nonisolated struct SyncIndex: Codable, Sendable {
     }
 }
 
-// MARK: - 云端路径映射与 Git 风格分片规范
+// MARK: - 云端路径映射与 Git 风格分片规范及墓碑修剪
 
 extension SyncIndex {
+    /// 修剪超过指定保留天数的已删除墓碑记录，防止索引文件随时间无限膨胀
+    @discardableResult
+    public mutating func pruneExpiredTombstones(
+        retentionDays: Int = 30,
+        currentTimeMillis: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+    ) -> Int {
+        let cutoff = currentTimeMillis - Int64(retentionDays * 24 * 3600 * 1000)
+        let expiredKeys = entries.compactMap { (key, entry) -> String? in
+            (entry.isDeleted && entry.updatedAt < cutoff) ? key : nil
+        }
+        for key in expiredKeys {
+            entries.removeValue(forKey: key)
+        }
+        return expiredKeys.count
+    }
+
     /// Git 风格 2 字符前缀分片子目录路径 (如 ClipboardSync/items/00/0007e2a8....enc)
     public nonisolated static func shardedItemPath(for uniqueId: String) -> String {
         let prefix = uniqueId.count >= 2 ? String(uniqueId.prefix(2)) : "misc"
@@ -259,6 +298,6 @@ nonisolated struct SyncDiffResult: Sendable {
     var toUpload: [SyncItemBlob] = []
     /// 远端为墓碑标记，本地需执行删除的 uniqueId 清单
     var toDeleteLocal: [String] = []
-    /// 本地已删除，云端需物理移除 items/<id>.enc 并打上墓碑的 uniqueId 清单
+    /// 本地已从收藏中移除，远端需标记为删除的 uniqueId 清单
     var toDeleteRemote: [String] = []
 }

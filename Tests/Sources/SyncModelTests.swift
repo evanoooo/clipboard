@@ -183,6 +183,31 @@ enum SyncModelTests {
             "Short ID should fallback to misc folder"
         )
 
+        // Test Tombstone Pruning (30-day retention)
+        var pruneIndex = SyncIndex()
+        let nowMillis: Int64 = 1_000_000_000_000
+        let dayMillis: Int64 = 24 * 3600 * 1000
+
+        // 1. Alive item (should NEVER be pruned, even if old)
+        pruneIndex.entries["alive-old"] = SyncIndexEntry(uniqueId: "alive-old", updatedAt: nowMillis - 40 * dayMillis, checksum: "c1", isDeleted: false)
+
+        // 2. Tombstone within 30 days (should NOT be pruned yet)
+        pruneIndex.entries["tombstone-recent"] = SyncIndexEntry(uniqueId: "tombstone-recent", updatedAt: nowMillis - 10 * dayMillis, checksum: "", isDeleted: true)
+
+        // 3. Tombstone older than 30 days (MUST be pruned)
+        pruneIndex.entries["tombstone-expired"] = SyncIndexEntry(uniqueId: "tombstone-expired", updatedAt: nowMillis - 31 * dayMillis, checksum: "", isDeleted: true)
+
+        // 4. Tombstone exactly 35 days old (MUST be pruned)
+        pruneIndex.entries["tombstone-expired-2"] = SyncIndexEntry(uniqueId: "tombstone-expired-2", updatedAt: nowMillis - 35 * dayMillis, checksum: "", isDeleted: true)
+
+        let prunedCount = pruneIndex.pruneExpiredTombstones(retentionDays: 30, currentTimeMillis: nowMillis)
+        runner.assertEqual(prunedCount, 2, "Exactly 2 expired tombstones must be pruned")
+        runner.assertEqual(pruneIndex.entries.count, 2, "2 items should remain")
+        runner.assertTrue(pruneIndex.entries["alive-old"] != nil, "Alive item must be kept")
+        runner.assertTrue(pruneIndex.entries["tombstone-recent"] != nil, "Recent tombstone must be kept")
+        runner.assertTrue(pruneIndex.entries["tombstone-expired"] == nil, "Expired tombstone must be removed")
+        runner.assertTrue(pruneIndex.entries["tombstone-expired-2"] == nil, "Expired tombstone 2 must be removed")
+
         print("✓ Sync Models, Summary & Index Serialization tests passed!")
     }
 }

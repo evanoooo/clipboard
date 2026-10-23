@@ -2,15 +2,16 @@
 //  SyncEngine.swift
 //  Clipboard
 //
-//  WebDAV 增量同步调度引擎：Diff 比对、LWW 冲突裁决、15s 防抖与受控并发传输管线
+//  WebDAV 增量同步调度引擎：Diff 比对、LWW 冲突裁决、动态能耗感知防抖与受控滑动窗口并发流水线
 //
 
+import AppKit
 import Combine
 import CryptoKit
 import Foundation
 import SQLite
 
-enum SyncState: Sendable, Equatable {
+nonisolated enum SyncState: Sendable, Equatable {
     case disabled
     case idle
     case syncing
@@ -65,6 +66,8 @@ final class SyncEngine: ObservableObject {
     private var lastRemoteETag: String?
     private var isDirty = false
     private var activeSyncTask: Task<SyncState, Never>?
+    private var debounceTask: Task<Void, Never>?
+    private var powerObservers: [NSObjectProtocol] = []
 
     var isOnlySyncPinned: Bool {
         if UserDefaults.standard.object(forKey: "sync_only_pinned") == nil {
@@ -79,9 +82,8 @@ final class SyncEngine: ObservableObject {
         activeSyncTask = nil
         currentState = .idle
         syncProgress = nil
-        addLog("已手动取消当前同步任务")
+        addLog("已取消当前同步任务")
     }
-    private var debounceTask: Task<Void, Never>?
 
     // MARK: - 性能优化缓存（密钥派生与连接池复用）
 
@@ -123,6 +125,47 @@ final class SyncEngine: ObservableObject {
 
     private init() {
         loadCachedSummary()
+        setupPowerAndSleepObservers()
+    }
+
+    // MARK: - 系统功耗与睡眠感知生命周期
+
+    private func setupPowerAndSleepObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+
+        // 系统即将休眠：优雅中断正在进行的同步传输，防止在休眠中挂起导致唤醒后超时
+        let obsSleep = center.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.currentState == .syncing {
+                    self.addLog("系统即将进入休眠，优雅中止后台同步任务")
+                    self.cancelSync()
+                }
+            }
+        }
+
+        // 系统唤醒恢复：延迟 5 秒待 Wi-Fi 重连稳定后，如有脏数据自动触发增量同步
+        let obsWake = center.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if UserDefaults.standard.bool(forKey: "sync_enabled"), self.isDirty {
+                    self.addLog("系统唤醒网络已恢复，自动执行增量同步")
+                    await self.triggerSync()
+                }
+            }
+        }
+
+        powerObservers = [obsSleep, obsWake]
     }
 
     // MARK: - 日志记录
@@ -168,10 +211,6 @@ final class SyncEngine: ObservableObject {
     ) -> SyncDiffResult {
         SyncDiffEngine.calculateDiff(localItems: localItems, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
     }
-
-
-
-
 
     // MARK: - 从 SQLite 全量加载待同步数据（彻底脱离 UI 分页 50 条限制）
 
@@ -219,14 +258,19 @@ final class SyncEngine: ObservableObject {
         }
     }
 
-    // MARK: - 防抖调度 (Debounce 15s)
+    // MARK: - 防抖调度 (结合低功耗模式动态调节防抖窗口)
 
     func markDirtyAndSchedule() {
         guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
         isDirty = true
         debounceTask?.cancel()
+
+        // 功耗优化：检测 macOS 低电量模式或系统发热保护，将 15s 防抖自动拉长至 60s
+        let isPowerSaving = SystemEnergyMonitor.shared.isLowPowerMode || SystemEnergyMonitor.shared.isThermalThrottled
+        let delayNanoseconds: UInt64 = isPowerSaving ? 60_000_000_000 : 15_000_000_000
+
         debounceTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
             guard !Task.isCancelled else { return }
             await self?.triggerSync()
         }
@@ -364,14 +408,18 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
-            addLog("需拉取还原 \(toDownloadIds.count) 条数据，开始受控并发下载...")
+            addLog("需拉取还原 \(toDownloadIds.count) 条数据，启动受控滑动窗口并发流水线...")
             var restoredCount = 0
             let maxConcurrency = 3
             let total = toDownloadIds.count
+            var batchBuffer: [PasteboardModel] = []
 
-            for chunk in toDownloadIds.chunked(into: maxConcurrency) {
-                let downloadedModels = try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
-                    for id in chunk {
+            try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
+                var iterator = toDownloadIds.makeIterator()
+
+                // 初始填满并发槽位
+                for _ in 0..<maxConcurrency {
+                    if let id = iterator.next() {
                         group.addTask {
                             let sharded = SyncIndex.shardedItemPath(for: id)
                             let legacy = SyncIndex.legacyItemPath(for: id)
@@ -388,17 +436,49 @@ final class SyncEngine: ObservableObject {
                             return await MainActor.run { blob.toPasteboardModel() }
                         }
                     }
-                    var models: [PasteboardModel] = []
-                    for try await model in group {
-                        if let model { models.append(model) }
-                    }
-                    return models
                 }
 
-                await PasteDataStore.main.ingestSyncedBatch(downloadedModels)
-                restoredCount += downloadedModels.count
-                syncProgress = "正在还原 (\(restoredCount)/\(total))..."
-                addLog("还原进度: \(restoredCount)/\(total)")
+                // 滑动窗口：单个任务完成立即补充下一个
+                while let model = try await group.next() {
+                    if let model {
+                        batchBuffer.append(model)
+                        restoredCount += 1
+
+                        // 批量 50 条单事务入库，兼顾性能与低内存
+                        if batchBuffer.count >= 50 {
+                            await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                            batchBuffer.removeAll(keepingCapacity: true)
+                        }
+
+                        syncProgress = "正在还原 (\(restoredCount)/\(total))..."
+                        if restoredCount % 25 == 0 || restoredCount == total {
+                            addLog("还原进度: \(restoredCount)/\(total)")
+                        }
+                    }
+
+                    if !Task.isCancelled, let nextId = iterator.next() {
+                        group.addTask {
+                            let sharded = SyncIndex.shardedItemPath(for: nextId)
+                            let legacy = SyncIndex.legacyItemPath(for: nextId)
+                            let encData: Data? = if let d = try? await client.download(from: sharded) {
+                                d
+                            } else {
+                                try? await client.download(from: legacy)
+                            }
+                            guard let encData,
+                                  let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                                  let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                return nil
+                            }
+                            return await MainActor.run { blob.toPasteboardModel() }
+                        }
+                    }
+                }
+            }
+
+            if !batchBuffer.isEmpty {
+                await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                batchBuffer.removeAll()
             }
 
             await PasteDataStore.main.reloadHistory()
@@ -509,15 +589,20 @@ final class SyncEngine: ObservableObject {
             addLog("本地 SQLite 扫描完成: 共有 \(localBlobs.count) 条待比对记录 (仅同步收藏: \(onlySyncPinned))")
 
             let diff = Self.calculateDiff(localItems: localBlobs, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
-            addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理 \(diff.toDeleteRemote.count) 条")
+            addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理本地 \(diff.toDeleteLocal.count) 条, 待清理远端 \(diff.toDeleteRemote.count) 条")
 
-            // 8. 受控并发传输管线：下载需拉取条目 (限制并发为 3)
+            // 8. 受控滑动窗口并发流水线：下载需拉取条目 (限制并发为 3)
             if !diff.toDownload.isEmpty {
                 let maxConcurrency = 3
                 var downloadedCount = 0
-                for chunk in diff.toDownload.chunked(into: maxConcurrency) {
-                    let models = try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
-                        for id in chunk {
+                let totalDownloads = diff.toDownload.count
+                var batchBuffer: [PasteboardModel] = []
+
+                try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
+                    var iterator = diff.toDownload.makeIterator()
+
+                    for _ in 0..<maxConcurrency {
+                        if let id = iterator.next() {
                             group.addTask {
                                 let sharded = SyncIndex.shardedItemPath(for: id)
                                 let legacy = SyncIndex.legacyItemPath(for: id)
@@ -534,21 +619,62 @@ final class SyncEngine: ObservableObject {
                                 return await MainActor.run { blob.toPasteboardModel() }
                             }
                         }
-                        var list: [PasteboardModel] = []
-                        for try await model in group {
-                            if let model { list.append(model) }
-                        }
-                        return list
                     }
-                    await PasteDataStore.main.ingestSyncedBatch(models)
-                    downloadedCount += models.count
-                    syncProgress = "正在下载云端条目 (\(downloadedCount)/\(diff.toDownload.count))..."
-                    addLog("下载进度: \(downloadedCount)/\(diff.toDownload.count)")
+
+                    while let model = try await group.next() {
+                        if let model {
+                            batchBuffer.append(model)
+                            downloadedCount += 1
+
+                            if batchBuffer.count >= 50 {
+                                await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                                batchBuffer.removeAll(keepingCapacity: true)
+                            }
+
+                            syncProgress = "正在下载云端条目 (\(downloadedCount)/\(totalDownloads))..."
+                            if downloadedCount % 25 == 0 || downloadedCount == totalDownloads {
+                                addLog("下载进度: \(downloadedCount)/\(totalDownloads)")
+                            }
+                        }
+
+                        if !Task.isCancelled, let nextId = iterator.next() {
+                            group.addTask {
+                                let sharded = SyncIndex.shardedItemPath(for: nextId)
+                                let legacy = SyncIndex.legacyItemPath(for: nextId)
+                                let encData: Data? = if let d = try? await client.download(from: sharded) {
+                                    d
+                                } else {
+                                    try? await client.download(from: legacy)
+                                }
+                                guard let encData,
+                                      let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                                      let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                    return nil
+                                }
+                                return await MainActor.run { blob.toPasteboardModel() }
+                            }
+                        }
+                    }
                 }
+
+                if !batchBuffer.isEmpty {
+                    await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                    batchBuffer.removeAll()
+                }
+            }
+
+            // 8.1 同步清理远端墓碑删除条目（保证多端一致性）
+            if !diff.toDeleteLocal.isEmpty {
+                addLog("检测到远端已标记删除 \(diff.toDeleteLocal.count) 条记录，正在同步清理本地 SQLite...")
+                await PasteDataStore.main.deleteSyncedBatch(uniqueIds: diff.toDeleteLocal)
+            }
+
+            // 若有本地新增入库或删除清理，统一重载一次主列表
+            if !diff.toDownload.isEmpty || !diff.toDeleteLocal.isEmpty {
                 await PasteDataStore.main.reloadHistory()
             }
 
-            // 9. 受控并发传输管线：加密上传本地条目 (限制并发为 3，Payload 延迟按需加载，UI 节流刷新与检查点保存)
+            // 9. 受控滑动窗口并发流水线：加密上传本地条目 (限制并发为 3，Payload 延迟按需加载，UI 节流刷新与检查点保存)
             if !diff.toUpload.isEmpty {
                 let maxConcurrency = 3
                 var uploadedCount = 0
@@ -556,15 +682,11 @@ final class SyncEngine: ObservableObject {
                 var ensuredDirectories = Set<String>()
                 var lastUIUpdateTime = ContinuousClock.now
 
-                for chunk in diff.toUpload.chunked(into: maxConcurrency) {
-                    if Task.isCancelled {
-                        addLog("同步任务已被取消")
-                        let state: SyncState = .idle
-                        self.currentState = state
-                        return state
-                    }
-                    let chunkResults = try await withThrowingTaskGroup(of: (String, SyncIndexEntry)?.self) { group in
-                        for blob in chunk {
+                try await withThrowingTaskGroup(of: (String, SyncIndexEntry)?.self) { group in
+                    var iterator = diff.toUpload.makeIterator()
+
+                    for _ in 0..<maxConcurrency {
+                        if let blob = iterator.next() {
                             let prefix = blob.uniqueId.count >= 2 ? String(blob.uniqueId.prefix(2)) : "misc"
                             let dir = "ClipboardSync/items/\(prefix)"
                             if !ensuredDirectories.contains(dir) {
@@ -573,7 +695,7 @@ final class SyncEngine: ObservableObject {
                             }
                             group.addTask {
                                 var uploadBlob = blob
-                                // 关键内存优化：延迟点查 Payload，仅上传时读取，随 chunk 结束即刻释放
+                                // 关键内存优化：延迟点查 Payload，仅上传时读取，随 task 结束即刻释放
                                 if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
                                     uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId)
                                 }
@@ -598,33 +720,64 @@ final class SyncEngine: ObservableObject {
                                 return (uploadBlob.uniqueId, entry)
                             }
                         }
-                        var results: [(String, SyncIndexEntry)] = []
-                        for try await res in group {
-                            if let res { results.append(res) }
+                    }
+
+                    while let result = try await group.next() {
+                        if let (id, entry) = result {
+                            remoteIndex.entries[id] = entry
+                            uploadedCount += 1
+
+                            // UI 节流：每上传 25 条或每 400ms 刷新一次主线程
+                            let now = ContinuousClock.now
+                            if uploadedCount == totalUploads || uploadedCount % 25 == 0 || now - lastUIUpdateTime >= .milliseconds(400) {
+                                lastUIUpdateTime = now
+                                syncProgress = "正在加密上传 (\(uploadedCount)/\(totalUploads))..."
+                                addLog("上传进度: \(uploadedCount)/\(totalUploads)")
+                            }
+
+                            // 每上传 500 条进行检查点保存，保障大批量同步中途意外中断时无需从头重传
+                            if uploadedCount > 0 && uploadedCount % 500 == 0 {
+                                remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
+                                if let updatedIndexData = try? JSONEncoder().encode(remoteIndex),
+                                   let encUpdatedIndex = try? SyncCryptoEngine.encrypt(data: updatedIndexData, using: masterKey) {
+                                    try? await client.upload(data: encUpdatedIndex, to: indexPath)
+                                    addLog("已保存阶段性同步索引清单 (\(uploadedCount)/\(totalUploads))")
+                                }
+                            }
                         }
-                        return results
-                    }
 
-                    for (id, entry) in chunkResults {
-                        remoteIndex.entries[id] = entry
-                        uploadedCount += 1
-                    }
-
-                    // UI 节流：每上传 25 条或每 400ms 刷新一次主线程，避免 2500+ 次连续通知引发主线程卡顿
-                    let now = ContinuousClock.now
-                    if uploadedCount == totalUploads || uploadedCount % 25 == 0 || now - lastUIUpdateTime >= .milliseconds(400) {
-                        lastUIUpdateTime = now
-                        syncProgress = "正在加密上传 (\(uploadedCount)/\(totalUploads))..."
-                        addLog("上传进度: \(uploadedCount)/\(totalUploads)")
-                    }
-
-                    // 每上传 500 条进行检查点保存，保障大批量同步中途意外中断时无需从头重传
-                    if uploadedCount > 0 && uploadedCount % 500 == 0 {
-                        remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
-                        if let updatedIndexData = try? JSONEncoder().encode(remoteIndex),
-                           let encUpdatedIndex = try? SyncCryptoEngine.encrypt(data: updatedIndexData, using: masterKey) {
-                            try? await client.upload(data: encUpdatedIndex, to: indexPath)
-                            addLog("已保存阶段性同步索引清单 (\(uploadedCount)/\(totalUploads))")
+                        if !Task.isCancelled, let nextBlob = iterator.next() {
+                            let prefix = nextBlob.uniqueId.count >= 2 ? String(nextBlob.uniqueId.prefix(2)) : "misc"
+                            let dir = "ClipboardSync/items/\(prefix)"
+                            if !ensuredDirectories.contains(dir) {
+                                try? await client.makeDirectory(path: dir)
+                                ensuredDirectories.insert(dir)
+                            }
+                            group.addTask {
+                                var uploadBlob = nextBlob
+                                if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
+                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId)
+                                }
+                                guard let rawData = try? JSONEncoder().encode(uploadBlob),
+                                      let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
+                                    return nil
+                                }
+                                let targetPath = SyncIndex.shardedItemPath(for: uploadBlob.uniqueId)
+                                try await client.upload(data: encData, to: targetPath)
+                                let checksum = SyncCryptoEngine.checksum(for: uploadBlob.payloadData ?? Data())
+                                let estimatedSize = (uploadBlob.payloadData?.count ?? 0) + (uploadBlob.showData?.count ?? 0)
+                                let entry = SyncIndexEntry(
+                                    uniqueId: uploadBlob.uniqueId,
+                                    updatedAt: uploadBlob.timestamp,
+                                    checksum: checksum,
+                                    isDeleted: false,
+                                    group: uploadBlob.group,
+                                    type: uploadBlob.pasteboardType,
+                                    tag: uploadBlob.tag,
+                                    size: estimatedSize
+                                )
+                                return (uploadBlob.uniqueId, entry)
+                            }
                         }
                     }
                 }
@@ -644,6 +797,12 @@ final class SyncEngine: ObservableObject {
                     tag: nil,
                     size: 0
                 )
+            }
+
+            // 10.1 自动修剪 30 天超期墓碑（保持云端索引清单极简轻量，控制内存与网络传输）
+            let prunedCount = remoteIndex.pruneExpiredTombstones()
+            if prunedCount > 0 {
+                addLog("已自动修剪 30 天超期墓碑 \(prunedCount) 条，云端索引保持轻量")
             }
 
             // 11. 智能元数据回填：补全历史条目的类型与估算大小
@@ -695,17 +854,6 @@ final class SyncEngine: ObservableObject {
             self.currentState = state
             addLog("同步失败: \(error.localizedDescription)", isError: true)
             return state
-        }
-    }
-}
-
-// MARK: - Array Chunking 扩展
-
-extension Array {
-    fileprivate func chunked(into size: Int) -> [[Element]] {
-        guard size > 0 else { return [self] }
-        return stride(from: 0, to: count, by: size).map {
-            Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
 }

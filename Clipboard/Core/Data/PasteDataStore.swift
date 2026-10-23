@@ -609,6 +609,12 @@ extension PasteDataStore {
         await sqlManager.ingestSyncedBatch(records)
     }
 
+    /// 批量静默删除远端已标记墓碑的本地条目（单事务执行，不抢占前台 UI）
+    func deleteSyncedBatch(uniqueIds: [String]) async {
+        guard !uniqueIds.isEmpty else { return }
+        await sqlManager.deleteByUniqueIds(uniqueIds)
+    }
+
     func insertModel(_ model: PasteboardModel) async {
         guard await prepareApp(for: model) else { return }
         let result = await sqlManager.insert(
