@@ -62,6 +62,7 @@ final class TestRunner {
         SystemEnergyMonitorTests.run(runner: TestRunner.self)
         StorageAnalysisTests.run(runner: TestRunner.self)
         AppLoggerTests.run(runner: TestRunner.self)
+        SyncCryptoTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")
