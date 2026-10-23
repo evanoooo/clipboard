@@ -135,7 +135,7 @@ struct AboutSettingView: View {
                     }
                 }
                 VStack(spacing: Const.space4) {
-                    Text("基于 evanoooo/clipboard 进行架构增强 · 遵循 CC BY-NC 4.0 许可")
+                    Text("基于 Ineffable919/clipboard 进行架构增强 · 遵循 CC BY-NC 4.0 许可")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                     Text(.aboutMadeForMac)
