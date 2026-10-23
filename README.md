@@ -17,11 +17,16 @@ Download the latest version from [Releases](https://github.com/evanoooo/clipboar
 
 ## 🔄 Data Migration
 
-- **Migrating from Paste.app**: Seamlessly and safely import your clipboard history, images, and source applications from Paste.app. See the [Paste.app Migration Guide](docs/paste_migration_guide.md).
+- **Native Paste.app Migration (Beta)**: Starting in v2.4.0, directly scan and safely migrate Paste.app clipboard history, images, and external media via **Settings ➔ Storage**. Features native LZFSE/Deflate decompression, SHA-256 fingerprint deduplication, seamless historical timeline re-ranking, and automatic pre-migration database snapshot backups. See the [Paste.app Migration Guide](docs/paste_migration_guide.md).
 
 ---
 
 ## ✨ Features & Architecture
+
+### 🚀 Sparkle 2 In-App Updates & Architecture Distribution
+- **Native Architecture Slices**: Delivers tailored Apple Silicon (`arm64`) and Intel (`x86_64`) standalone packages alongside Universal binaries, reducing bundle sizes by ~45% with instant launches.
+- **Cryptographic Ed25519 Signatures**: Uses modern Curve25519 asymmetric cryptography to guarantee download integrity and origin authenticity against tampering.
+- **Seamless In-App Updates**: Powered by Sparkle 2, automatically detecting device architecture to install verified updates in place with a single click.
 
 ### 🔐 End-to-End Encrypted Cloud Sync (E2EE WebDAV)
 - **Military-Grade Security**: Encrypted using **ChaCha20-Poly1305** AEAD and **PBKDF2-HMAC-SHA256** (100,000 iterations + 32-byte CSPRNG salt). All payloads are encrypted locally before transmission; your master passphrase never leaves your device, guaranteeing zero-knowledge on the WebDAV server.
@@ -80,7 +85,7 @@ Download the latest version from [Releases](https://github.com/evanoooo/clipboar
 Automated quality gates and hot-upgrade script included:
 
 ```bash
-# 1. Run all 539 automated unit tests (Crypto, Models, Diff, FTS5, Sliding Window, etc.)
+# 1. Run all 570 automated unit tests (Crypto, Models, Diff, FTS5, Sliding Window, Paste Migration, Architecture Gates, etc.)
 cd Tests && swift run
 
 # 2. Build Release package and hot-replace running application
