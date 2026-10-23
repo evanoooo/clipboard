@@ -5,6 +5,53 @@
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
 
+        <!-- Version 2.4.1 (Apple Silicon) -->
+        <item>
+            <title>Version 2.4.1 (Apple Silicon)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.1
+
+- 完善文档演示体系与多模块视觉画廊；
+- 优化多架构打包重签名流水线，确保 Sparkle 升级完全自洽无阻；
+- 持续增强 Paste.app 历史数据迁移 (Beta) 健壮性与去重排序算法。
+]]>
+            </description>
+            <pubDate>Fri, 23 Oct 2026 13:51:40 GMT</pubDate>
+            <sparkle:version>924</sparkle:version>
+            <sparkle:shortVersionString>2.4.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.1/Clipboard-2.4.1-arm64.zip"
+                sparkle:edSignature="ZM7lljyaM0QETFgNTeA4G7UnDs/KPvbJSYWU/lIkuLnX904wVSGNzlhCTW+pBrasnDDnajj097SBnROuwN23Bg=="
+                length="4466068"
+                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.4.1 (Intel) -->
+        <item>
+            <title>Version 2.4.1 (Intel)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.1
+
+- 完善文档演示体系与多模块视觉画廊；
+- 优化多架构打包重签名流水线，确保 Sparkle 升级完全自洽无阻；
+- 持续增强 Paste.app 历史数据迁移 (Beta) 健壮性与去重排序算法。
+]]>
+            </description>
+            <pubDate>Fri, 23 Oct 2026 13:51:40 GMT</pubDate>
+            <sparkle:version>924</sparkle:version>
+            <sparkle:shortVersionString>2.4.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.1/Clipboard-2.4.1-x86_64.zip"
+                sparkle:edSignature="YnW/XuLkYE1GlSgH6uqXUFjckJs/BVfOITImFmgTOrtOhqjDarruZE1eJFVVYOYof3BeumC4AnWr83h/d6m+CA=="
+                length="4781731"
+                type="application/octet-stream" />
+        </item>
+
         <!-- Version 2.4.0 (Apple Silicon) -->
         <item>
             <title>Version 2.4.0 (Apple Silicon)</title>
