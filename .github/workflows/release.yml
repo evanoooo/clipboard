@@ -7,7 +7,7 @@ on:
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -18,7 +18,7 @@ jobs:
         run: |
           XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_16*.app" | sort -V | tail -n 1)
           if [ -z "$XCODE_APP" ]; then
-            XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_*.app" | sort -V | tail -n 1)
+            XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode*.app" | sort -V | tail -n 1)
           fi
           echo "DEVELOPER_DIR=${XCODE_APP}/Contents/Developer" >> $GITHUB_ENV
           sudo xcode-select -s "${XCODE_APP}/Contents/Developer"
