@@ -14,6 +14,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Select Xcode 16
+        run: |
+          XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_16*.app" | sort -V | tail -n 1)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Selected Xcode: $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          fi
+          swift --version
+
       - name: Run Unit Tests
         run: swift run --package-path Tests
 
@@ -51,7 +60,7 @@ jobs:
           else
             OUTPUT=$(swift scripts/sign_update.swift "$ZIP_PATH" "$PRIV_KEY")
             LENGTH=$(echo "$OUTPUT" | grep "^LENGTH:" | cut -d ' ' -f2)
-            SIGNATURE=$(echo "$OUTPUT" | grep "^ED_SIGNATURE:" | cut -d ' ' -f2)
+            SIGNATURE=$(echo "$OUTPUT" | grep "^ED_SIGNATURE:\" | cut -d ' ' -f2)
             echo "SIGNATURE=${SIGNATURE}" >> $GITHUB_OUTPUT
             echo "LENGTH=${LENGTH}" >> $GITHUB_OUTPUT
           fi
