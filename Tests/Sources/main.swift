@@ -162,4 +162,6 @@ final class TestRunner {
     }
 }
 
-TestRunner.main()
+MainActor.assumeIsolated {
+    TestRunner.main()
+}
