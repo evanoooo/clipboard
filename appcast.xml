@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Clipboard 更新</title>
+        <description>Clipboard 应用更新源</description>
+        <language>zh-CN</language>
+
+        <!-- 当前发布记录占位模板，发版流水线将自动在此追加新 item -->
+    </channel>
+</rss>

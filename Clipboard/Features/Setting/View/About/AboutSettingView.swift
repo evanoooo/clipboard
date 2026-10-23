@@ -5,6 +5,7 @@
 //  Created by crown on 2025/11/11.
 //
 
+import Sparkle
 import SwiftUI
 
 struct AboutSettingView: View {
@@ -27,40 +28,76 @@ struct AboutSettingView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(spacing: 8) {
-                if let appIcon = NSImage(named: "AppIcon") {
-                    Image(nsImage: appIcon)
-                        .resizable()
-                        .frame(width: 96, height: 96)
-                        .shadow(
-                            color: Color.blue.opacity(0.15),
-                            radius: Const.radius,
-                            x: 0,
-                            y: 6
-                        )
-                        .draggable(Bundle.main.bundleURL)
-                        .onHover { isHovered in
-                            if isHovered {
+            VStack {
+                VStack(spacing: 8) {
+                    if let appIcon = NSImage(named: "AppIcon") {
+                        Image(nsImage: appIcon)
+                            .resizable()
+                            .frame(width: 96, height: 96)
+                            .shadow(
+                                color: Color.blue.opacity(0.15),
+                                radius: Const.radius,
+                                x: 0,
+                                y: 6
+                            )
+                            .draggable(Bundle.main.bundleURL)
+                            .onHover { isHovered in
+                                if isHovered {
                                 NSCursor.openHand.set()
                             } else {
                                 NSCursor.arrow.set()
                             }
                         }
-                }
-                Text(appName)
-                    .font(
-                        .system(size: 24, weight: .medium, design: .default)
-                    )
+                    }
+                    Text(appName)
+                        .font(
+                            .system(size: 24, weight: .medium, design: .default)
+                        )
 
-                Text("\(appVersion) (\(buildNumber))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    Text("\(appVersion) (\(buildNumber))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, Const.space16)
+
+                Button(
+                    action: {
+                        checkForUpdates()
+                    },
+                    label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 14))
+                            Text("检查更新...")
+                                .font(.system(size: 14, weight: .regular))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .padding(.horizontal, Const.space16)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: Const.radius)
+                                .fill(Color.accentColor)
+                        )
+                        .foregroundStyle(.white)
+                    }
+                )
+                .buttonStyle(.plain)
+                .shadow(
+                    color: Color.accentColor.opacity(0.3),
+                    radius: Const.radius,
+                    x: 0,
+                    y: 4
+                )
+                .padding(Const.space32)
             }
-            .padding(.top, Const.space16)
             .frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: Const.space12) {
+                if let updater = AppDelegate.shared?.updaterController.updater {
+                    UpdaterSettingsView(updater: updater)
+                }
                 HStack(spacing: 20) {
                     if let github = URL(string: "https://github.com/Ineffable919/clipboard") {
                         Link(String(localized: .aboutGithub), destination: github)
@@ -92,6 +129,11 @@ struct AboutSettingView: View {
         }
         .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 检查更新
+    private func checkForUpdates() {
+        AppDelegate.shared?.updaterController.checkForUpdates(nil)
     }
 }
 

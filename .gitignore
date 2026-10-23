@@ -5,3 +5,4 @@ scripts/build.sh
 .build/
 Tests/.build/
 release/
+.sparkle_keys.json

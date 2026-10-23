@@ -16,6 +16,7 @@ final class StatusBarController: NSObject {
     private var menuBarIconObserver: NSObjectProtocol?
 
     private var menu: NSMenu?
+    private var onCheckUpdateClick: (() -> Void)?
 
     override private init() {
         super.init()
@@ -29,7 +30,8 @@ final class StatusBarController: NSObject {
         )
     }
 
-    func setup() {
+    func setup(onCheckUpdateClick: (() -> Void)? = nil) {
+        self.onCheckUpdateClick = onCheckUpdateClick
         menu = createMenu()
 
         initializeStatusItem()
@@ -164,6 +166,10 @@ final class StatusBarController: NSObject {
         SettingWindowController.shared.toggleWindow(page: .about)
     }
 
+    @objc private func checkUpdateAction() {
+        onCheckUpdateClick?()
+    }
+
     @objc private func resumePasteboard() {
         PasteBoard.main.resume()
     }
@@ -258,6 +264,12 @@ extension StatusBarController {
         setMenuItemImage(pauseItem, symbolName: "pause.circle")
         pauseItem.submenu = createPauseSubmenu()
         menu.addItem(pauseItem)
+
+        let checkUpdateItem = makeItem(
+            title: "检查更新...", action: #selector(checkUpdateAction),
+            symbol: "arrow.down.circle"
+        )
+        menu.addItem(checkUpdateItem)
 
         let restartItem = makeItem(
             title: String(localized: .restart), action: #selector(NSApplication.relaunch),

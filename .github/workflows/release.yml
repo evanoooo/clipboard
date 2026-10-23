@@ -1,0 +1,108 @@
+name: Release App & Sparkle Update
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Unit Tests
+        run: swift run --package-path Tests
+
+      - name: Build macOS Release App
+        run: |
+          xcodebuild -project Clipboard.xcodeproj -scheme Clipboard \
+            -configuration Release -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO
+
+      - name: Archive Artifact
+        id: archive
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_NAME#v}"
+          APP_PATH="/Users/runner/Library/Developer/Xcode/DerivedData/Clipboard-*/Build/Products/Release/Clipboard.app"
+          
+          # 创建打包输出目录
+          mkdir -p dist
+          ZIP_NAME="Clipboard-${VERSION}-arm64.zip"
+          cd /Users/runner/Library/Developer/Xcode/DerivedData/Clipboard-*/Build/Products/Release
+          ditto -c -k --keepParent Clipboard.app "${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
+          cd "${GITHUB_WORKSPACE}"
+
+          echo "ZIP_PATH=dist/${ZIP_NAME}" >> $GITHUB_OUTPUT
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_OUTPUT
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Sign Update with Sparkle Private Key
+        id: sign
+        run: |
+          ZIP_PATH="${{ steps.archive.outputs.ZIP_PATH }}"
+          PRIV_KEY="${{ secrets.SPARKLE_PRIVATE_KEY }}"
+          
+          if [ -z "$PRIV_KEY" ]; then
+            echo "::warning::SPARKLE_PRIVATE_KEY secret is not set. Skipping Sparkle signature."
+            echo "SIGNATURE=" >> $GITHUB_OUTPUT
+            echo "LENGTH=0" >> $GITHUB_OUTPUT
+          else
+            OUTPUT=$(swift scripts/sign_update.swift "$ZIP_PATH" "$PRIV_KEY")
+            LENGTH=$(echo "$OUTPUT" | grep "^LENGTH:" | cut -d ' ' -f2)
+            SIGNATURE=$(echo "$OUTPUT" | grep "^ED_SIGNATURE:" | cut -d ' ' -f2)
+            echo "SIGNATURE=${SIGNATURE}" >> $GITHUB_OUTPUT
+            echo "LENGTH=${LENGTH}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update appcast.xml
+        if: steps.sign.outputs.SIGNATURE != ''
+        run: |
+          VERSION="${{ steps.archive.outputs.VERSION }}"
+          ZIP_NAME="${{ steps.archive.outputs.ZIP_NAME }}"
+          LENGTH="${{ steps.sign.outputs.LENGTH }}"
+          SIG="${{ steps.sign.outputs.SIGNATURE }}"
+          PUBDATE=$(date -R)
+
+          ITEM_XML=$(cat << EOF
+        <item>
+            <title>Version ${VERSION}</title>
+            <pubDate>${PUBDATE}</pubDate>
+            <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${ZIP_NAME}"
+                sparkle:arch="arm64"
+                sparkle:edSignature="${SIG}"
+                length="${LENGTH}"
+                type="application/octet-stream" />
+        </item>
+EOF
+          )
+          
+          # 将新 item 插入到 channel 标签后
+          python3 -c "
+with open('appcast.xml', 'r', encoding='utf-8') as f:
+    content = f.read()
+item = '''$ITEM_XML'''
+if '<channel>' in content:
+    content = content.replace('<channel>', '<channel>\n' + item, 1)
+with open('appcast.xml', 'w', encoding='utf-8') as f:
+    f.write(content)
+"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml
+          git commit -m "chore(release): update appcast.xml for v${VERSION} [skip ci]" || true
+          git push origin HEAD:master || true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.archive.outputs.ZIP_PATH }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

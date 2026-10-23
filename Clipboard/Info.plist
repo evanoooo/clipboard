@@ -2,11 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- 链接预览需要加载用户复制来的任意 http 页面；仅对 WebView 放开，URLSession 仍受 ATS 保护。 -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true/>
-	</dict>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/Ineffable919/clipboard/master/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>CAP3GXFFFntAVTx9VWI2Et88CyifKSHOOfgt2sQ68Eg=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>43200</integer>
 </dict>
 </plist>
