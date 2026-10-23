@@ -40,12 +40,8 @@ final class CardImageContentView: NSView, PassthroughMouseEvents {
         return view
     }()
 
-    private lazy var ocrOverlayView = OCRHighlightOverlayView()
-
     private var loadTask: Task<Void, Never>?
-    private var ocrTask: Task<Void, Never>?
     private var currentModelId: String = ""
-    private var currentKeyword: String = ""
     private var isFillMode: Bool = false
     private var currentImageSize: CGSize?
 
@@ -69,19 +65,15 @@ final class CardImageContentView: NSView, PassthroughMouseEvents {
 
     deinit {
         loadTask?.cancel()
-        ocrTask?.cancel()
     }
 
     func cancelLoad() {
         loadTask?.cancel()
         loadTask = nil
-        ocrTask?.cancel()
-        ocrTask = nil
     }
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
-        currentKeyword = ""
-        updateOCR(model: model, keyword: keyword)
+        // 卡片缩略图专注于极速渲染，不再执行耗时的二次实时 Vision OCR 识别
     }
 
     private func setupViews() {
@@ -91,12 +83,10 @@ final class CardImageContentView: NSView, PassthroughMouseEvents {
         addSubview(placeholderImageView)
 
         imageContainerView.addSubview(imageView)
-        imageContainerView.addSubview(ocrOverlayView)
 
         checkerboardView.snp.makeConstraints { $0.edges.equalToSuperview() }
         imageContainerView.snp.makeConstraints { $0.edges.equalToSuperview() }
         imageView.snp.makeConstraints { $0.edges.equalToSuperview() }
-        ocrOverlayView.snp.makeConstraints { $0.edges.equalToSuperview() }
 
         loadingIndicator.snp.makeConstraints { make in
             make.center.equalToSuperview()
@@ -136,7 +126,6 @@ final class CardImageContentView: NSView, PassthroughMouseEvents {
 
     private func load(model: PasteboardModel, keyword: String) {
         guard currentModelId != model.uniqueId else {
-            updateOCR(model: model, keyword: keyword)
             return
         }
 
@@ -166,31 +155,6 @@ final class CardImageContentView: NSView, PassthroughMouseEvents {
             } else {
                 placeholderImageView.isHidden = false
             }
-
-            updateOCR(model: model, keyword: keyword)
-        }
-    }
-
-    private func updateOCR(model: PasteboardModel, keyword: String) {
-        guard currentKeyword != keyword else { return }
-        currentKeyword = keyword
-        ocrTask?.cancel()
-
-        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, model.type == .image else {
-            ocrOverlayView.regions = []
-            ocrOverlayView.imageSize = nil
-            return
-        }
-
-        ocrTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            let regions = await model.loadOCRHighlightRegions(keyword: trimmed)
-            guard !Task.isCancelled else { return }
-            ocrOverlayView.regions = regions
-            ocrOverlayView.imageSize = model.cachedImageSize
-            ocrOverlayView.isFillMode = isFillMode
-            ocrOverlayView.setNeedsDisplay(ocrOverlayView.bounds)
         }
     }
 
@@ -209,58 +173,6 @@ final class CardImageContentView: NSView, PassthroughMouseEvents {
 
         let cropRatio = max(0, 1 - (visibleArea / fillArea))
         return cropRatio <= maxFillCropRatio
-    }
-}
-
-// MARK: - OCRHighlightOverlayView
-
-private final class OCRHighlightOverlayView: NSView {
-    var regions: [OCRTextRegion] = [] {
-        didSet { needsDisplay = true }
-    }
-
-    var imageSize: CGSize?
-    var isFillMode: Bool = false
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = .clear
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError()
-    }
-
-    override var isFlipped: Bool {
-        true
-    }
-
-    override func draw(_: NSRect) {
-        guard !regions.isEmpty, let imageSize else { return }
-
-        let containerSize = bounds.size
-        let layout = computeImageLayout(imageSize: imageSize, containerSize: containerSize)
-        NSColor.systemYellow.withAlphaComponent(0.45).setFill()
-
-        for region in regions {
-            let rect = convertToContainerRect(normalizedBox: region.boundingBox, imageLayout: layout)
-            let path = NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2)
-            path.fill()
-        }
-    }
-
-    private func computeImageLayout(imageSize: CGSize, containerSize: CGSize) -> CGRect {
-        imageLayout(imageSize: imageSize, containerSize: containerSize, isFillMode: isFillMode)
-    }
-
-    private func convertToContainerRect(normalizedBox: CGRect, imageLayout: CGRect) -> CGRect {
-        let left = imageLayout.origin.x + normalizedBox.origin.x * imageLayout.width
-        let top = imageLayout.origin.y + (1 - normalizedBox.origin.y - normalizedBox.height) * imageLayout.height
-        let width = normalizedBox.width * imageLayout.width
-        let height = normalizedBox.height * imageLayout.height
-        return CGRect(x: left, y: top, width: width, height: height)
     }
 }
 

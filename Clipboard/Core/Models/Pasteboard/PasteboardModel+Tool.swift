@@ -28,24 +28,6 @@ extension PasteboardModel {
         }
     }
 
-    /// 加载匹配关键字的 OCR 高亮区域
-    func loadOCRHighlightRegions(keyword: String) async -> [OCRTextRegion] {
-        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-
-        if cachedOCRKeyword == trimmed, let cachedOCRRegions {
-            return cachedOCRRegions
-        }
-
-        let regions = await OCRViewService.shared.recognizeHighlightRegions(
-            from: data,
-            keyword: trimmed
-        )
-        cachedOCRKeyword = trimmed
-        cachedOCRRegions = regions
-        return regions
-    }
-
     // MARK: - 计算图片尺寸
 
     static func computeImageSize(from data: Data) -> CGSize? {
