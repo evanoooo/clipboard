@@ -5,6 +5,28 @@
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
 
-        <!-- 当前发布记录占位模板，发版流水线将自动在此追加新 item -->
+        <!-- Version 2.3.0 -->
+        <item>
+            <title>Version 2.3.0</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.3.0
+
+- 架构增强与底层数据增量同步优化；
+- Sparkle 2 自动更新与独立 Ed25519 签名体系；
+- 遵循 CC BY-NC 4.0 开源许可。
+]]>
+            </description>
+            <pubDate>Fri, 23 Oct 2026 15:00:00 +0800</pubDate>
+            <sparkle:version>888</sparkle:version>
+            <sparkle:shortVersionString>2.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.3.0/Clipboard-2.3.0-arm64.zip"
+                sparkle:arch="arm64"
+                sparkle:edSignature="CAP3GXFFFntAVTx9VWI2Et88CyifKSHOOfgt2sQ68Eg="
+                length="0"
+                type="application/octet-stream" />
+        </item>
     </channel>
 </rss>
