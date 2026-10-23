@@ -25,7 +25,9 @@ jobs:
           echo "Using Xcode at: ${XCODE_APP}"
 
       - name: Verify Swift Version
-        run: swift --version
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Run Unit Tests
         run: |
@@ -40,8 +42,15 @@ jobs:
 
       - name: Build macOS Release App
         run: |
+          set -o pipefail
           xcodebuild -project Clipboard.xcodeproj -scheme Clipboard \
-            -configuration Release -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO
+            -configuration Release -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO 2>&1 | tee build_app.log || {
+            echo "### ❌ Build macOS Release App Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 150 build_app.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
       - name: Archive Artifact
         id: archive
