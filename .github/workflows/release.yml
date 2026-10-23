@@ -44,7 +44,8 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project Clipboard.xcodeproj -scheme Clipboard \
-            -configuration Release -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO 2>&1 | tee build_app.log || {
+            -configuration Release -destination 'platform=macOS' \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build CODE_SIGNING_ALLOWED=NO 2>&1 | tee build_app.log || {
             echo "### ❌ Build macOS Release App Failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             tail -n 150 build_app.log >> $GITHUB_STEP_SUMMARY
@@ -52,20 +53,36 @@ jobs:
             exit 1
           }
 
-      - name: Archive Artifact
+      - name: Archive Artifacts (Universal DMG & ZIP)
         id: archive
         run: |
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG_NAME#v}"
           
           mkdir -p dist
-          ZIP_NAME="Clipboard-${VERSION}-arm64.zip"
-          cd /Users/runner/Library/Developer/Xcode/DerivedData/Clipboard-*/Build/Products/Release
+          APP_DIR=$(ls -d /Users/runner/Library/Developer/Xcode/DerivedData/Clipboard-*/Build/Products/Release | tail -n 1)
+
+          ZIP_NAME="Clipboard-${VERSION}.zip"
+          DMG_NAME="Clipboard-${VERSION}.dmg"
+
+          # 1. 生成 Universal ZIP（供 Sparkle 自动更新使用）
+          cd "${APP_DIR}"
           ditto -c -k --keepParent Clipboard.app "${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
+
+          # 2. 生成 Universal DMG（带 Applications 快捷方式，供用户直接安装）
+          DMG_TEMP="${GITHUB_WORKSPACE}/dmg_temp"
+          mkdir -p "${DMG_TEMP}"
+          cp -R Clipboard.app "${DMG_TEMP}/"
+          ln -s /Applications "${DMG_TEMP}/Applications"
+          hdiutil create -volname "Clipboard" -srcfolder "${DMG_TEMP}" -ov -format UDZO "${GITHUB_WORKSPACE}/dist/${DMG_NAME}"
+          rm -rf "${DMG_TEMP}"
+
           cd "${GITHUB_WORKSPACE}"
 
           echo "ZIP_PATH=dist/${ZIP_NAME}" >> $GITHUB_OUTPUT
           echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_OUTPUT
+          echo "DMG_PATH=dist/${DMG_NAME}" >> $GITHUB_OUTPUT
+          echo "DMG_NAME=${DMG_NAME}" >> $GITHUB_OUTPUT
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Sign Update with Sparkle Private Key
@@ -89,7 +106,8 @@ jobs:
       - name: Update appcast.xml
         if: steps.sign.outputs.SIGNATURE != ''
         run: |
-          python3 scripts/update_appcast.py "${{ steps.archive.outputs.VERSION }}" "${{ steps.archive.outputs.ZIP_NAME }}" "${{ steps.sign.outputs.LENGTH }}" "${{ steps.sign.outputs.SIGNATURE }}" "${{ github.repository }}"
+          BUILD_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" Clipboard/Info.plist 2>/dev/null || echo "888")
+          python3 scripts/update_appcast.py "${{ steps.archive.outputs.VERSION }}" "${{ steps.archive.outputs.ZIP_NAME }}" "${{ steps.sign.outputs.LENGTH }}" "${{ steps.sign.outputs.SIGNATURE }}" "${{ github.repository }}" "${BUILD_VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add appcast.xml
@@ -99,7 +117,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ steps.archive.outputs.ZIP_PATH }}
+          files: |
+            ${{ steps.archive.outputs.DMG_PATH }}
+            ${{ steps.archive.outputs.ZIP_PATH }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
