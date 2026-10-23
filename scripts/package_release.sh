@@ -17,12 +17,6 @@ WORK_DIR=$(mktemp -d /tmp/pkg_release.XXXXXX)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 UNIVERSAL_APP="${APP_DIR}/Clipboard.app"
-ARM64_APP="${WORK_DIR}/Clipboard-arm64.app"
-X86_APP="${WORK_DIR}/Clipboard-x86_64.app"
-
-echo "==> Preparing architecture variants..."
-cp -R "$UNIVERSAL_APP" "$ARM64_APP"
-cp -R "$UNIVERSAL_APP" "$X86_APP"
 
 thin_app() {
   local target_arch="$1"
@@ -34,8 +28,16 @@ thin_app() {
   done
 }
 
-thin_app "arm64" "$ARM64_APP"
-thin_app "x86_64" "$X86_APP"
+sign_bundle() {
+  local app_bundle="$1"
+  echo "==> Re-signing bundle with ad-hoc signature: $app_bundle"
+  if [ -d "$app_bundle/Contents/Frameworks" ]; then
+    find "$app_bundle/Contents/Frameworks" -type d -name "*.framework" -o -type f -name "*.dylib" 2>/dev/null | while read -r fw; do
+      codesign --force --deep -s - "$fw" 2>/dev/null || true
+    done
+  fi
+  codesign --force --deep -s - "$app_bundle"
+}
 
 make_dmg() {
   local app_path="$1"
@@ -56,27 +58,32 @@ make_zip() {
   (cd "$app_parent" && ditto -c -k --keepParent "Clipboard.app" "$zip_out")
 }
 
-# Rename for ditto so the unzipped app is always named Clipboard.app
-mv "$ARM64_APP" "${WORK_DIR}/arm64" && mkdir -p "${WORK_DIR}/arm64" && mv "${WORK_DIR}/arm64" "${WORK_DIR}/arm64_dir" && mkdir -p "${WORK_DIR}/arm64" && mv "${WORK_DIR}/arm64_dir" "${WORK_DIR}/arm64/Clipboard.app" 2>/dev/null || true
-# Simpler: just keep it named Clipboard.app inside its own subfolder:
 ARM64_DIR="${WORK_DIR}/arm64_bundle"
 X86_DIR="${WORK_DIR}/x86_bundle"
-mkdir -p "$ARM64_DIR" "$X86_DIR"
-rm -rf "${ARM64_DIR}/Clipboard.app" "${X86_DIR}/Clipboard.app"
+UNIVERSAL_DIR="${WORK_DIR}/universal_bundle"
+
+mkdir -p "$ARM64_DIR" "$X86_DIR" "$UNIVERSAL_DIR"
 cp -R "$UNIVERSAL_APP" "${ARM64_DIR}/Clipboard.app"
 cp -R "$UNIVERSAL_APP" "${X86_DIR}/Clipboard.app"
+cp -R "$UNIVERSAL_APP" "${UNIVERSAL_DIR}/Clipboard.app"
+
 thin_app "arm64" "${ARM64_DIR}/Clipboard.app"
 thin_app "x86_64" "${X86_DIR}/Clipboard.app"
+
+echo "==> Signing bundles with ad-hoc signature..."
+sign_bundle "${ARM64_DIR}/Clipboard.app"
+sign_bundle "${X86_DIR}/Clipboard.app"
+sign_bundle "${UNIVERSAL_DIR}/Clipboard.app"
 
 echo "==> Packaging DMGs..."
 make_dmg "${ARM64_DIR}/Clipboard.app" "${DIST_DIR}/Clipboard-${VERSION}-arm64.dmg"
 make_dmg "${X86_DIR}/Clipboard.app" "${DIST_DIR}/Clipboard-${VERSION}-x86_64.dmg"
-make_dmg "$UNIVERSAL_APP" "${DIST_DIR}/Clipboard-${VERSION}-universal.dmg"
+make_dmg "${UNIVERSAL_DIR}/Clipboard.app" "${DIST_DIR}/Clipboard-${VERSION}-universal.dmg"
 
 echo "==> Packaging ZIPs..."
 make_zip "${ARM64_DIR}/Clipboard.app" "${DIST_DIR}/Clipboard-${VERSION}-arm64.zip"
 make_zip "${X86_DIR}/Clipboard.app" "${DIST_DIR}/Clipboard-${VERSION}-x86_64.zip"
-make_zip "$UNIVERSAL_APP" "${DIST_DIR}/Clipboard-${VERSION}-universal.zip"
+make_zip "${UNIVERSAL_DIR}/Clipboard.app" "${DIST_DIR}/Clipboard-${VERSION}-universal.zip"
 
 echo "==> Artifacts packaging complete:"
 ls -lh "${DIST_DIR}"
