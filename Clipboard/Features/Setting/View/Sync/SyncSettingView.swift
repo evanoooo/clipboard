@@ -49,6 +49,7 @@ struct SyncSettingView: View {
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testSuccess: Bool?
+    @State private var showOverwriteConfirmation = false
 
     var body: some View {
         let content = ScrollView(.vertical) {
@@ -271,6 +272,182 @@ struct SyncSettingView: View {
                     }
                     .padding(Const.space16)
                     .settingsStyle()
+
+                    // 4. 云端已备份资产看板与还原卡片
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Label("云端已备份资产看板", systemImage: "internaldrive.fill")
+                                .font(.headline)
+                                .bold()
+                            Spacer()
+
+                            if engine.isFetchingSummary {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Button(action: {
+                                    Task { await engine.fetchCloudSummary() }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                        Text("刷新概览")
+                                    }
+                                    .font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.isFetchingSummary)
+                            }
+                        }
+
+                        if let summary = engine.syncSummary {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text("云端已安全加密备份共")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                Text("\(summary.totalCount)")
+                                    .font(.title3)
+                                    .bold()
+                                    .foregroundStyle(.primary)
+                                Text("条记录")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            // 分组 / 标签细分胶囊条
+                            if !summary.groupCounts.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("按分组/标签已备份:")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 8) {
+                                            ForEach(summary.groupCounts) { item in
+                                                HStack(spacing: 5) {
+                                                    Circle()
+                                                        .fill(chipColor(for: item))
+                                                        .frame(width: 8, height: 8)
+                                                    Text(item.name)
+                                                        .font(.caption)
+                                                    Text("\(item.count)")
+                                                        .font(.caption)
+                                                        .bold()
+                                                        .padding(.horizontal, 4)
+                                                        .padding(.vertical, 1)
+                                                        .background(Color.primary.opacity(0.08))
+                                                        .clipShape(Capsule())
+                                                }
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color(NSColor.controlBackgroundColor))
+                                                .cornerRadius(6)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 媒体类型胶囊
+                            if !summary.typeCounts.isEmpty {
+                                HStack(spacing: 8) {
+                                    ForEach(summary.typeCounts) { t in
+                                        HStack(spacing: 4) {
+                                            Text(t.typeName)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                            Text("\(t.count)")
+                                                .font(.caption2)
+                                                .bold()
+                                        }
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.secondary.opacity(0.1))
+                                        .cornerRadius(4)
+                                    }
+                                }
+                            }
+                        } else {
+                            HStack(spacing: 6) {
+                                Image(systemName: "icloud.slash")
+                                    .foregroundStyle(.secondary)
+                                Text("尚未获取到云端资产统计，连接同步后将在此呈现详细看板。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+
+                        Divider()
+
+                        // MARK: - 还原与恢复操作
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("还原与恢复数据")
+                                .font(.subheadline)
+                                .bold()
+
+                            // 智能合并还原（推荐模式）
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("智能拉取还原 (安全合并 · 推荐)")
+                                        .font(.callout)
+                                    Text("仅补充本地缺失的云端条目，严格保留本地所有已添加的新内容，不丢失任何数据。")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(action: {
+                                    Task {
+                                        _ = await engine.restoreFromCloud(overwriteLocal: false)
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        if engine.isRestoring {
+                                            ProgressView().controlSize(.small)
+                                        } else {
+                                            Image(systemName: "arrow.down.doc")
+                                        }
+                                        Text("智能还原")
+                                    }
+                                }
+                                .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.isRestoring || engine.currentState == .syncing)
+                            }
+
+                            Divider()
+
+                            // 完全覆盖本地（高级危险模式）
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("完全以云端覆盖本地 (危险)")
+                                        .font(.callout)
+                                        .foregroundStyle(.red)
+                                    Text("清空本地现有记录，完全克隆云端备份。本地未同步的新增内容将被抹掉且不可逆。")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("覆盖本地...") {
+                                    showOverwriteConfirmation = true
+                                }
+                                .foregroundStyle(.red)
+                                .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.isRestoring || engine.currentState == .syncing)
+                            }
+
+                            if let msg = engine.restoreMessage {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "info.circle.fill")
+                                        .foregroundStyle(.blue)
+                                    Text(msg)
+                                        .font(.caption)
+                                }
+                                .padding(.top, 2)
+                            }
+                        }
+                    }
+                    .padding(Const.space16)
+                    .settingsStyle()
                 }
                 .disabled(!syncEnabled)
                 .opacity(syncEnabled ? 1.0 : 0.6)
@@ -279,6 +456,16 @@ struct SyncSettingView: View {
                 Spacer(minLength: 20)
             }
             .padding([.horizontal, .bottom], Const.space24)
+        }
+        .alert("完全用云端覆盖本地？", isPresented: $showOverwriteConfirmation) {
+            Button("抹掉并覆盖本地", role: .destructive) {
+                Task {
+                    _ = await engine.restoreFromCloud(overwriteLocal: true)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作将完全抹掉本地所有剪贴板记录，并以云端备份为准重新导入。本地任何尚未同步的新增内容都将永久丢失。")
         }
         .onAppear {
             loadCredentials()
@@ -299,6 +486,16 @@ struct SyncSettingView: View {
         case .success: return .green
         case .failed: return .red
         }
+    }
+
+    private func chipColor(for item: SyncGroupCount) -> Color {
+        if item.groupId == -1 {
+            return .gray
+        }
+        if let hex = item.colorHex, !hex.isEmpty {
+            return Color(hex: hex)
+        }
+        return .blue
     }
 
     private func loadCredentials() {

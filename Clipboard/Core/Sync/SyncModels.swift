@@ -20,6 +20,51 @@ nonisolated struct SyncIndexEntry: Codable, Equatable, Sendable {
     let isDeleted: Bool
     /// 分组 ID：-1 为普通流水，>= 0 为收藏/自定义分组
     let group: Int
+    /// 媒体类型（如 text, image 等）
+    var type: String? = nil
+    /// 标签名称（如有）
+    var tag: String? = nil
+
+    init(
+        uniqueId: String,
+        updatedAt: Int64,
+        checksum: String,
+        isDeleted: Bool,
+        group: Int,
+        type: String? = nil,
+        tag: String? = nil
+    ) {
+        self.uniqueId = uniqueId
+        self.updatedAt = updatedAt
+        self.checksum = checksum
+        self.isDeleted = isDeleted
+        self.group = group
+        self.type = type
+        self.tag = tag
+    }
+}
+
+// MARK: - 云端资产统计细分模型
+
+nonisolated struct SyncGroupCount: Codable, Identifiable, Equatable, Sendable {
+    var id: String { "\(groupId)_\(name)" }
+    let groupId: Int
+    let name: String
+    let count: Int
+    let colorHex: String?
+}
+
+nonisolated struct SyncTypeCount: Codable, Identifiable, Equatable, Sendable {
+    var id: String { typeName }
+    let typeName: String
+    let count: Int
+}
+
+nonisolated struct SyncSummary: Codable, Equatable, Sendable {
+    let totalCount: Int
+    let groupCounts: [SyncGroupCount]
+    let typeCounts: [SyncTypeCount]
+    let lastUpdated: Int64
 }
 
 // MARK: - 全量索引清单（存放于云端 index.json.enc）
@@ -36,6 +81,86 @@ nonisolated struct SyncIndex: Codable, Sendable {
         self.version = version
         self.lastModified = lastModified
         self.entries = entries
+    }
+
+    /// 毫秒级生成云端资产概览摘要（过滤墓碑，按分组和类型细分）
+    func generateSummary(chips: [CategoryChip]) -> SyncSummary {
+        let activeEntries = entries.values.filter { !$0.isDeleted }
+        let totalCount = activeEntries.count
+
+        // 1. 按分组统计
+        var groupMap: [Int: Int] = [:]
+        for entry in activeEntries {
+            groupMap[entry.group, default: 0] += 1
+        }
+
+        let chipDict = Dictionary(chips.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        var groupCounts: [SyncGroupCount] = []
+        for (groupId, count) in groupMap {
+            if groupId == -1 {
+                groupCounts.append(SyncGroupCount(
+                    groupId: -1,
+                    name: String(localized: "clipboard"),
+                    count: count,
+                    colorHex: nil
+                ))
+            } else if let chip = chipDict[groupId] {
+                groupCounts.append(SyncGroupCount(
+                    groupId: groupId,
+                    name: chip.name,
+                    count: count,
+                    colorHex: chip.customHexColor
+                ))
+            } else {
+                groupCounts.append(SyncGroupCount(
+                    groupId: groupId,
+                    name: "分类 #\(groupId)",
+                    count: count,
+                    colorHex: nil
+                ))
+            }
+        }
+
+        // 默认剪贴板优先，其余按数量降序
+        groupCounts.sort { a, b in
+            if a.groupId == -1 { return true }
+            if b.groupId == -1 { return false }
+            return a.count > b.count
+        }
+
+        // 2. 按媒体类型统计
+        var typeMap: [String: Int] = [:]
+        for entry in activeEntries {
+            let t = entry.type?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            let typeName: String
+            if let t, !t.isEmpty {
+                if t.contains("image") || t.contains("png") || t.contains("tiff") {
+                    typeName = "图片"
+                } else if t.contains("url") || t.contains("link") {
+                    typeName = "链接"
+                } else if t.contains("rtf") {
+                    typeName = "富文本"
+                } else if t.contains("file") {
+                    typeName = "文件"
+                } else {
+                    typeName = "文本"
+                }
+            } else {
+                typeName = "记录"
+            }
+            typeMap[typeName, default: 0] += 1
+        }
+
+        var typeCounts = typeMap.map { SyncTypeCount(typeName: $0.key, count: $0.value) }
+        typeCounts.sort { $0.count > $1.count }
+
+        return SyncSummary(
+            totalCount: totalCount,
+            groupCounts: groupCounts,
+            typeCounts: typeCounts,
+            lastUpdated: lastModified
+        )
     }
 }
 

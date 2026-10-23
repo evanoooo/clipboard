@@ -36,11 +36,33 @@ final class SyncEngine: ObservableObject {
     static let shared = SyncEngine()
 
     @Published private(set) var currentState: SyncState = .idle
+    @Published private(set) var syncSummary: SyncSummary?
+    @Published private(set) var isRestoring: Bool = false
+    @Published private(set) var restoreMessage: String?
+    @Published private(set) var isFetchingSummary: Bool = false
+
     private var lastRemoteETag: String?
     private var isDirty = false
     private var debounceTask: Task<Void, Never>?
 
-    private init() {}
+    private init() {
+        loadCachedSummary()
+    }
+
+    // MARK: - 缓存摘要
+
+    private func loadCachedSummary() {
+        if let data = UserDefaults.standard.data(forKey: "sync_summary_cache"),
+           let summary = try? JSONDecoder().decode(SyncSummary.self, from: data) {
+            self.syncSummary = summary
+        }
+    }
+
+    private func saveSummaryCache(_ summary: SyncSummary) {
+        if let data = try? JSONEncoder().encode(summary) {
+            UserDefaults.standard.set(data, forKey: "sync_summary_cache")
+        }
+    }
 
     // MARK: - 静态纯函数：Diff 计算矩阵 (供测试与引擎共享)
 
@@ -62,6 +84,161 @@ final class SyncEngine: ObservableObject {
             try? await Task.sleep(nanoseconds: 15_000_000_000) // 15秒防抖
             guard !Task.isCancelled else { return }
             await self?.triggerSync()
+        }
+    }
+
+    // MARK: - 仅刷新云端资产看板摘要
+
+    @discardableResult
+    func fetchCloudSummary() async -> SyncSummary? {
+        guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return nil }
+        guard !isFetchingSummary else { return syncSummary }
+        isFetchingSummary = true
+        defer { isFetchingSummary = false }
+
+        do {
+            guard let serverURLString = UserDefaults.standard.string(forKey: "sync_webdav_url"),
+                  let serverURL = URL(string: serverURLString),
+                  let username = UserDefaults.standard.string(forKey: "sync_webdav_username"),
+                  let password = SyncKeychainManager.shared.loadWebDAVPassword(),
+                  let passphrase = SyncKeychainManager.shared.loadSyncPassphrase(),
+                  !passphrase.isEmpty else {
+                return nil
+            }
+
+            let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
+            let saltPath = "ClipboardSync/vault.meta.enc"
+            guard let salt = try? await client.download(from: saltPath) else { return nil }
+            let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
+
+            let indexPath = "ClipboardSync/index.json.enc"
+            guard let encIndexData = try? await client.download(from: indexPath),
+                  let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
+                  let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
+                return nil
+            }
+
+            let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
+            self.syncSummary = summary
+            saveSummaryCache(summary)
+            return summary
+        } catch {
+            return nil
+        }
+    }
+
+    // MARK: - 从云端还原
+
+    /// 从云端拉取还原数据
+    /// - Parameter overwriteLocal: 若为 false，进行智能安全合并（仅补充本地缺失或陈旧条目，保留本地一切新增）；若为 true，先清空本地，完全由云端镜像覆盖。
+    @discardableResult
+    func restoreFromCloud(overwriteLocal: Bool = false) async -> (success: Bool, message: String) {
+        guard UserDefaults.standard.bool(forKey: "sync_enabled") else {
+            return (false, "请先启用云端同步")
+        }
+        guard !isRestoring, currentState != .syncing else {
+            return (false, "同步或还原正在进行中")
+        }
+
+        isRestoring = true
+        restoreMessage = nil
+        defer { isRestoring = false }
+
+        do {
+            guard let serverURLString = UserDefaults.standard.string(forKey: "sync_webdav_url"),
+                  let serverURL = URL(string: serverURLString),
+                  let username = UserDefaults.standard.string(forKey: "sync_webdav_username"),
+                  let password = SyncKeychainManager.shared.loadWebDAVPassword(),
+                  let passphrase = SyncKeychainManager.shared.loadSyncPassphrase(),
+                  !passphrase.isEmpty else {
+                let msg = "WebDAV 账号或同步密码未配置完整"
+                restoreMessage = msg
+                return (false, msg)
+            }
+
+            let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
+
+            // 1. 获取 salt 与派生主密钥
+            let saltPath = "ClipboardSync/vault.meta.enc"
+            guard let salt = try? await client.download(from: saltPath) else {
+                let msg = "未找到云端密钥元数据，云端可能尚未进行过备份"
+                restoreMessage = msg
+                return (false, msg)
+            }
+            let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
+
+            // 2. 下载并解密云端索引
+            let indexPath = "ClipboardSync/index.json.enc"
+            guard let encIndexData = try? await client.download(from: indexPath),
+                  let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
+                  let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
+                let msg = "读取或解密云端索引失败，请检查同步密码是否正确"
+                restoreMessage = msg
+                return (false, msg)
+            }
+
+            let activeEntries = remoteIndex.entries.values.filter { !$0.isDeleted }
+
+            // 3. 计算需要拉取的条目 ID
+            var toDownloadIds: [String] = []
+
+            if overwriteLocal {
+                // 完全覆盖模式：清空本地历史
+                _ = try await PasteSQLManager.manager.clearHistory(includePinnedAndGrouped: true)
+                toDownloadIds = activeEntries.map(\.uniqueId)
+            } else {
+                // 智能安全合并模式：保留本地所有新增！仅拉取本地没有或云端时间戳更新的记录
+                let localModels = PasteDataStore.main.dataList.value
+                let localMap = Dictionary(localModels.map { ($0.uniqueId, $0) }, uniquingKeysWith: { first, _ in first })
+
+                for entry in activeEntries {
+                    if let local = localMap[entry.uniqueId] {
+                        if entry.updatedAt > local.timestamp {
+                            toDownloadIds.append(entry.uniqueId)
+                        }
+                    } else {
+                        toDownloadIds.append(entry.uniqueId)
+                    }
+                }
+            }
+
+            // 4. 并发拉取并写入本地数据库
+            var restoredCount = 0
+            try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
+                for id in toDownloadIds {
+                    group.addTask {
+                        guard let encData = try? await client.download(from: "ClipboardSync/items/\(id).enc"),
+                              let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                              let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                            return nil
+                        }
+                        return await MainActor.run { blob.toPasteboardModel() }
+                    }
+                }
+                for try await model in group {
+                    if let model {
+                        await PasteDataStore.main.insertModel(model)
+                        restoredCount += 1
+                    }
+                }
+            }
+
+            // 5. 刷新历史列表与更新资产概览
+            await PasteDataStore.main.reloadHistory()
+            let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
+            self.syncSummary = summary
+            saveSummaryCache(summary)
+
+            let msg = overwriteLocal
+                ? "完全覆盖完成：已从云端拉取 \(restoredCount) 条记录并完全覆盖本地。"
+                : "智能合并完成：已拉取恢复 \(restoredCount) 条云端记录，本地现有数据均已完好保留。"
+            self.restoreMessage = msg
+            return (true, msg)
+
+        } catch {
+            let errorMsg = "还原失败: \(error.localizedDescription)"
+            self.restoreMessage = errorMsg
+            return (false, errorMsg)
         }
     }
 
@@ -167,7 +344,9 @@ final class SyncEngine: ObservableObject {
                             updatedAt: blob.timestamp,
                             checksum: checksum,
                             isDeleted: false,
-                            group: blob.group
+                            group: blob.group,
+                            type: blob.pasteboardType,
+                            tag: blob.tag
                         )
                         return (blob.uniqueId, entry)
                     }
@@ -187,11 +366,13 @@ final class SyncEngine: ObservableObject {
                     updatedAt: Int64(Date().timeIntervalSince1970 * 1000),
                     checksum: "",
                     isDeleted: true,
-                    group: -1
+                    group: -1,
+                    type: nil,
+                    tag: nil
                 )
             }
 
-            // 10. 加密上传最新索引清单并更新状态
+            // 10. 加密上传最新索引清单并更新状态与资产看板
             remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
             let updatedIndexData = try JSONEncoder().encode(remoteIndex)
             let encUpdatedIndex = try SyncCryptoEngine.encrypt(data: updatedIndexData, using: masterKey)
@@ -199,6 +380,11 @@ final class SyncEngine: ObservableObject {
 
             self.lastRemoteETag = try? await client.getETag(path: indexPath)
             self.isDirty = false
+
+            // 统计并缓存资产看板
+            let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
+            self.syncSummary = summary
+            saveSummaryCache(summary)
 
             let finishTime = Int64(Date().timeIntervalSince1970 * 1000)
             let state: SyncState = .success(lastSyncTime: finishTime)
