@@ -73,6 +73,7 @@ final class SearchField: NSView {
     // MARK: - Suggestion Window
 
     lazy var suggestionWindow = SearchSuggestionWindow()
+    var suggestionsWorkItem: DispatchWorkItem?
 
     // MARK: - Init
 
@@ -283,7 +284,20 @@ final class SearchField: NSView {
         text = plainText
         onTextChanged?(plainText)
         updateCancelButtonVisibility()
-        updateSuggestions()
+        scheduleDebouncedSuggestions()
+    }
+
+    func scheduleDebouncedSuggestions() {
+        suggestionsWorkItem?.cancel()
+        if text.isEmpty {
+            hideSuggestions()
+            return
+        }
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.updateSuggestions()
+        }
+        suggestionsWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(120), execute: workItem)
     }
 
     private func updateCancelButtonVisibility() {
@@ -314,9 +328,7 @@ final class SearchField: NSView {
         updateCancelButtonVisibility()
         onTextChanged?(plainText)
         moveCursorToEnd()
-        Task { @MainActor [weak self] in
-            self?.updateSuggestions()
-        }
+        scheduleDebouncedSuggestions()
     }
 
 }
@@ -333,7 +345,7 @@ extension SearchField: NSTextViewDelegate {
         // 原生编辑可能只删除标签，关键词不变时也要同步筛选条件。
         onTokensChanged?(tokenTextView.getAllTokens())
         updateCancelButtonVisibility()
-        updateSuggestions()
+        scheduleDebouncedSuggestions()
     }
 
     func textDidBeginEditing(_: Notification) {

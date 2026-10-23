@@ -39,6 +39,8 @@ extension SearchField {
     }
 
     func hideSuggestions() {
+        suggestionsWorkItem?.cancel()
+        suggestionsWorkItem = nil
         guard suggestionWindow.isVisible else { return }
         suggestionWindow.hide()
     }
