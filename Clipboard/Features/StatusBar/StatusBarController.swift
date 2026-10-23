@@ -266,7 +266,7 @@ extension StatusBarController {
         menu.addItem(pauseItem)
 
         let checkUpdateItem = makeItem(
-            title: "检查更新...", action: #selector(checkUpdateAction),
+            title: "检查更新", action: #selector(checkUpdateAction),
             symbol: "arrow.down.circle"
         )
         menu.addItem(checkUpdateItem)

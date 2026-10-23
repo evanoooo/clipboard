@@ -124,7 +124,7 @@ struct AboutSettingView: View {
                         case .idle:
                             Image(systemName: "arrow.down.circle")
                                 .font(.system(size: 13))
-                            Text("检查更新...")
+                            Text("检查更新")
                                 .font(.system(size: 13, weight: .medium))
                         }
                     }
