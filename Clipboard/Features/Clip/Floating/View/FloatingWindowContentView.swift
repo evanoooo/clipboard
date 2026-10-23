@@ -114,7 +114,7 @@ final class FloatingWindowContentView: NSView {
             .store(in: &cancellables)
 
         topVM.filterDidChange
-            .receive(on: RunLoop.main)
+            .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
             .sink { [weak self] in
                 guard let self else { return }
                 topVM.performSearch()
