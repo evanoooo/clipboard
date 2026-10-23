@@ -227,6 +227,7 @@ extension AppDelegate: SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
     }
 
     nonisolated func updater(_: SPUUpdater, didAbortWithError error: Error) {
+        log.error("Sparkle 更新检查终止: \(error.localizedDescription) (\(error))")
         Task { @MainActor in
             UpdateManager.shared.setFailed(message: error.localizedDescription)
         }
