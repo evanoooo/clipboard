@@ -27,9 +27,7 @@ jobs:
         run: |
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG_NAME#v}"
-          APP_PATH="/Users/runner/Library/Developer/Xcode/DerivedData/Clipboard-*/Build/Products/Release/Clipboard.app"
           
-          # 创建打包输出目录
           mkdir -p dist
           ZIP_NAME="Clipboard-${VERSION}-arm64.zip"
           cd /Users/runner/Library/Developer/Xcode/DerivedData/Clipboard-*/Build/Products/Release
@@ -61,42 +59,11 @@ jobs:
       - name: Update appcast.xml
         if: steps.sign.outputs.SIGNATURE != ''
         run: |
-          VERSION="${{ steps.archive.outputs.VERSION }}"
-          ZIP_NAME="${{ steps.archive.outputs.ZIP_NAME }}"
-          LENGTH="${{ steps.sign.outputs.LENGTH }}"
-          SIG="${{ steps.sign.outputs.SIGNATURE }}"
-          PUBDATE=$(date -R)
-
-          ITEM_XML=$(cat << EOF
-        <item>
-            <title>Version ${VERSION}</title>
-            <pubDate>${PUBDATE}</pubDate>
-            <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure
-                url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${ZIP_NAME}"
-                sparkle:arch="arm64"
-                sparkle:edSignature="${SIG}"
-                length="${LENGTH}"
-                type="application/octet-stream" />
-        </item>
-EOF
-          )
-          
-          # 将新 item 插入到 channel 标签后
-          python3 -c "
-with open('appcast.xml', 'r', encoding='utf-8') as f:
-    content = f.read()
-item = '''$ITEM_XML'''
-if '<channel>' in content:
-    content = content.replace('<channel>', '<channel>\n' + item, 1)
-with open('appcast.xml', 'w', encoding='utf-8') as f:
-    f.write(content)
-"
+          python3 scripts/update_appcast.py "${{ steps.archive.outputs.VERSION }}" "${{ steps.archive.outputs.ZIP_NAME }}" "${{ steps.sign.outputs.LENGTH }}" "${{ steps.sign.outputs.SIGNATURE }}" "${{ github.repository }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add appcast.xml
-          git commit -m "chore(release): update appcast.xml for v${VERSION} [skip ci]" || true
+          git commit -m "chore(release): update appcast.xml for v${{ steps.archive.outputs.VERSION }} [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Create GitHub Release

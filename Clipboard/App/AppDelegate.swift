@@ -207,6 +207,12 @@ extension Notification.Name {
 // MARK: - SPUUpdaterDelegate
 
 extension AppDelegate: SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
+    nonisolated func updaterWillCheckForUpdates(_: SPUUpdater) {
+        Task { @MainActor in
+            UpdateManager.shared.setChecking()
+        }
+    }
+
     nonisolated func updater(_: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let version = item.displayVersionString
         Task { @MainActor in
@@ -216,7 +222,13 @@ extension AppDelegate: SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
 
     nonisolated func updaterDidNotFindUpdate(_: SPUUpdater) {
         Task { @MainActor in
-            UpdateManager.shared.clearUpdate()
+            UpdateManager.shared.setUpToDate()
+        }
+    }
+
+    nonisolated func updater(_: SPUUpdater, didAbortWithError error: Error) {
+        Task { @MainActor in
+            UpdateManager.shared.setFailed(message: error.localizedDescription)
         }
     }
 

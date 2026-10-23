@@ -10,6 +10,7 @@ import SwiftUI
 
 struct AboutSettingView: View {
     @State private var copiedVersionFeedback = false
+    @State private var updateManager = UpdateManager.shared
 
     private var appName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
@@ -94,23 +95,47 @@ struct AboutSettingView: View {
                     },
                     label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "arrow.down.circle")
-                                .font(.system(size: 14))
-                            Text("检查更新...")
-                                .font(.system(size: 14, weight: .regular))
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
+                            switch updateManager.status {
+                            case .checking:
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("正在检查更新...")
+                                    .font(.system(size: 14, weight: .regular))
+                            case .upToDate:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 14))
+                                Text("已是最新版本 (v\(appVersion))")
+                                    .font(.system(size: 14, weight: .regular))
+                            case .updateAvailable(let version):
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 14))
+                                Text("发现新版本 v\(version)")
+                                    .font(.system(size: 14, weight: .semibold))
+                            case .failed:
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 14))
+                                Text("检查失败，请检查网络")
+                                    .font(.system(size: 14, weight: .regular))
+                            case .idle:
+                                Image(systemName: "arrow.down.circle")
+                                    .font(.system(size: 14))
+                                Text("检查更新...")
+                                    .font(.system(size: 14, weight: .regular))
+                            }
                         }
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, Const.space16)
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: Const.radius)
-                                .fill(Color.accentColor)
+                                .fill(updateManager.status == .upToDate ? Color.green : Color.accentColor)
                         )
                         .foregroundStyle(.white)
                     }
                 )
                 .buttonStyle(.plain)
+                .disabled(updateManager.status == .checking)
                 .shadow(
                     color: Color.accentColor.opacity(0.3),
                     radius: Const.radius,
@@ -173,6 +198,8 @@ struct AboutSettingView: View {
 
     /// 检查更新
     private func checkForUpdates() {
+        NSApp.activate(ignoringOtherApps: true)
+        updateManager.setChecking()
         AppDelegate.shared?.updaterController.checkForUpdates(nil)
     }
 }
