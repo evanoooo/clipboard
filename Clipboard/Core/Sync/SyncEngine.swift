@@ -530,6 +530,11 @@ final class SyncEngine: ObservableObject {
             self.syncSummary = summary
             saveSummaryCache(summary)
 
+            let allPending = Array(SyncPendingDeletionsStore.shared.getAllDeletions())
+            if !allPending.isEmpty {
+                SyncPendingDeletionsStore.shared.clear(uniqueIds: allPending)
+            }
+
             let msg = overwriteLocal
                 ? "完全覆盖完成：已从云端拉取 \(restoredCount) 条记录并完全覆盖本地。"
                 : "智能合并完成：已拉取恢复 \(restoredCount) 条云端记录，本地现有数据均已完好保留。"
@@ -703,6 +708,13 @@ final class SyncEngine: ObservableObject {
             syncProgress = "扫描本地数据库并比对差异..."
             let onlySyncPinned = self.isOnlySyncPinned
             let localBlobs = await fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
+
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
+            }
+
             addLog("本地 SQLite 扫描完成: 共有 \(localBlobs.count) 条待比对记录 (仅同步收藏: \(onlySyncPinned))")
 
             let pendingDeletions = SyncPendingDeletionsStore.shared.getAllDeletions()
