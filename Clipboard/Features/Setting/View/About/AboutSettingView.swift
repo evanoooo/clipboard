@@ -20,12 +20,12 @@ struct AboutSettingView: View {
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-            as? String ?? "2.4.1"
+            as? String ?? "2.4.2"
     }
 
     private var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-            ?? "914"
+            ?? "915"
     }
 
     private var commitHash: String {

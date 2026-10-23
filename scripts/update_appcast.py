@@ -38,7 +38,16 @@ def main():
 
     pubdate = formatdate(timeval=None, localtime=False, usegmt=True)
 
-    if version == "2.4.1":
+    if version == "2.4.2":
+        release_notes = """## Version 2.4.2
+
+- 重构云端同步调度机制，新增「自动同步策略与频率」多档选择（关闭、实时变动15秒防抖、5分钟~6小时周期同步）；
+- 解除 PasteboardWritingItem 与 PasteboardModel 强引用循环，彻底消除卡片拖拽后的内存泄漏；
+- 实现拖拽数据惰性按需访问，拖拽起始无需全量加载数十兆大图，显著降低瞬时内存峰值；
+- 修复 CollectionViewItem 复用池残留历史数据引用的生命周期问题；
+- 将 OCR 识别大图解码流程完全下沉至后台并发任务，彻底消除复制高分辨率图片时的主线程掉帧；
+- 优化剪贴板自适应轮询与定时器能耗机制，支持系统内核唤醒批处理，显著提升 MacBook 电池续航。"""
+    elif version == "2.4.1":
         release_notes = """## Version 2.4.1
 
 - 完善文档演示体系与多模块视觉画廊；
