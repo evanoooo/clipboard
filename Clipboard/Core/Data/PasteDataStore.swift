@@ -571,6 +571,20 @@ extension PasteDataStore {
         }
     }
 
+    /// 静默录入由云端同步拉取的条目（仅底层 SQLite 持久化并解析 App，不劫持当前内存剪贴板列表顶部，不触发即时动画）
+    func ingestSyncedModel(_ model: PasteboardModel) async {
+        guard await prepareApp(for: model) else { return }
+        let result = await sqlManager.insert(
+            item: model,
+            timestamp: model.timestamp,
+            group: model.group
+        )
+        guard result.id >= 0 else { return }
+        model.id = result.id
+        model.appID = result.appID
+        model.sortOrder = result.sortOrder
+    }
+
     func insertModel(_ model: PasteboardModel) async {
         guard await prepareApp(for: model) else { return }
         let result = await sqlManager.insert(

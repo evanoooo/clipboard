@@ -131,6 +131,8 @@ final class SyncEngine: ObservableObject {
         SyncDiffEngine.calculateDiff(localItems: localItems, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
     }
 
+
+
     // MARK: - 从 SQLite 全量加载待同步数据（彻底脱离 UI 分页 50 条限制）
 
     private func fetchLocalBlobsForSync(onlySyncPinned: Bool) async -> [SyncItemBlob] {
@@ -349,7 +351,7 @@ final class SyncEngine: ObservableObject {
                 }
 
                 for model in downloadedModels {
-                    await PasteDataStore.main.insertModel(model)
+                    await PasteDataStore.main.ingestSyncedModel(model)
                     restoredCount += 1
                 }
                 syncProgress = "正在还原 (\(restoredCount)/\(total))..."
@@ -492,12 +494,13 @@ final class SyncEngine: ObservableObject {
                         return list
                     }
                     for m in models {
-                        await PasteDataStore.main.insertModel(m)
+                        await PasteDataStore.main.ingestSyncedModel(m)
                         downloadedCount += 1
                     }
                     syncProgress = "正在下载云端条目 (\(downloadedCount)/\(diff.toDownload.count))..."
                     addLog("下载进度: \(downloadedCount)/\(diff.toDownload.count)")
                 }
+                await PasteDataStore.main.reloadHistory()
             }
 
             // 9. 受控并发传输管线：加密上传本地条目 (限制并发为 3，消除跨洋高延时网络下的连接拥塞与超时)
