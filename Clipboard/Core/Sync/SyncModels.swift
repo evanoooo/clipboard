@@ -19,11 +19,13 @@ nonisolated struct SyncIndexEntry: Codable, Equatable, Sendable {
     /// 墓碑标记：true 表示已被删除，用于多端协同删除（防幽灵复活）
     let isDeleted: Bool
     /// 分组 ID：-1 为普通流水，>= 0 为收藏/自定义分组
-    let group: Int
+    var group: Int
     /// 媒体类型（如 text, image 等）
     var type: String? = nil
     /// 标签名称（如有）
     var tag: String? = nil
+    /// 数据估算大小（字节数）
+    var size: Int? = nil
 
     init(
         uniqueId: String,
@@ -32,7 +34,8 @@ nonisolated struct SyncIndexEntry: Codable, Equatable, Sendable {
         isDeleted: Bool,
         group: Int,
         type: String? = nil,
-        tag: String? = nil
+        tag: String? = nil,
+        size: Int? = nil
     ) {
         self.uniqueId = uniqueId
         self.updatedAt = updatedAt
@@ -41,6 +44,7 @@ nonisolated struct SyncIndexEntry: Codable, Equatable, Sendable {
         self.group = group
         self.type = type
         self.tag = tag
+        self.size = size
     }
 }
 
@@ -62,9 +66,14 @@ nonisolated struct SyncTypeCount: Codable, Identifiable, Equatable, Sendable {
 
 nonisolated struct SyncSummary: Codable, Equatable, Sendable {
     let totalCount: Int
+    let totalBytes: Int64
     let groupCounts: [SyncGroupCount]
     let typeCounts: [SyncTypeCount]
     let lastUpdated: Int64
+
+    var formattedStorageSize: String {
+        ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+    }
 }
 
 // MARK: - 全量索引清单（存放于云端 index.json.enc）
@@ -87,11 +96,13 @@ nonisolated struct SyncIndex: Codable, Sendable {
     func generateSummary(chips: [CategoryChip]) -> SyncSummary {
         let activeEntries = entries.values.filter { !$0.isDeleted }
         let totalCount = activeEntries.count
+        var totalBytes: Int64 = 0
 
         // 1. 按分组统计
         var groupMap: [Int: Int] = [:]
         for entry in activeEntries {
             groupMap[entry.group, default: 0] += 1
+            totalBytes += Int64(entry.size ?? 128)
         }
 
         let chipDict = Dictionary(chips.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -129,25 +140,27 @@ nonisolated struct SyncIndex: Codable, Sendable {
             return a.count > b.count
         }
 
-        // 2. 按媒体类型统计
+        // 2. 按媒体类型统计（智能归类，不再出现模糊的“记录”）
         var typeMap: [String: Int] = [:]
         for entry in activeEntries {
             let t = entry.type?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
             let typeName: String
             if let t, !t.isEmpty {
-                if t.contains("image") || t.contains("png") || t.contains("tiff") {
+                if t.contains("image") || t.contains("png") || t.contains("tiff") || t.contains("jpeg") {
                     typeName = "图片"
                 } else if t.contains("url") || t.contains("link") {
                     typeName = "链接"
-                } else if t.contains("rtf") {
+                } else if t.contains("rtf") || t.contains("html") {
                     typeName = "富文本"
-                } else if t.contains("file") {
+                } else if t.contains("file") || t.contains("path") {
                     typeName = "文件"
+                } else if t.contains("color") {
+                    typeName = "颜色"
                 } else {
                     typeName = "文本"
                 }
             } else {
-                typeName = "记录"
+                typeName = "文本"
             }
             typeMap[typeName, default: 0] += 1
         }
@@ -157,6 +170,7 @@ nonisolated struct SyncIndex: Codable, Sendable {
 
         return SyncSummary(
             totalCount: totalCount,
+            totalBytes: totalBytes,
             groupCounts: groupCounts,
             typeCounts: typeCounts,
             lastUpdated: lastModified

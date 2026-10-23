@@ -310,6 +310,11 @@ struct SyncSettingView: View {
                                 Text("条记录")
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
+                                if summary.totalBytes > 0 {
+                                    Text("· \(summary.formattedStorageSize)")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
 
                             // 分组 / 标签细分胶囊条

@@ -21,7 +21,8 @@ enum SyncModelTests {
             isDeleted: false,
             group: -1,
             type: "public.utf8-plain-text",
-            tag: ""
+            tag: "",
+            size: 120
         )
         let entry2 = SyncIndexEntry(
             uniqueId: "uuid-clip-002",
@@ -30,7 +31,8 @@ enum SyncModelTests {
             isDeleted: true,
             group: 42,
             type: "public.png",
-            tag: "deleted"
+            tag: "deleted",
+            size: 500
         )
         index.entries["uuid-clip-001"] = entry1
         index.entries["uuid-clip-002"] = entry2
@@ -50,6 +52,7 @@ enum SyncModelTests {
             runner.assertEqual(fetchedEntry1?.isDeleted, false, "isDeleted mismatch")
             runner.assertEqual(fetchedEntry1?.group, -1, "group mismatch")
             runner.assertEqual(fetchedEntry1?.type, "public.utf8-plain-text", "type mismatch")
+            runner.assertEqual(fetchedEntry1?.size, 120, "size mismatch")
 
             let fetchedEntry2 = decodedIndex.entries["uuid-clip-002"]
             runner.assertTrue(fetchedEntry2 != nil, "Entry 2 must exist")
@@ -98,19 +101,19 @@ enum SyncModelTests {
         // 3. SyncSummary Generation & Breakdown
         var summaryIndex = SyncIndex(version: 1, lastModified: 1729655555000)
         // 3 active normal items
-        summaryIndex.entries["item-norm-1"] = SyncIndexEntry(uniqueId: "item-norm-1", updatedAt: 100, checksum: "c1", isDeleted: false, group: -1, type: "public.utf8-plain-text")
-        summaryIndex.entries["item-norm-2"] = SyncIndexEntry(uniqueId: "item-norm-2", updatedAt: 101, checksum: "c2", isDeleted: false, group: -1, type: "public.utf8-plain-text")
-        summaryIndex.entries["item-norm-3"] = SyncIndexEntry(uniqueId: "item-norm-3", updatedAt: 102, checksum: "c3", isDeleted: false, group: -1, type: "public.rtf")
+        summaryIndex.entries["item-norm-1"] = SyncIndexEntry(uniqueId: "item-norm-1", updatedAt: 100, checksum: "c1", isDeleted: false, group: -1, type: "public.utf8-plain-text", tag: "", size: 50)
+        summaryIndex.entries["item-norm-2"] = SyncIndexEntry(uniqueId: "item-norm-2", updatedAt: 101, checksum: "c2", isDeleted: false, group: -1, type: "public.utf8-plain-text", tag: "", size: 60)
+        summaryIndex.entries["item-norm-3"] = SyncIndexEntry(uniqueId: "item-norm-3", updatedAt: 102, checksum: "c3", isDeleted: false, group: -1, type: "public.rtf", tag: "", size: 100)
 
         // 2 pinned items in Group 1 ("常用收藏")
-        summaryIndex.entries["item-pinned-1"] = SyncIndexEntry(uniqueId: "item-pinned-1", updatedAt: 103, checksum: "c4", isDeleted: false, group: 1, type: "public.png")
-        summaryIndex.entries["item-pinned-2"] = SyncIndexEntry(uniqueId: "item-pinned-2", updatedAt: 104, checksum: "c5", isDeleted: false, group: 1, type: "public.tiff")
+        summaryIndex.entries["item-pinned-1"] = SyncIndexEntry(uniqueId: "item-pinned-1", updatedAt: 103, checksum: "c4", isDeleted: false, group: 1, type: "public.png", tag: "", size: 500)
+        summaryIndex.entries["item-pinned-2"] = SyncIndexEntry(uniqueId: "item-pinned-2", updatedAt: 104, checksum: "c5", isDeleted: false, group: 1, type: "public.tiff", tag: "", size: 600)
 
         // 1 item in Group 2 ("代码片段")
-        summaryIndex.entries["item-code-1"] = SyncIndexEntry(uniqueId: "item-code-1", updatedAt: 105, checksum: "c6", isDeleted: false, group: 2, type: "public.utf8-plain-text")
+        summaryIndex.entries["item-code-1"] = SyncIndexEntry(uniqueId: "item-code-1", updatedAt: 105, checksum: "c6", isDeleted: false, group: 2, type: "public.utf8-plain-text", tag: "", size: 80)
 
         // 1 tombstone (must not be counted)
-        summaryIndex.entries["item-deleted-1"] = SyncIndexEntry(uniqueId: "item-deleted-1", updatedAt: 106, checksum: "c7", isDeleted: true, group: 1, type: "public.utf8-plain-text")
+        summaryIndex.entries["item-deleted-1"] = SyncIndexEntry(uniqueId: "item-deleted-1", updatedAt: 106, checksum: "c7", isDeleted: true, group: 1, type: "public.utf8-plain-text", tag: "", size: 200)
 
         let chips: [CategoryChip] = [
             CategoryChip(id: -1, name: "剪贴板", colorIndex: 0, isSystem: true),
@@ -122,6 +125,8 @@ enum SyncModelTests {
 
         runner.assertEqual(summary.totalCount, 6, "Total active count must be 6 (tombstone excluded)")
         runner.assertEqual(summary.lastUpdated, 1729655555000, "lastUpdated mismatch")
+        runner.assertTrue(summary.totalBytes > 0, "Total bytes must be > 0")
+        runner.assertTrue(!summary.formattedStorageSize.isEmpty, "formattedStorageSize must not be empty")
 
         // Group counts
         runner.assertEqual(summary.groupCounts.count, 3, "Must have 3 groups")
@@ -154,6 +159,7 @@ enum SyncModelTests {
             let decodedSummary = try JSONDecoder().decode(SyncSummary.self, from: summaryData)
             runner.assertEqual(decodedSummary.totalCount, 6, "Decoded summary count mismatch")
             runner.assertEqual(decodedSummary.groupCounts.count, 3, "Decoded group count mismatch")
+            runner.assertTrue(decodedSummary.totalBytes > 0, "Decoded total bytes must be > 0")
         } catch {
             runner.assertTrue(false, "SyncSummary encode/decode failed: \(error)")
         }

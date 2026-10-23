@@ -8,6 +8,7 @@
 import Combine
 import CryptoKit
 import Foundation
+import SQLite
 
 enum SyncState: Sendable, Equatable {
     case disabled
@@ -72,6 +73,55 @@ final class SyncEngine: ObservableObject {
         onlySyncPinned: Bool = false
     ) -> SyncDiffResult {
         SyncDiffEngine.calculateDiff(localItems: localItems, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
+    }
+
+    // MARK: - 从 SQLite 全量加载待同步数据（彻底脱离 UI 分页 50 条限制）
+
+    private func fetchLocalBlobsForSync(onlySyncPinned: Bool) async -> [SyncItemBlob] {
+        let filter: Expression<Bool> = onlySyncPinned
+            ? (Col.group >= 0 && Col.hidden == 0)
+            : (Col.hidden == 0)
+
+        let sel: [Expressible] = [
+            Col.id, Col.uniqueId, Col.type, Col.data, Col.timestamp,
+            Col.showData, Col.group, Col.tag, Col.alias
+        ]
+
+        // 若仅同步收藏和分组，查询全部分组（通常数百条）；若同步全量流水，设定 5000 条上限
+        let rows = await PasteReadStore.shared.search(
+            filter: filter,
+            select: sel,
+            limit: onlySyncPinned ? nil : 5000
+        )
+
+        return rows.compactMap { row in
+            guard let uniqueId = try? row.get(Col.uniqueId),
+                  let timestamp = try? row.get(Col.timestamp) else {
+                return nil
+            }
+            let rawType = (try? row.get(Col.type)) ?? ""
+            let id = try? row.get(Col.id)
+            var payloadData = try? row.get(Col.data)
+            if payloadData == nil, let id {
+                payloadData = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId)
+            }
+            let showData = try? row.get(Col.showData)
+            let group = (try? row.get(Col.group)) ?? -1
+            let tag = (try? row.get(Col.tag)) ?? ""
+            let alias = (try? row.get(Col.alias)) ?? ""
+
+            return SyncItemBlob(
+                uniqueId: uniqueId,
+                pasteboardType: rawType,
+                payloadData: payloadData,
+                showData: showData,
+                timestamp: timestamp,
+                group: group,
+                tag: tag,
+                alias: alias,
+                sourceAppName: nil
+            )
+        }
     }
 
     // MARK: - 防抖调度 (Debounce 15s)
@@ -187,13 +237,21 @@ final class SyncEngine: ObservableObject {
                 _ = try await PasteSQLManager.manager.clearHistory(includePinnedAndGrouped: true)
                 toDownloadIds = activeEntries.map(\.uniqueId)
             } else {
-                // 智能安全合并模式：保留本地所有新增！仅拉取本地没有或云端时间戳更新的记录
-                let localModels = PasteDataStore.main.dataList.value
-                let localMap = Dictionary(localModels.map { ($0.uniqueId, $0) }, uniquingKeysWith: { first, _ in first })
+                // 智能安全合并模式：查询 SQLite 数据库全量条目比对，保留本地所有已有和新增！
+                let localRows = await PasteReadStore.shared.search(
+                    select: [Col.uniqueId, Col.timestamp],
+                    limit: nil
+                )
+                var localMap: [String: Int64] = [:]
+                for r in localRows {
+                    if let uid = try? r.get(Col.uniqueId), let ts = try? r.get(Col.timestamp) {
+                        localMap[uid] = ts
+                    }
+                }
 
                 for entry in activeEntries {
-                    if let local = localMap[entry.uniqueId] {
-                        if entry.updatedAt > local.timestamp {
+                    if let localTimestamp = localMap[entry.uniqueId] {
+                        if entry.updatedAt > localTimestamp {
                             toDownloadIds.append(entry.uniqueId)
                         }
                     } else {
@@ -303,10 +361,9 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
-            // 6. 收集本地数据与执行 Diff
+            // 6. 从 SQLite 数据库全量收集本地数据并执行 Diff
             let onlySyncPinned = UserDefaults.standard.bool(forKey: "sync_only_pinned")
-            let localModels = PasteDataStore.main.dataList.value
-            let localBlobs = localModels.map { SyncItemBlob(from: $0) }
+            let localBlobs = await fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
 
             let diff = Self.calculateDiff(localItems: localBlobs, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
 
@@ -339,6 +396,7 @@ final class SyncEngine: ObservableObject {
                         }
                         try await client.upload(data: encData, to: "ClipboardSync/items/\(blob.uniqueId).enc")
                         let checksum = SyncCryptoEngine.checksum(for: blob.payloadData ?? Data())
+                        let estimatedSize = (blob.payloadData?.count ?? 0) + (blob.showData?.count ?? 0)
                         let entry = SyncIndexEntry(
                             uniqueId: blob.uniqueId,
                             updatedAt: blob.timestamp,
@@ -346,7 +404,8 @@ final class SyncEngine: ObservableObject {
                             isDeleted: false,
                             group: blob.group,
                             type: blob.pasteboardType,
-                            tag: blob.tag
+                            tag: blob.tag,
+                            size: estimatedSize
                         )
                         return (blob.uniqueId, entry)
                     }
@@ -368,11 +427,35 @@ final class SyncEngine: ObservableObject {
                     isDeleted: true,
                     group: -1,
                     type: nil,
-                    tag: nil
+                    tag: nil,
+                    size: 0
                 )
             }
 
-            // 10. 加密上传最新索引清单并更新状态与资产看板
+            // 10. 智能元数据回填：若远端索引某些活跃条目缺失 type 或 size，利用本地匹配补全
+            let localBlobMap = Dictionary(localBlobs.map { ($0.uniqueId, $0) }, uniquingKeysWith: { first, _ in first })
+            for (id, var entry) in remoteIndex.entries where !entry.isDeleted {
+                var modified = false
+                if let local = localBlobMap[id] {
+                    if entry.type == nil || entry.type?.isEmpty == true {
+                        entry.type = local.pasteboardType
+                        modified = true
+                    }
+                    if entry.size == nil || entry.size == 0 {
+                        entry.size = (local.payloadData?.count ?? 0) + (local.showData?.count ?? 0)
+                        modified = true
+                    }
+                    if entry.group != local.group {
+                        entry.group = local.group
+                        modified = true
+                    }
+                }
+                if modified {
+                    remoteIndex.entries[id] = entry
+                }
+            }
+
+            // 11. 加密上传最新索引清单并更新状态与资产看板
             remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
             let updatedIndexData = try JSONEncoder().encode(remoteIndex)
             let encUpdatedIndex = try SyncCryptoEngine.encrypt(data: updatedIndexData, using: masterKey)
