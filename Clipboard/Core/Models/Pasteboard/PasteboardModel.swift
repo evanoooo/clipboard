@@ -28,6 +28,9 @@ final class PasteboardModel: Identifiable, Codable {
             }
             if let loaded = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId) {
                 _data = loaded
+                if runtimeCache.codeDetectionState == .none, length > 300 {
+                    runtimeCache.codeDetectionState = .uncomputed
+                }
                 return loaded
             }
             return Data()

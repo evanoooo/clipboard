@@ -130,9 +130,18 @@ extension PasteboardModel {
                 runtimeCache.codeDetectionState = .none
                 return nil
             }
-            // 用完整原文判定：`attributeString` 只有 300 字符预览，
-            // docstring / 头部注释之后的 `def`、`import` 等信号会被截断。
-            if let lang = CodeLanguageDetector.detect(data) {
+            // 优先在内存中判定：已载入完整数据则直接检测，避免磁盘 I/O
+            if hasLoadedData {
+                if let lang = CodeLanguageDetector.detect(data) {
+                    runtimeCache.codeDetectionState = .detected(lang)
+                    return lang
+                } else {
+                    runtimeCache.codeDetectionState = .none
+                    return nil
+                }
+            }
+            // 未载入 full data 时，优先用 attributeString 内存预览判定，杜绝列表渲染触发 50 次 SQLite 点查
+            if let lang = CodeLanguageDetector.detect(attributeString.string) {
                 runtimeCache.codeDetectionState = .detected(lang)
                 return lang
             } else {
