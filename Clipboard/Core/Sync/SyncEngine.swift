@@ -10,6 +10,7 @@ import CryptoKit
 import Foundation
 
 enum SyncState: Sendable, Equatable {
+    case disabled
     case idle
     case syncing
     case success(lastSyncTime: Int64)
@@ -17,6 +18,7 @@ enum SyncState: Sendable, Equatable {
 
     var displayText: String {
         switch self {
+        case .disabled: return "未启用"
         case .idle: return "就绪"
         case .syncing: return "正在同步..."
         case let .success(time):
@@ -53,6 +55,7 @@ final class SyncEngine: ObservableObject {
     // MARK: - 防抖调度 (Debounce 15s)
 
     func markDirtyAndSchedule() {
+        guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
         isDirty = true
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
@@ -66,6 +69,11 @@ final class SyncEngine: ObservableObject {
 
     @discardableResult
     func triggerSync() async -> SyncState {
+        guard UserDefaults.standard.bool(forKey: "sync_enabled") else {
+            let state: SyncState = .disabled
+            currentState = state
+            return state
+        }
         guard currentState != .syncing else { return currentState }
         currentState = .syncing
 

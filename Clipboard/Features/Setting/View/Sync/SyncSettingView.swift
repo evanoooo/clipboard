@@ -37,6 +37,7 @@ enum WebDAVProviderPreset: String, CaseIterable, Identifiable {
 struct SyncSettingView: View {
     @ObservedObject private var engine = SyncEngine.shared
 
+    @AppStorage("sync_enabled") private var syncEnabled: Bool = false
     @AppStorage("sync_webdav_url") private var serverURL: String = ""
     @AppStorage("sync_webdav_username") private var username: String = ""
     @AppStorage("sync_only_pinned") private var onlySyncPinned: Bool = true
@@ -52,197 +53,228 @@ struct SyncSettingView: View {
     var body: some View {
         let content = ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 20) {
-                // MARK: - 服务器连接配置卡片
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("WebDAV 同步服务器")
-                            .font(.headline)
-                            .bold()
-                        Spacer()
-                    }
-
-                    // 预设选择器
-                    HStack {
-                        Text("服务商预设")
-                            .font(.callout)
-                            .frame(width: 90, alignment: .leading)
-                        Picker("", selection: $selectedPreset) {
-                            ForEach(WebDAVProviderPreset.allCases) { preset in
-                                Text(preset.displayName).tag(preset.rawValue)
-                            }
-                        }
-                        .labelsHidden()
-                        .onChange(of: selectedPreset) { _, newVal in
-                            if let preset = WebDAVProviderPreset(rawValue: newVal), preset != .custom, serverURL.isEmpty || serverURL == "https://" {
-                                serverURL = preset.defaultURL
-                            }
-                        }
-                    }
-
-                    // 服务器地址
-                    HStack {
-                        Text("服务器地址")
-                            .font(.callout)
-                            .frame(width: 90, alignment: .leading)
-                        TextField("https://dav.example.com/", text: $serverURL)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    // 账号
-                    HStack {
-                        Text("账号")
-                            .font(.callout)
-                            .frame(width: 90, alignment: .leading)
-                        TextField("用户名或邮箱", text: $username)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    // 应用密码
-                    HStack {
-                        Text("密码 / Token")
-                            .font(.callout)
-                            .frame(width: 90, alignment: .leading)
-                        SecureField("WebDAV 密码或应用令牌", text: $passwordInput)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: passwordInput) { _, newValue in
-                                try? SyncKeychainManager.shared.saveWebDAVPassword(newValue)
-                            }
-                    }
-
-                    Divider()
-                        .padding(.vertical, 4)
-
-                    // 测试连接按钮与状态
-                    HStack {
-                        if let testResult {
-                            HStack(spacing: 4) {
-                                Image(systemName: testSuccess == true ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                                    .foregroundStyle(testSuccess == true ? .green : .red)
-                                Text(testResult)
-                                    .font(.caption)
-                                    .foregroundStyle(testSuccess == true ? Color.primary : Color.red)
-                            }
-                        }
-
-                        Spacer()
-
-                        if isTesting {
-                            ProgressView().controlSize(.small)
-                        }
-
-                        Button("测试连接") {
-                            runConnectionTest()
-                        }
-                        .disabled(serverURL.isEmpty || username.isEmpty || passwordInput.isEmpty || isTesting)
-                    }
-                }
-                .padding(Const.space16)
-                .settingsStyle()
-
-                // MARK: - 端到端密码加密卡片
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Label("端到端密码加密 (E2EE)", systemImage: "lock.shield")
-                            .font(.headline)
-                            .bold()
-                        Spacer()
-                    }
-
-                    Text("剪贴板内容在离开您的 Mac 之前，均会使用 AES-256 算法进行本地强加密；WebDAV 服务器仅存储密文，无法解读您的任何复制内容。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    HStack {
-                        Text("同步主密码")
-                            .font(.callout)
-                            .frame(width: 90, alignment: .leading)
-                        SecureField("输入所有设备共享的同步密码", text: $passphraseInput)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: passphraseInput) { _, newValue in
-                                try? SyncKeychainManager.shared.saveSyncPassphrase(newValue)
-                            }
-                    }
-
-                    Text("请在所有需要同步的设备上输入完全相同的密码。若密码遗失，云端密文将无法解密。")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(Const.space16)
-                .settingsStyle()
-
-                // MARK: - 同步控制与策略卡片
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("同步策略与状态")
-                            .font(.headline)
-                            .bold()
-                        Spacer()
-                    }
-
-                    // 仅同步收藏
+                // MARK: - 主总开关卡片
+                VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("仅同步收藏和分组条目 (推荐)")
-                                .font(.callout)
-                            Text("日常零散的剪贴流水仅保留在本机，只有添加了分组或收藏的重要条目才会被加密同步。")
+                            Text("启用 WebDAV 云端同步")
+                                .font(.headline)
+                            Text("在多台 Mac 设备之间通过 WebDAV 安全同步剪贴板资产。")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $onlySyncPinned)
+                        Toggle("", isOn: $syncEnabled)
+                            .toggleStyle(.switch)
                             .labelsHidden()
-                    }
-
-                    Divider()
-
-                    // 自动增量同步
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("后台 15 秒自动增量同步")
-                                .font(.callout)
-                            Text("本地内容产生变化 15 秒后，自动聚合为一次轻量增量加密上传，低能耗低流量。")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $autoSyncEnabled)
-                            .labelsHidden()
-                    }
-
-                    Divider()
-
-                    // 当前状态与手动同步
-                    HStack {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(statusColor)
-                                .frame(width: 8, height: 8)
-                            Text(engine.currentState.displayText)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        Button(action: {
-                            Task {
-                                await engine.triggerSync()
-                            }
-                        }) {
-                            HStack(spacing: 4) {
-                                if case .syncing = engine.currentState {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
+                            .onChange(of: syncEnabled) { _, newValue in
+                                if newValue {
+                                    Task { await engine.triggerSync() }
                                 }
-                                Text("立即同步")
+                            }
+                    }
+                    .padding(.vertical, Const.space12)
+                }
+                .padding(.horizontal, Const.space16)
+                .settingsStyle()
+
+                // MARK: - 详细配置区域（由主开关驱动）
+                VStack(alignment: .leading, spacing: 20) {
+                    // 1. 服务器连接配置卡片
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("WebDAV 同步服务器")
+                                .font(.headline)
+                                .bold()
+                            Spacer()
+                        }
+
+                        // 预设选择器
+                        HStack {
+                            Text("服务商预设")
+                                .font(.callout)
+                                .frame(width: 90, alignment: .leading)
+                            Picker("", selection: $selectedPreset) {
+                                ForEach(WebDAVProviderPreset.allCases) { preset in
+                                    Text(preset.displayName).tag(preset.rawValue)
+                                }
+                            }
+                            .labelsHidden()
+                            .onChange(of: selectedPreset) { _, newVal in
+                                if let preset = WebDAVProviderPreset(rawValue: newVal), preset != .custom, serverURL.isEmpty || serverURL == "https://" {
+                                    serverURL = preset.defaultURL
+                                }
                             }
                         }
-                        .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.currentState == .syncing)
+
+                        // 服务器地址
+                        HStack {
+                            Text("服务器地址")
+                                .font(.callout)
+                                .frame(width: 90, alignment: .leading)
+                            TextField("https://dav.example.com/", text: $serverURL)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        // 账号
+                        HStack {
+                            Text("账号")
+                                .font(.callout)
+                                .frame(width: 90, alignment: .leading)
+                            TextField("用户名或邮箱", text: $username)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        // 应用密码
+                        HStack {
+                            Text("密码 / Token")
+                                .font(.callout)
+                                .frame(width: 90, alignment: .leading)
+                            SecureField("WebDAV 密码或应用令牌", text: $passwordInput)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: passwordInput) { _, newValue in
+                                    try? SyncKeychainManager.shared.saveWebDAVPassword(newValue)
+                                }
+                        }
+
+                        Divider()
+                            .padding(.vertical, 4)
+
+                        // 测试连接按钮与状态
+                        HStack {
+                            if let testResult {
+                                HStack(spacing: 4) {
+                                    Image(systemName: testSuccess == true ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                                        .foregroundStyle(testSuccess == true ? .green : .red)
+                                    Text(testResult)
+                                        .font(.caption)
+                                        .foregroundStyle(testSuccess == true ? Color.primary : Color.red)
+                                }
+                            }
+
+                            Spacer()
+
+                            if isTesting {
+                                ProgressView().controlSize(.small)
+                            }
+
+                            Button("测试连接") {
+                                runConnectionTest()
+                            }
+                            .disabled(serverURL.isEmpty || username.isEmpty || passwordInput.isEmpty || isTesting)
+                        }
                     }
+                    .padding(Const.space16)
+                    .settingsStyle()
+
+                    // 2. 端到端密码加密卡片
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Label("端到端密码加密 (E2EE)", systemImage: "lock.shield")
+                                .font(.headline)
+                                .bold()
+                            Spacer()
+                        }
+
+                        Text("剪贴板内容在离开您的 Mac 之前，均会使用 AES-256 算法进行本地强加密；WebDAV 服务器仅存储密文，无法解读您的任何复制内容。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        HStack {
+                            Text("同步主密码")
+                                .font(.callout)
+                                .frame(width: 90, alignment: .leading)
+                            SecureField("输入所有设备共享的同步密码", text: $passphraseInput)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: passphraseInput) { _, newValue in
+                                    try? SyncKeychainManager.shared.saveSyncPassphrase(newValue)
+                                }
+                        }
+
+                        Text("请在所有需要同步的设备上输入完全相同的密码。若密码遗失，云端密文将无法解密。")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(Const.space16)
+                    .settingsStyle()
+
+                    // 3. 同步控制与策略卡片
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("同步策略与状态")
+                                .font(.headline)
+                                .bold()
+                            Spacer()
+                        }
+
+                        // 仅同步收藏
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("仅同步收藏和分组条目 (推荐)")
+                                    .font(.callout)
+                                Text("日常零散的剪贴流水仅保留在本机，只有添加了分组或收藏的重要条目才会被加密同步。")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $onlySyncPinned)
+                                .labelsHidden()
+                        }
+
+                        Divider()
+
+                        // 自动增量同步
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("后台 15 秒自动增量同步")
+                                    .font(.callout)
+                                Text("本地内容产生变化 15 秒后，自动聚合为一次轻量增量加密上传，低能耗低流量。")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $autoSyncEnabled)
+                                .labelsHidden()
+                        }
+
+                        Divider()
+
+                        // 当前状态与手动同步
+                        HStack {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(statusColor)
+                                    .frame(width: 8, height: 8)
+                                Text(engine.currentState.displayText)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button(action: {
+                                Task {
+                                    await engine.triggerSync()
+                                }
+                            }) {
+                                HStack(spacing: 4) {
+                                    if case .syncing = engine.currentState {
+                                        ProgressView().controlSize(.small)
+                                    } else {
+                                        Image(systemName: "arrow.triangle.2.circlepath")
+                                    }
+                                    Text("立即同步")
+                                }
+                            }
+                            .disabled(serverURL.isEmpty || username.isEmpty || passphraseInput.isEmpty || engine.currentState == .syncing)
+                        }
+                    }
+                    .padding(Const.space16)
+                    .settingsStyle()
                 }
-                .padding(Const.space16)
-                .settingsStyle()
+                .disabled(!syncEnabled)
+                .opacity(syncEnabled ? 1.0 : 0.6)
+                .animation(.easeInOut(duration: 0.2), value: syncEnabled)
 
                 Spacer(minLength: 20)
             }
@@ -260,8 +292,9 @@ struct SyncSettingView: View {
     }
 
     private var statusColor: Color {
+        guard syncEnabled else { return .gray }
         switch engine.currentState {
-        case .idle: return .gray
+        case .disabled, .idle: return .gray
         case .syncing: return .blue
         case .success: return .green
         case .failed: return .red
