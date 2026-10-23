@@ -7,16 +7,16 @@ on:
 
 jobs:
   release:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Select Xcode 16
+      - name: Select Xcode 26
         run: |
-          XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_16*.app" | sort -V | tail -n 1)
+          XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode_26*.app" | sort -V | tail -n 1)
           if [ -z "$XCODE_APP" ]; then
             XCODE_APP=$(find /Applications -maxdepth 1 -name "Xcode*.app" | sort -V | tail -n 1)
           fi
