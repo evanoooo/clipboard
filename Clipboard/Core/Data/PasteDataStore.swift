@@ -533,6 +533,7 @@ extension PasteDataStore {
         ingestionTask = Task {
             await previous?.value
             await insertModel(model)
+            SyncEngine.shared.markDirtyAndSchedule()
             await runOCRIfNeeded(model)
         }
         return true

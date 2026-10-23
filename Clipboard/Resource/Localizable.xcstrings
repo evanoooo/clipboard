@@ -6426,6 +6426,23 @@
           }
         }
       }
+    },
+    "pageSync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "云端同步"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

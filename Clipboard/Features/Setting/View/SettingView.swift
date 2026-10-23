@@ -13,6 +13,7 @@ enum SettingPage: CaseIterable, Identifiable {
     case privacy
     case keyboard
     case storage
+    case sync
     case ai
     case about
 
@@ -27,6 +28,7 @@ enum SettingPage: CaseIterable, Identifiable {
         case .privacy: "hand.raised"
         case .keyboard: "command"
         case .storage: "externaldrive"
+        case .sync: "arrow.triangle.2.circlepath.circle"
         case .ai:
             if #available(macOS 15.0, *) {
                 "apple.intelligence"
@@ -44,6 +46,7 @@ enum SettingPage: CaseIterable, Identifiable {
         case .privacy: .pagePrivacy
         case .keyboard: .pageKeyboard
         case .storage: .pageStorage
+        case .sync: .pageSync
         case .ai: .pageMcp
         case .about: .pageAbout
         }
@@ -122,6 +125,8 @@ struct SettingView: View {
                     KeyboardSettingView()
                 case .storage:
                     StorageSettingView()
+                case .sync:
+                    SyncSettingView()
                 case .ai:
                     AISettingsView()
                 case .about:
