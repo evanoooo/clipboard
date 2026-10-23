@@ -398,7 +398,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 888;
+				CURRENT_PROJECT_VERSION = 914;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -406,6 +406,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				GIT_COMMIT_HASH = 127a30e;
 				INFOPLIST_FILE = Clipboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Clipboard;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -450,7 +451,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 888;
+				CURRENT_PROJECT_VERSION = 914;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -458,6 +459,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				GIT_COMMIT_HASH = 127a30e;
 				INFOPLIST_FILE = Clipboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Clipboard;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";

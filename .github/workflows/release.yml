@@ -43,8 +43,12 @@ jobs:
       - name: Build macOS Release App
         run: |
           set -o pipefail
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          echo "Building with commit count: ${COMMIT_COUNT}, hash: ${COMMIT_HASH}"
           xcodebuild -project Clipboard.xcodeproj -scheme Clipboard \
             -configuration Release -destination 'platform=macOS' \
+            CURRENT_PROJECT_VERSION="${COMMIT_COUNT}" GIT_COMMIT_HASH="${COMMIT_HASH}" \
             ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build CODE_SIGNING_ALLOWED=NO 2>&1 | tee build_app.log || {
             echo "### ❌ Build macOS Release App Failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
@@ -102,7 +106,7 @@ jobs:
       - name: Update appcast.xml
         if: steps.sign.outputs.ENCLOSURES_JSON != '[]' && steps.sign.outputs.ENCLOSURES_JSON != ''
         run: |
-          BUILD_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" Clipboard/Info.plist 2>/dev/null || echo "888")
+          BUILD_VERSION=$(git rev-list --count HEAD)
           python3 scripts/update_appcast.py "${{ steps.archive.outputs.VERSION }}" "${{ github.repository }}" "${BUILD_VERSION}" '${{ steps.sign.outputs.ENCLOSURES_JSON }}'
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

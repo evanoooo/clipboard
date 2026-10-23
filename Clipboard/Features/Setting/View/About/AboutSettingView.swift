@@ -25,11 +25,11 @@ struct AboutSettingView: View {
 
     private var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-            ?? "888"
+            ?? "914"
     }
 
     private var commitHash: String {
-        Bundle.main.object(forInfoDictionaryKey: "GitCommitHash") as? String ?? "13cff85"
+        Bundle.main.object(forInfoDictionaryKey: "GitCommitHash") as? String ?? "127a30e"
     }
 
     private var versionDisplay: String {

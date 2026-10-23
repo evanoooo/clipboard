@@ -10,5 +10,7 @@
 	<string>CAP3GXFFFntAVTx9VWI2Et88CyifKSHOOfgt2sQ68Eg=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>43200</integer>
+	<key>GitCommitHash</key>
+	<string>$(GIT_COMMIT_HASH)</string>
 </dict>
 </plist>
