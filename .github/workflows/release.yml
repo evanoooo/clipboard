@@ -28,7 +28,15 @@ jobs:
         run: swift --version
 
       - name: Run Unit Tests
-        run: swift run --package-path Tests
+        run: |
+          set -o pipefail
+          swift run --package-path Tests 2>&1 | tee test_run.log || {
+            echo "### ❌ Unit Tests Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 test_run.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
       - name: Build macOS Release App
         run: |
