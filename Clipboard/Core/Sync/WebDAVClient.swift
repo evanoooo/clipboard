@@ -56,8 +56,9 @@ actor WebDAVClient {
         }
 
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 60
-        config.timeoutIntervalForResource = 120
+        // 针对海外/代理或高延迟网络（往返延迟数秒级别），放宽超时限制保障大文件/索引完整传输
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 300
         config.waitsForConnectivity = true
         self.session = URLSession(configuration: config)
     }
@@ -141,10 +142,19 @@ actor WebDAVClient {
                     }
                 }
                 if http.statusCode == 401 { throw WebDAVError.unauthorized }
+                if http.statusCode == 403 { throw WebDAVError.forbidden }
                 throw WebDAVError.serverError(code: http.statusCode)
+            } catch let err as WebDAVError {
+                if case .unauthorized = err { throw err }
+                if case .forbidden = err { throw err }
+                if attempts < 3 {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    continue
+                }
+                throw err
             } catch {
-                if attempts < 2 {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if attempts < 3 {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
                     continue
                 }
                 throw error
@@ -167,10 +177,23 @@ actor WebDAVClient {
                 if http.statusCode == 200 { return data }
                 if http.statusCode == 404 { throw WebDAVError.notFound }
                 if http.statusCode == 401 { throw WebDAVError.unauthorized }
+                if http.statusCode == 403 { throw WebDAVError.forbidden }
                 throw WebDAVError.serverError(code: http.statusCode)
+            } catch let err as WebDAVError {
+                switch err {
+                case .notFound, .unauthorized, .forbidden, .invalidURL:
+                    // 确定性错误立即抛出，避免多余重试
+                    throw err
+                default:
+                    if attempts < 3 {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        continue
+                    }
+                    throw err
+                }
             } catch {
-                if attempts < 2 {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if attempts < 3 {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
                     continue
                 }
                 throw error

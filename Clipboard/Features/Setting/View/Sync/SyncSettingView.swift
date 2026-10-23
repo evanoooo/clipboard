@@ -71,7 +71,7 @@ struct SyncSettingView: View {
                             .labelsHidden()
                             .onChange(of: syncEnabled) { _, newValue in
                                 if newValue {
-                                    Task { await engine.triggerSync() }
+                                    engine.startSyncTask()
                                 }
                             }
                     }
@@ -281,9 +281,7 @@ struct SyncSettingView: View {
                                     .foregroundStyle(.red)
                                 } else {
                                     Button(action: {
-                                        Task {
-                                            await engine.triggerSync()
-                                        }
+                                        engine.startSyncTask()
                                     }) {
                                         HStack(spacing: 4) {
                                             Image(systemName: "arrow.triangle.2.circlepath")

@@ -65,6 +65,7 @@ final class SyncEngine: ObservableObject {
 
     private var lastRemoteETag: String?
     private var isDirty = false
+    private var isCancelled = false
     private var activeSyncTask: Task<SyncState, Never>?
     private var debounceTask: Task<Void, Never>?
     private var powerObservers: [NSObjectProtocol] = []
@@ -76,13 +77,24 @@ final class SyncEngine: ObservableObject {
         return UserDefaults.standard.bool(forKey: "sync_only_pinned")
     }
 
+    /// 外部启动后台同步任务的规范入口（绑定 Task 句柄以支持安全取消）
+    func startSyncTask() {
+        guard currentState != .syncing else { return }
+        activeSyncTask = Task { @MainActor [weak self] in
+            guard let self else { return .idle }
+            return await self.triggerSync()
+        }
+    }
+
+    /// 取消当前正在执行的同步任务
     func cancelSync() {
         guard currentState == .syncing else { return }
+        isCancelled = true
         activeSyncTask?.cancel()
         activeSyncTask = nil
         currentState = .idle
         syncProgress = nil
-        addLog("已取消当前同步任务")
+        addLog("已手动取消当前同步任务")
     }
 
     // MARK: - 性能优化缓存（密钥派生与连接池复用）
@@ -160,7 +172,7 @@ final class SyncEngine: ObservableObject {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 if UserDefaults.standard.bool(forKey: "sync_enabled"), self.isDirty {
                     self.addLog("系统唤醒网络已恢复，自动执行增量同步")
-                    await self.triggerSync()
+                    self.startSyncTask()
                 }
             }
         }
@@ -187,7 +199,7 @@ final class SyncEngine: ObservableObject {
         syncLogs.removeAll()
     }
 
-    // MARK: - 缓存摘要
+    // MARK: - 缓存概要
 
     private func loadCachedSummary() {
         if let data = UserDefaults.standard.data(forKey: "sync_summary_cache"),
@@ -209,7 +221,54 @@ final class SyncEngine: ObservableObject {
         remoteIndex: SyncIndex,
         onlySyncPinned: Bool = false
     ) -> SyncDiffResult {
-        SyncDiffEngine.calculateDiff(localItems: localItems, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
+        var toUpload: [SyncItemBlob] = []
+        var toDownload: [String] = []
+        var toDeleteLocal: [String] = []
+        var toDeleteRemote: [String] = []
+
+        var localMap: [String: SyncItemBlob] = [:]
+        for item in localItems {
+            localMap[item.uniqueId] = item
+        }
+
+        var handledRemoteKeys = Set<String>()
+
+        // 1. 遍历远端索引项
+        for (uniqueId, remoteEntry) in remoteIndex.entries {
+            handledRemoteKeys.insert(uniqueId)
+
+            if onlySyncPinned && remoteEntry.group < 0 && !remoteEntry.isDeleted {
+                continue
+            }
+
+            if let local = localMap[uniqueId] {
+                if remoteEntry.isDeleted {
+                    toDeleteLocal.append(uniqueId)
+                } else if remoteEntry.updatedAt > local.timestamp {
+                    toDownload.append(uniqueId)
+                } else if local.timestamp > remoteEntry.updatedAt {
+                    toUpload.append(local)
+                }
+            } else {
+                if !remoteEntry.isDeleted {
+                    toDownload.append(uniqueId)
+                }
+            }
+        }
+
+        // 2. 遍历本地存在但远端索引完全缺失的记录
+        for (uniqueId, local) in localMap {
+            if !handledRemoteKeys.contains(uniqueId) {
+                toUpload.append(local)
+            }
+        }
+
+        return SyncDiffResult(
+            toDownload: toDownload,
+            toUpload: toUpload,
+            toDeleteLocal: toDeleteLocal,
+            toDeleteRemote: toDeleteRemote
+        )
     }
 
     // MARK: - 从 SQLite 全量加载待同步数据（彻底脱离 UI 分页 50 条限制）
@@ -265,18 +324,17 @@ final class SyncEngine: ObservableObject {
         isDirty = true
         debounceTask?.cancel()
 
-        // 功耗优化：检测 macOS 低电量模式或系统发热保护，将 15s 防抖自动拉长至 60s
-        let isPowerSaving = SystemEnergyMonitor.shared.isLowPowerMode || SystemEnergyMonitor.shared.isThermalThrottled
+        let isPowerSaving = ProcessInfo.processInfo.isLowPowerModeEnabled
         let delayNanoseconds: UInt64 = isPowerSaving ? 60_000_000_000 : 15_000_000_000
 
         debounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: delayNanoseconds)
             guard !Task.isCancelled else { return }
-            await self?.triggerSync()
+            self?.startSyncTask()
         }
     }
 
-    // MARK: - 仅刷新云端资产看板摘要
+    // MARK: - 仅刷新云端资产看板概要
 
     @discardableResult
     func fetchCloudSummary() async -> SyncSummary? {
@@ -299,25 +357,34 @@ final class SyncEngine: ObservableObject {
 
             let client = getCachedClient(serverURL: serverURL, username: username, password: password)
             let saltPath = "ClipboardSync/vault.meta.enc"
-            guard let salt = try? await client.download(from: saltPath) else {
-                addLog("云端尚未初始化密钥元数据", isError: true)
-                return nil
+            let salt: Data
+            do {
+                salt = try await client.download(from: saltPath)
+            } catch {
+                addLog("获取云端密钥元数据失败: \(error.localizedDescription)", isError: true)
+                return syncSummary
             }
+
             let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
 
             let indexPath = "ClipboardSync/index.json.enc"
-            guard let encIndexData = try? await client.download(from: indexPath),
-                  let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
-                  let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
-                addLog("云端索引下载或解密失败", isError: true)
-                return nil
-            }
+            do {
+                let encIndexData = try await client.download(from: indexPath)
+                guard let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
+                      let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
+                    addLog("云端索引存在但解密失败，请检查同步主密码", isError: true)
+                    return syncSummary
+                }
 
-            let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
-            self.syncSummary = summary
-            saveSummaryCache(summary)
-            addLog("云端资产概览更新完成: 共 \(summary.totalCount) 条记录")
-            return summary
+                let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
+                self.syncSummary = summary
+                saveSummaryCache(summary)
+                addLog("云端资产概览更新完成: 共 \(summary.totalCount) 条记录")
+                return summary
+            } catch {
+                addLog("读取云端索引失败: \(error.localizedDescription)", isError: true)
+                return syncSummary
+            }
         } catch {
             addLog("获取看板异常: \(error.localizedDescription)", isError: true)
             return nil
@@ -359,8 +426,11 @@ final class SyncEngine: ObservableObject {
             let client = getCachedClient(serverURL: serverURL, username: username, password: password)
 
             let saltPath = "ClipboardSync/vault.meta.enc"
-            guard let salt = try? await client.download(from: saltPath) else {
-                let msg = "未找到云端密钥元数据，云端可能尚未进行过备份"
+            let salt: Data
+            do {
+                salt = try await client.download(from: saltPath)
+            } catch {
+                let msg = "未找到或无法读取云端密钥元数据: \(error.localizedDescription)"
                 restoreMessage = msg
                 addLog(msg, isError: true)
                 return (false, msg)
@@ -368,10 +438,19 @@ final class SyncEngine: ObservableObject {
             let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
 
             let indexPath = "ClipboardSync/index.json.enc"
-            guard let encIndexData = try? await client.download(from: indexPath),
-                  let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
+            let encIndexData: Data
+            do {
+                encIndexData = try await client.download(from: indexPath)
+            } catch {
+                let msg = "下载云端索引清单失败: \(error.localizedDescription)"
+                restoreMessage = msg
+                addLog(msg, isError: true)
+                return (false, msg)
+            }
+
+            guard let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
                   let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
-                let msg = "读取或解密云端索引失败，请检查同步密码是否正确"
+                let msg = "解密云端索引失败，请检查同步主密码是否正确"
                 restoreMessage = msg
                 addLog(msg, isError: true)
                 return (false, msg)
@@ -398,8 +477,8 @@ final class SyncEngine: ObservableObject {
                 }
 
                 for entry in activeEntries {
-                    if let localTimestamp = localMap[entry.uniqueId] {
-                        if entry.updatedAt > localTimestamp {
+                    if let localTs = localMap[entry.uniqueId] {
+                        if entry.updatedAt > localTs {
                             toDownloadIds.append(entry.uniqueId)
                         }
                     } else {
@@ -408,16 +487,22 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
-            addLog("需拉取还原 \(toDownloadIds.count) 条数据，启动受控滑动窗口并发流水线...")
-            var restoredCount = 0
+            if toDownloadIds.isEmpty {
+                let msg = overwriteLocal ? "云端暂无可覆盖还原的数据。" : "本地数据已是最新，无需拉取更新。"
+                self.restoreMessage = msg
+                addLog(msg)
+                return (true, msg)
+            }
+
+            addLog("待拉取条目: \(toDownloadIds.count) 条，启动并发流水线...")
             let maxConcurrency = 3
+            var restoredCount = 0
             let total = toDownloadIds.count
             var batchBuffer: [PasteboardModel] = []
 
             try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
                 var iterator = toDownloadIds.makeIterator()
 
-                // 初始填满并发槽位
                 for _ in 0..<maxConcurrency {
                     if let id = iterator.next() {
                         group.addTask {
@@ -438,13 +523,11 @@ final class SyncEngine: ObservableObject {
                     }
                 }
 
-                // 滑动窗口：单个任务完成立即补充下一个
                 while let model = try await group.next() {
                     if let model {
                         batchBuffer.append(model)
                         restoredCount += 1
 
-                        // 批量 50 条单事务入库，兼顾性能与低内存
                         if batchBuffer.count >= 50 {
                             await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
                             batchBuffer.removeAll(keepingCapacity: true)
@@ -501,7 +584,7 @@ final class SyncEngine: ObservableObject {
         }
     }
 
-    // MARK: - 手动或定时触发同步
+    // MARK: - 手动或定时触发增量同步
 
     @discardableResult
     func triggerSync() async -> SyncState {
@@ -511,12 +594,14 @@ final class SyncEngine: ObservableObject {
             return state
         }
         guard currentState != .syncing else { return currentState }
+        isCancelled = false
         currentState = .syncing
         syncProgress = "准备连接服务器..."
         addLog("====== 开始增量同步流程 ======")
 
         defer {
             syncProgress = nil
+            activeSyncTask = nil
         }
 
         do {
@@ -533,6 +618,12 @@ final class SyncEngine: ObservableObject {
                 return state
             }
 
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
+            }
+
             let client = getCachedClient(serverURL: serverURL, username: username, password: password)
 
             // 2. 首次或配置变动后验证目录结构
@@ -545,18 +636,44 @@ final class SyncEngine: ObservableObject {
                 hasValidatedDirectoryStructure = true
             }
 
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
+            }
+
             // 3. 读取或生成加密 Salt 与复用/派生主密钥
             let saltPath = "ClipboardSync/vault.meta.enc"
             var salt: Data
-            if let existingSaltEnc = try? await client.download(from: saltPath) {
-                salt = existingSaltEnc
-            } else {
-                salt = SyncCryptoEngine.generateSalt()
-                try? await client.upload(data: salt, to: saltPath)
-                addLog("为全新云端空间初始化加密 Salt 元数据")
+            do {
+                salt = try await client.download(from: saltPath)
+            } catch let error as WebDAVError {
+                if case .notFound = error {
+                    salt = SyncCryptoEngine.generateSalt()
+                    try await client.upload(data: salt, to: saltPath)
+                    addLog("为全新云端空间初始化加密 Salt 元数据")
+                } else {
+                    let msg = "读取云端安全元数据失败: \(error.localizedDescription)"
+                    addLog(msg, isError: true)
+                    let state: SyncState = .failed(message: msg)
+                    currentState = state
+                    return state
+                }
+            } catch {
+                let msg = "读取云端安全元数据失败: \(error.localizedDescription)"
+                addLog(msg, isError: true)
+                let state: SyncState = .failed(message: msg)
+                currentState = state
+                return state
             }
 
             let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
+
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
+            }
 
             // 5. ETag 极速预检
             let indexPath = "ClipboardSync/index.json.enc"
@@ -569,17 +686,55 @@ final class SyncEngine: ObservableObject {
                 return state
             }
 
-            // 6. 下载远端索引
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
+            }
+
+            // 6. 下载远端索引 (严密区分 404 与网络超时/解密失败)
             syncProgress = "获取云端索引清单..."
             var remoteIndex = SyncIndex()
-            if let encIndexData = try? await client.download(from: indexPath) {
-                if let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
-                   let decoded = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) {
-                    remoteIndex = decoded
-                    addLog("已解析云端索引: 现有记录 \(remoteIndex.entries.count) 条")
+            do {
+                let encIndexData = try await client.download(from: indexPath)
+                guard let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey) else {
+                    let msg = "云端索引已存在但解密失败，请检查同步主密码是否正确"
+                    addLog(msg, isError: true)
+                    let state: SyncState = .failed(message: msg)
+                    currentState = state
+                    return state
                 }
-            } else {
-                addLog("云端尚无索引文件，将初始化全新清单")
+                guard let decoded = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
+                    let msg = "云端索引清单数据损坏或格式不兼容"
+                    addLog(msg, isError: true)
+                    let state: SyncState = .failed(message: msg)
+                    currentState = state
+                    return state
+                }
+                remoteIndex = decoded
+                addLog("已成功解析云端索引: 现有记录 \(remoteIndex.entries.count) 条")
+            } catch let error as WebDAVError {
+                if case .notFound = error {
+                    addLog("云端尚无索引文件，将初始化全新清单")
+                } else {
+                    let msg = "下载云端索引清单失败: \(error.localizedDescription)"
+                    addLog(msg, isError: true)
+                    let state: SyncState = .failed(message: msg)
+                    currentState = state
+                    return state
+                }
+            } catch {
+                let msg = "下载云端索引清单失败: \(error.localizedDescription)"
+                addLog(msg, isError: true)
+                let state: SyncState = .failed(message: msg)
+                currentState = state
+                return state
+            }
+
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
             }
 
             // 7. 从 SQLite 数据库全量收集本地数据并执行 Diff
@@ -602,6 +757,7 @@ final class SyncEngine: ObservableObject {
                     var iterator = diff.toDownload.makeIterator()
 
                     for _ in 0..<maxConcurrency {
+                        if isCancelled || Task.isCancelled { break }
                         if let id = iterator.next() {
                             group.addTask {
                                 let sharded = SyncIndex.shardedItemPath(for: id)
@@ -622,6 +778,7 @@ final class SyncEngine: ObservableObject {
                     }
 
                     while let model = try await group.next() {
+                        if isCancelled || Task.isCancelled { break }
                         if let model {
                             batchBuffer.append(model)
                             downloadedCount += 1
@@ -637,7 +794,7 @@ final class SyncEngine: ObservableObject {
                             }
                         }
 
-                        if !Task.isCancelled, let nextId = iterator.next() {
+                        if !isCancelled && !Task.isCancelled, let nextId = iterator.next() {
                             group.addTask {
                                 let sharded = SyncIndex.shardedItemPath(for: nextId)
                                 let legacy = SyncIndex.legacyItemPath(for: nextId)
@@ -663,6 +820,12 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
+            }
+
             // 8.1 同步清理远端墓碑删除条目（保证多端一致性）
             if !diff.toDeleteLocal.isEmpty {
                 addLog("检测到远端已标记删除 \(diff.toDeleteLocal.count) 条记录，正在同步清理本地 SQLite...")
@@ -672,6 +835,12 @@ final class SyncEngine: ObservableObject {
             // 若有本地新增入库或删除清理，统一重载一次主列表
             if !diff.toDownload.isEmpty || !diff.toDeleteLocal.isEmpty {
                 await PasteDataStore.main.reloadHistory()
+            }
+
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
             }
 
             // 9. 受控滑动窗口并发流水线：加密上传本地条目 (限制并发为 3，Payload 延迟按需加载，UI 节流刷新与检查点保存)
@@ -686,6 +855,7 @@ final class SyncEngine: ObservableObject {
                     var iterator = diff.toUpload.makeIterator()
 
                     for _ in 0..<maxConcurrency {
+                        if isCancelled || Task.isCancelled { break }
                         if let blob = iterator.next() {
                             let prefix = blob.uniqueId.count >= 2 ? String(blob.uniqueId.prefix(2)) : "misc"
                             let dir = "ClipboardSync/items/\(prefix)"
@@ -723,6 +893,7 @@ final class SyncEngine: ObservableObject {
                     }
 
                     while let result = try await group.next() {
+                        if isCancelled || Task.isCancelled { break }
                         if let (id, entry) = result {
                             remoteIndex.entries[id] = entry
                             uploadedCount += 1
@@ -746,7 +917,7 @@ final class SyncEngine: ObservableObject {
                             }
                         }
 
-                        if !Task.isCancelled, let nextBlob = iterator.next() {
+                        if !isCancelled && !Task.isCancelled, let nextBlob = iterator.next() {
                             let prefix = nextBlob.uniqueId.count >= 2 ? String(nextBlob.uniqueId.prefix(2)) : "misc"
                             let dir = "ClipboardSync/items/\(prefix)"
                             if !ensuredDirectories.contains(dir) {
@@ -783,8 +954,15 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
+            if isCancelled || Task.isCancelled {
+                currentState = .idle
+                addLog("增量同步已取消")
+                return .idle
+            }
+
             // 10. 远端删除实体文件并写入墓碑
             for id in diff.toDeleteRemote {
+                if isCancelled || Task.isCancelled { break }
                 try? await client.delete(path: SyncIndex.shardedItemPath(for: id))
                 try? await client.delete(path: SyncIndex.legacyItemPath(for: id))
                 remoteIndex.entries[id] = SyncIndexEntry(
@@ -849,6 +1027,11 @@ final class SyncEngine: ObservableObject {
             addLog("====== 同步圆满成功 (云端总条目: \(summary.totalCount)) ======")
             return state
 
+        } catch is CancellationError {
+            let state: SyncState = .idle
+            self.currentState = state
+            addLog("增量同步已取消")
+            return state
         } catch {
             let state: SyncState = .failed(message: error.localizedDescription)
             self.currentState = state

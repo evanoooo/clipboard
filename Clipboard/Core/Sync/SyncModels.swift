@@ -291,6 +291,8 @@ nonisolated struct SyncItemBlob: Codable, Equatable, Sendable {
 
 // MARK: - 同步差异比对结果
 
+typealias SyncDiff = SyncDiffResult
+
 nonisolated struct SyncDiffResult: Sendable {
     /// 云端有较新版本，需下载到本地的 uniqueId 清单
     var toDownload: [String] = []
