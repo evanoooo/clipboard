@@ -28,6 +28,7 @@ struct StorageSettingView: View {
     @State private var selectedAgingPolicy: String = PasteUserDefaults.softQuotaAgingPolicy
     @State private var enableIdleAutoMaintenance: Bool = PasteUserDefaults.enableIdleAutoMaintenance
     @State private var selectedLogLevel: String = PasteUserDefaults.appLogLevel
+    @State private var selectedMmapSizeMB: Int = PasteUserDefaults.sqliteMmapSizeMB
     @State private var copiedReport = false
 
     private let db = PasteDataStore.main
@@ -282,6 +283,37 @@ struct StorageSettingView: View {
                     ) {
                         importDatabase()
                     }
+                }
+                .padding(.horizontal, Const.space16)
+                .settingsStyle()
+
+                // MARK: - 数据库性能与内存映射
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("数据库内存映射 (mmap)")
+                                .font(.callout)
+                            Text("控制 SQLite 数据库在虚拟内存中的映射上限，整库映射可实现零拷贝极速检索；修改后即时生效。")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $selectedMmapSizeMB) {
+                            ForEach(SQLiteMmapThreshold.allCases) { threshold in
+                                Text(threshold.displayName).tag(threshold.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 170)
+                        .onChange(of: selectedMmapSizeMB) { _, newValue in
+                            PasteUserDefaults.sqliteMmapSizeMB = newValue
+                            Task {
+                                await PasteSQLManager.manager.setMmapSizeMB(newValue)
+                                await PasteReadStore.shared.setMmapSizeMB(newValue)
+                            }
+                        }
+                    }
+                    .padding(.vertical, Const.space12)
                 }
                 .padding(.horizontal, Const.space16)
                 .settingsStyle()

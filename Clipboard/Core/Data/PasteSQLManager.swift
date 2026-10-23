@@ -32,6 +32,13 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         table = Table("Clip")
     }
 
+    func setMmapSizeMB(_ mb: Int) {
+        let bytes = Int64(mb) * 1024 * 1024
+        try? connection?.execute("PRAGMA mmap_size=\(bytes)")
+        let mapped = (try? connection?.scalar("PRAGMA mmap_size")) as? Int64
+        log.info("Updated SQLite write connection mmap_size=\(mapped ?? 0)")
+    }
+
     private func openDatabase() throws {
         guard connection == nil else { return }
         try FileManager.default.createDirectory(at: Self.databaseDirectory, withIntermediateDirectories: true)
@@ -42,11 +49,11 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         try? database.execute("PRAGMA synchronous=NORMAL")
         // 临时表与复杂排序驻留内存，杜绝临时文件写盘 I/O 尖刺
         try? database.execute("PRAGMA temp_store=MEMORY")
-        // 整库内存映射：窄关键词全表扫描实测 32.6 ms → 19.0 ms。
-        // mmap_size 需不小于库体积才生效，1 GB 可覆盖绝大多数历史库。
-        try? database.execute("PRAGMA mmap_size=1073741824")
+        // 整库虚拟内存映射：零拷贝极速检索，上限按用户配置生效
+        let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
+        try? database.execute("PRAGMA mmap_size=\(mmapBytes)")
         let mapped = (try? database.scalar("PRAGMA mmap_size")) as? Int64
-        log.info("SQLite mmap_size=\(mapped ?? 0)")
+        log.info("SQLite write connection mmap_size=\(mapped ?? 0)")
         Self.createTable(on: database, table: table)
         connection = database
     }

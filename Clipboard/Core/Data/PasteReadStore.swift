@@ -44,8 +44,11 @@ actor PasteReadStore {
             let database = try Connection(Self.databasePath, readonly: readonly)
             database.busyTimeout = 5.0
             try database.execute("PRAGMA query_only=1")
-            try? database.execute("PRAGMA mmap_size=1073741824")
+            let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
+            try? database.execute("PRAGMA mmap_size=\(mmapBytes)")
             try? database.execute("PRAGMA temp_store=MEMORY")
+            let mapped = (try? database.scalar("PRAGMA mmap_size")) as? Int64
+            log.info("SQLite read connection mmap_size=\(mapped ?? 0)")
             return database
         } catch {
             log.error("查询连接打开失败（readonly=\(readonly)）：\(error)")
@@ -55,6 +58,13 @@ actor PasteReadStore {
 
     private static var databasePath: String {
         PasteSQLManager.databasePath
+    }
+
+    func setMmapSizeMB(_ mb: Int) {
+        let bytes = Int64(mb) * 1024 * 1024
+        try? connection?.execute("PRAGMA mmap_size=\(bytes)")
+        let mapped = (try? connection?.scalar("PRAGMA mmap_size")) as? Int64
+        log.info("Updated SQLite read connection mmap_size=\(mapped ?? 0)")
     }
 
     func search(

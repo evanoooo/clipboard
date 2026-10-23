@@ -77,6 +77,8 @@ enum PrefKey: String, CaseIterable {
     case enableIdleAutoMaintenance
     /// 日志记录级别
     case appLogLevel
+    /// SQLite 虚拟内存映射上限（MB）
+    case sqliteMmapSizeMB
 }
 
 /// 应用语言
