@@ -8,22 +8,26 @@
 import AppKit
 
 final class PasteboardWritingItem: NSObject {
-    private let data: Data
+    private let providedData: Data?
     private let type: PasteboardType
     private let plainText: String
     private let appName: String
     private let timestamp: Int64
-    private let model: PasteboardModel?
+    private weak var model: PasteboardModel?
+
+    private var data: Data {
+        providedData ?? model?.data ?? Data()
+    }
 
     init(
-        data: Data,
+        data: Data? = nil,
         type: PasteboardType,
         plainText: String = "",
         appName: String = "",
         timestamp: Int64 = 0,
         model: PasteboardModel? = nil
     ) {
-        self.data = data
+        self.providedData = data
         self.type = type
         self.plainText = plainText
         self.appName = appName

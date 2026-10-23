@@ -6,3 +6,4 @@ scripts/build.sh
 Tests/.build/
 release/
 .sparkle_keys.json
+__pycache__/

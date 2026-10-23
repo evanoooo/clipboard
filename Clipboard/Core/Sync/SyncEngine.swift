@@ -69,6 +69,7 @@ final class SyncEngine: ObservableObject {
     private var dirtyGeneration: UInt64 = 0
     private var activeSyncTask: Task<SyncState, Never>?
     private var debounceTask: Task<Void, Never>?
+    private var periodicSyncTimer: Timer?
     private var powerObservers: [NSObjectProtocol] = []
 
     var isOnlySyncPinned: Bool {
@@ -139,6 +140,7 @@ final class SyncEngine: ObservableObject {
     private init() {
         loadCachedSummary()
         setupPowerAndSleepObservers()
+        updateSyncSchedule()
     }
 
     // MARK: - 系统功耗与睡眠感知生命周期
@@ -158,6 +160,8 @@ final class SyncEngine: ObservableObject {
                     self.addLog("系统即将进入休眠，优雅中止后台同步任务")
                     self.cancelSync()
                 }
+                self.periodicSyncTimer?.invalidate()
+                self.periodicSyncTimer = nil
             }
         }
 
@@ -171,6 +175,7 @@ final class SyncEngine: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
+                self.updateSyncSchedule()
                 if UserDefaults.standard.bool(forKey: "sync_enabled"), self.isDirty {
                     self.addLog("系统唤醒网络已恢复，自动执行增量同步")
                     self.startSyncTask()
@@ -277,7 +282,7 @@ final class SyncEngine: ObservableObject {
         }
     }
 
-    // MARK: - 防抖调度 (结合低功耗模式动态调节防抖窗口)
+    // MARK: - 增量同步调度与周期调度 (支持关闭、实时防抖与周期轮询)
 
     func markDirtyAndSchedule() {
         guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
@@ -285,13 +290,49 @@ final class SyncEngine: ObservableObject {
         dirtyGeneration &+= 1
         debounceTask?.cancel()
 
-        let isPowerSaving = ProcessInfo.processInfo.isLowPowerModeEnabled
-        let delayNanoseconds: UInt64 = isPowerSaving ? 60_000_000_000 : 15_000_000_000
+        let freq = SyncFrequency.current
+        guard freq != .off else { return }
 
-        debounceTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: delayNanoseconds)
-            guard !Task.isCancelled else { return }
-            self?.startSyncTask()
+        if freq == .realtime {
+            let isPowerSaving = ProcessInfo.processInfo.isLowPowerModeEnabled
+            let delayNanoseconds: UInt64 = isPowerSaving ? 60_000_000_000 : 15_000_000_000
+
+            debounceTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+                guard !Task.isCancelled else { return }
+                self?.startSyncTask()
+            }
+        } else {
+            if periodicSyncTimer == nil {
+                updateSyncSchedule()
+            }
+        }
+    }
+
+    func updateSyncSchedule() {
+        periodicSyncTimer?.invalidate()
+        periodicSyncTimer = nil
+        debounceTask?.cancel()
+        debounceTask = nil
+
+        guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
+        let freq = SyncFrequency.current
+        guard freq != .off else { return }
+
+        if freq != .realtime {
+            let interval = TimeInterval(freq.rawValue)
+            let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
+                    self.addLog("触发周期自动同步 (\(freq.title))")
+                    self.startSyncTask()
+                }
+            }
+            // 遵循 Apple 能耗规范：设置 10% 容差，允许 macOS 内核进行定时器聚合，显著降低电池唤醒能耗
+            timer.tolerance = interval * 0.1
+            RunLoop.main.add(timer, forMode: .common)
+            periodicSyncTimer = timer
         }
     }
 

@@ -21,12 +21,16 @@ final class TimeManager {
     }
 
     private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
+                guard let self else { return }
+                guard WindowManager.shared.isVisible else { return }
                 self.currentTime = Date()
                 self.tick.send(self.currentTime)
             }
         }
-        RunLoop.main.add(timer!, forMode: .common)
+        timer.tolerance = 3.0
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 }

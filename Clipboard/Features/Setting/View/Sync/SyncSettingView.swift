@@ -41,9 +41,10 @@ struct SyncSettingView: View {
     @AppStorage("sync_webdav_url") private var serverURL: String = ""
     @AppStorage("sync_webdav_username") private var username: String = ""
     @AppStorage("sync_only_pinned") private var onlySyncPinned: Bool = true
-    @AppStorage("sync_auto_enabled") private var autoSyncEnabled: Bool = true
+    @AppStorage(SyncFrequency.userDefaultsKey) private var syncFrequencyRaw: Int = 15
     @AppStorage("sync_preset") private var selectedPreset: String = WebDAVProviderPreset.custom.rawValue
 
+    @State private var selectedFrequency: SyncFrequency = .current
     @State private var passwordInput: String = ""
     @State private var passphraseInput: String = ""
     @State private var isTesting = false
@@ -70,6 +71,7 @@ struct SyncSettingView: View {
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .onChange(of: syncEnabled) { _, newValue in
+                                engine.updateSyncSchedule()
                                 if newValue {
                                     engine.startSyncTask()
                                 }
@@ -227,18 +229,33 @@ struct SyncSettingView: View {
 
                         Divider()
 
-                        // 自动增量同步
-                        HStack {
+                        // 自动同步策略与频率
+                        HStack(alignment: .center) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("后台 15 秒自动增量同步")
+                                Text("自动同步策略与频率")
                                     .font(.callout)
-                                Text("本地内容产生变化 15 秒后，自动聚合为一次轻量增量加密上传，低能耗低流量。")
+                                Text(selectedFrequency.subtitle)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            Spacer()
-                            Toggle("", isOn: $autoSyncEnabled)
-                                .labelsHidden()
+                            Spacer(minLength: 16)
+                            Picker("", selection: Binding(
+                                get: { selectedFrequency },
+                                set: { newFreq in
+                                    selectedFrequency = newFreq
+                                    syncFrequencyRaw = newFreq.rawValue
+                                    UserDefaults.standard.set(newFreq != .off, forKey: "sync_auto_enabled")
+                                    engine.updateSyncSchedule()
+                                }
+                            )) {
+                                ForEach(SyncFrequency.allCases) { freq in
+                                    Text(freq.title).tag(freq)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .frame(width: 155)
                         }
 
                         Divider()
@@ -510,6 +527,7 @@ struct SyncSettingView: View {
             SyncLogSheetView(engine: engine, isPresented: $showLogSheet)
         }
         .onAppear {
+            selectedFrequency = SyncFrequency.current
             loadCredentials()
         }
 

@@ -17,16 +17,18 @@ struct OCRTextRegion {
 class OCRViewService {
     static let shared = OCRViewService()
 
-    func recognizeText(from data: Data) async -> String {
-        guard let image = NSImage(data: data),
-              let cgImage = image.cgImage(
-                  forProposedRect: nil,
-                  context: nil,
-                  hints: nil
-              )
-        else { return "" }
+    nonisolated private static func createCGImage(from data: Data) -> CGImage? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
+            return nil
+        }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
 
-        return await Task.detached {
+    func recognizeText(from data: Data) async -> String {
+        await Task.detached(priority: .utility) {
+            guard let cgImage = Self.createCGImage(from: data) else { return "" }
+
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
@@ -50,15 +52,9 @@ class OCRViewService {
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 
-        guard let image = NSImage(data: data),
-              let cgImage = image.cgImage(
-                  forProposedRect: nil,
-                  context: nil,
-                  hints: nil
-              )
-        else { return [] }
+        return await Task.detached(priority: .userInitiated) {
+            guard let cgImage = Self.createCGImage(from: data) else { return [OCRTextRegion]() }
 
-        return await Task.detached {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]

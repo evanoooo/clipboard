@@ -29,6 +29,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     private static let quiescenceDebounce: Duration = .milliseconds(100)
 
     private var pollTimer: Timer?
+    private var currentPollInterval: TimeInterval = 0
     private var idleTicks = 0
 
     /// 等待中的静止防抖任务
@@ -70,6 +71,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     func stopListening() {
         pollTimer?.invalidate()
         pollTimer = nil
+        currentPollInterval = 0
         unregisterEventMonitors()
         quiescenceTask?.cancel()
         quiescenceTask = nil
@@ -130,12 +132,15 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     // MARK: - 自适应轮询调度
 
     private func scheduleNextPoll(interval: TimeInterval) {
-        pollTimer?.invalidate()
-        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                self?.performAdaptivePoll()
-            }
+        if pollTimer != nil, currentPollInterval == interval {
+            return
         }
+        pollTimer?.invalidate()
+        currentPollInterval = interval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            self?.performAdaptivePoll()
+        }
+        timer.tolerance = interval * 0.1
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
     }
@@ -216,6 +221,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         ) { [weak self] _ in
             self?.pollTimer?.invalidate()
             self?.pollTimer = nil
+            self?.currentPollInterval = 0
         }
         let sleep2 = wsCenter.addObserver(
             forName: NSWorkspace.screensDidSleepNotification,
@@ -224,6 +230,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         ) { [weak self] _ in
             self?.pollTimer?.invalidate()
             self?.pollTimer = nil
+            self?.currentPollInterval = 0
         }
 
         // 系统唤醒 / 亮屏：恢复轮询并同步计数值

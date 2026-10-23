@@ -54,7 +54,6 @@ final class PasteboardModel: Identifiable, Codable {
         .init(with: showData, type: pasteboardType) ?? NSAttributedString()
 
     private(set) lazy var writeItem = PasteboardWritingItem(
-        data: data,
         type: pasteboardType,
         plainText: plainText,
         appName: appName,

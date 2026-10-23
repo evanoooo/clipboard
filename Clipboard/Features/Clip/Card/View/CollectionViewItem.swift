@@ -264,6 +264,7 @@ extension CollectionViewItem {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        item = nil
         tickCancellable?.cancel()
         tickCancellable = nil
         iconLoadTask?.cancel()
