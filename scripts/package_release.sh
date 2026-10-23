@@ -11,6 +11,8 @@ if [ -z "$VERSION" ] || [ -z "$APP_DIR" ]; then
 fi
 
 mkdir -p "$DIST_DIR"
+DIST_DIR="$(cd "$DIST_DIR" && pwd)"
+APP_DIR="$(cd "$APP_DIR" && pwd)"
 WORK_DIR=$(mktemp -d /tmp/pkg_release.XXXXXX)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
