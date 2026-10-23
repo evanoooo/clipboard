@@ -19,21 +19,21 @@
 - 迁移修改前自动创建本地完整数据库快照备份，安全零风险。
 ]]>
             </description>
-            <pubDate>Fri, 23 Oct 2026 12:00:00 GMT</pubDate>
-            <sparkle:version>916</sparkle:version>
+            <pubDate>Fri, 23 Oct 2026 12:41:52 GMT</pubDate>
+            <sparkle:version>919</sparkle:version>
             <sparkle:shortVersionString>2.4.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure
-                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.0/Clipboard-2.4.0-arm64.dmg"
-                sparkle:edSignature="AZ9KWbQJo9V/IgjDbC0XrP3VcoEsvm4mLeCYcJfoOR61NFTIRpSPgQVC6ijXOBKwL8oHRBpxhKDyocLHT778CA=="
-                length="5148082"
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.0/Clipboard-2.4.0-arm64.zip"
+                sparkle:edSignature="Led6nuGHFfOnZP5fCF42oseJ1WvcSxzmSjAV/GnffS9w8eY4biN4heXiyCtgw/hRA5JcLTL5xnDsoxhFmxR6Cw=="
+                length="4466065"
                 type="application/octet-stream" />
         </item>
 
-        <!-- Version 2.4.0 (Universal) -->
+        <!-- Version 2.4.0 (Intel) -->
         <item>
-            <title>Version 2.4.0 (Universal / Intel)</title>
+            <title>Version 2.4.0 (Intel)</title>
             <description sparkle:format="markdown">
                 <![CDATA[
 ## Version 2.4.0
@@ -45,16 +45,20 @@
 - 迁移修改前自动创建本地完整数据库快照备份，安全零风险。
 ]]>
             </description>
-            <pubDate>Fri, 23 Oct 2026 12:00:00 GMT</pubDate>
-            <sparkle:version>916</sparkle:version>
+            <pubDate>Fri, 23 Oct 2026 12:41:52 GMT</pubDate>
+            <sparkle:version>919</sparkle:version>
             <sparkle:shortVersionString>2.4.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <enclosure
-                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.0/Clipboard-2.4.0-universal.dmg"
-                sparkle:edSignature="FUgv6bjPb2SuwIJePT34nKYEo09i86sI7ncQi+KOryS/1mekd+TaDAptKjlKAPt4DdRRxuSAU+CtWGHOf8B4Ag=="
-                length="9362115"
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.0/Clipboard-2.4.0-x86_64.zip"
+                sparkle:edSignature="tqJflyjSTj0NncjrZzT0S6WJthdfwB8Dp6l5FTHhKTqfKXmg4pqtk0jd40+DaBBcUqtrMDufkHK8JZvbY1UlCg=="
+                length="4781728"
                 type="application/octet-stream" />
         </item>
+
+        <!-- Version 2.4.0 (Apple Silicon) -->
+
+        <!-- Version 2.4.0 (Universal) -->
 
         <!-- Version 2.3.0 -->
         <item>
