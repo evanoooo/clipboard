@@ -2,6 +2,22 @@ import AppKit
 import Foundation
 import SQLite
 
+/// 批量同步纯净数据载荷（避免跨 Actor 访问 PasteboardModel）
+struct SyncIngestionRecord: Sendable {
+    let uniqueId: String
+    let type: String
+    let data: Data
+    let showData: Data?
+    let timestamp: Int64
+    let appID: Int64
+    let searchText: String
+    let length: Int
+    let group: Int
+    let tag: String
+    let hidden: Bool
+    let alias: String
+}
+
 extension PasteSQLManager {
     func deleteExpiredHistory(before cutoff: Int64) async throws {
         guard let connection else { throw CocoaError(.fileWriteUnknown) }
@@ -23,6 +39,54 @@ extension PasteSQLManager {
               )
         else { return 0 }
         return row[Col.sortOrder]
+    }
+
+    /// 批量同步入库（单事务提交，极致提升下载与恢复性能）
+    func ingestSyncedBatch(_ records: [SyncIngestionRecord]) async {
+        guard let connection, !records.isEmpty else { return }
+        do {
+            try connection.transaction {
+                for r in records {
+                    let existing = try? connection.pluck(
+                        table.select(Col.id, Col.group, Col.appID).filter(Col.uniqueId == r.uniqueId)
+                    )
+                    if let existing {
+                        let existingId = existing[Col.id]
+                        let existingGroup = existing[Col.group]
+                        var updates: [Setter] = [
+                            Col.timestamp <- r.timestamp,
+                            Col.hidden <- 0,
+                            Col.sortOrder <- Col.nextSortOrder
+                        ]
+                        if r.group != -1, r.group != existingGroup {
+                            updates.append(Col.group <- r.group)
+                        }
+                        try connection.run(table.filter(Col.id == existingId).update(updates))
+                    } else {
+                        let insert = table.insert(
+                            [
+                                Col.uniqueId <- r.uniqueId,
+                                Col.type <- r.type,
+                                Col.data <- r.data,
+                                Col.showData <- r.showData,
+                                Col.timestamp <- r.timestamp,
+                                Col.sortOrder <- Col.nextSortOrder,
+                                Col.appID <- r.appID,
+                                Col.searchText <- r.searchText,
+                                Col.length <- r.length,
+                                Col.group <- r.group,
+                                Col.tag <- r.tag,
+                                Col.hidden <- r.hidden ? 1 : 0,
+                            ] + Self.aliasSetters(r.alias)
+                        )
+                        _ = try connection.run(insert)
+                    }
+                }
+            }
+            await refreshAppCache()
+        } catch {
+            log.error("批量同步入库失败：\(error)")
+        }
     }
 
     func insert(item: PasteboardModel, timestamp: Int64, group: Int = -1) async -> PasteInsertResult {

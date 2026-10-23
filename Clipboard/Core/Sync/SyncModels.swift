@@ -198,13 +198,18 @@ extension SyncIndex {
 nonisolated struct SyncItemBlob: Codable, Equatable, Sendable {
     let uniqueId: String
     let pasteboardType: String
-    let payloadData: Data?
-    let showData: Data?
+    var payloadData: Data?
+    var showData: Data?
     let timestamp: Int64
     let group: Int
     let tag: String
     let alias: String
     let sourceAppName: String?
+    var localRowId: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case uniqueId, pasteboardType, payloadData, showData, timestamp, group, tag, alias, sourceAppName
+    }
 
     init(
         uniqueId: String,
@@ -215,7 +220,8 @@ nonisolated struct SyncItemBlob: Codable, Equatable, Sendable {
         group: Int = -1,
         tag: String = "",
         alias: String = "",
-        sourceAppName: String? = nil
+        sourceAppName: String? = nil,
+        localRowId: Int64? = nil
     ) {
         self.uniqueId = uniqueId
         self.pasteboardType = pasteboardType
@@ -226,6 +232,21 @@ nonisolated struct SyncItemBlob: Codable, Equatable, Sendable {
         self.tag = tag
         self.alias = alias
         self.sourceAppName = sourceAppName
+        self.localRowId = localRowId
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.uniqueId = try container.decode(String.self, forKey: .uniqueId)
+        self.pasteboardType = try container.decode(String.self, forKey: .pasteboardType)
+        self.payloadData = try container.decodeIfPresent(Data.self, forKey: .payloadData)
+        self.showData = try container.decodeIfPresent(Data.self, forKey: .showData)
+        self.timestamp = try container.decode(Int64.self, forKey: .timestamp)
+        self.group = try container.decodeIfPresent(Int.self, forKey: .group) ?? -1
+        self.tag = try container.decodeIfPresent(String.self, forKey: .tag) ?? ""
+        self.alias = try container.decodeIfPresent(String.self, forKey: .alias) ?? ""
+        self.sourceAppName = try container.decodeIfPresent(String.self, forKey: .sourceAppName)
+        self.localRowId = nil
     }
 }
 

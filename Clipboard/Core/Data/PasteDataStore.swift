@@ -585,6 +585,30 @@ extension PasteDataStore {
         model.sortOrder = result.sortOrder
     }
 
+    /// 批量静默录入由云端同步拉取的条目（单事务提交，解决海量数据恢复时逐条写入的 I/O 阻塞）
+    func ingestSyncedBatch(_ models: [PasteboardModel]) async {
+        guard !models.isEmpty else { return }
+        var records: [SyncIngestionRecord] = []
+        for model in models {
+            _ = await prepareApp(for: model)
+            records.append(SyncIngestionRecord(
+                uniqueId: model.uniqueId,
+                type: model.pasteboardType.rawValue,
+                data: model.data,
+                showData: model.showData,
+                timestamp: model.timestamp,
+                appID: model.appID ?? 1,
+                searchText: model.searchText,
+                length: model.length,
+                group: model.group,
+                tag: model.tag,
+                hidden: model.hidden,
+                alias: model.alias
+            ))
+        }
+        await sqlManager.ingestSyncedBatch(records)
+    }
+
     func insertModel(_ model: PasteboardModel) async {
         guard await prepareApp(for: model) else { return }
         let result = await sqlManager.insert(

@@ -83,6 +83,44 @@ final class SyncEngine: ObservableObject {
     }
     private var debounceTask: Task<Void, Never>?
 
+    // MARK: - 性能优化缓存（密钥派生与连接池复用）
+
+    private var cachedMasterKey: SymmetricKey?
+    private var cachedKeySignature: String?
+    private var cachedClient: WebDAVClient?
+    private var cachedClientSignature: String?
+    private var hasValidatedDirectoryStructure = false
+
+    func invalidateClientAndKeyCache() {
+        cachedMasterKey = nil
+        cachedKeySignature = nil
+        cachedClient = nil
+        cachedClientSignature = nil
+        hasValidatedDirectoryStructure = false
+    }
+
+    private func getCachedClient(serverURL: URL, username: String?, password: String?) -> WebDAVClient {
+        let sig = "\(serverURL.absoluteString)|\(username ?? "")|\(password ?? "")"
+        if let cachedClient, cachedClientSignature == sig {
+            return cachedClient
+        }
+        let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
+        self.cachedClient = client
+        self.cachedClientSignature = sig
+        return client
+    }
+
+    private func getCachedMasterKey(passphrase: String, salt: Data) throws -> SymmetricKey {
+        let sig = "\(passphrase)|\(salt.base64EncodedString())"
+        if let cachedMasterKey, cachedKeySignature == sig {
+            return cachedMasterKey
+        }
+        let key = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
+        self.cachedMasterKey = key
+        self.cachedKeySignature = sig
+        return key
+    }
+
     private init() {
         loadCachedSummary()
     }
@@ -142,8 +180,9 @@ final class SyncEngine: ObservableObject {
             ? (Col.group >= 0 && Col.hidden == 0)
             : (Col.hidden == 0)
 
+        // 仅查询轻量元数据，严格排除 Col.data，避免 1.2W+ 全量同步时占用上百 MB 内存
         let sel: [Expressible] = [
-            Col.id, Col.uniqueId, Col.type, Col.data, Col.timestamp,
+            Col.id, Col.uniqueId, Col.type, Col.timestamp,
             Col.showData, Col.group, Col.tag, Col.alias
         ]
 
@@ -160,10 +199,6 @@ final class SyncEngine: ObservableObject {
             }
             let rawType = (try? row.get(Col.type)) ?? ""
             let id = try? row.get(Col.id)
-            var payloadData = try? row.get(Col.data)
-            if payloadData == nil, let id {
-                payloadData = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId)
-            }
             let showData = try? row.get(Col.showData)
             let group = (try? row.get(Col.group)) ?? -1
             let tag = (try? row.get(Col.tag)) ?? ""
@@ -172,13 +207,14 @@ final class SyncEngine: ObservableObject {
             return SyncItemBlob(
                 uniqueId: uniqueId,
                 pasteboardType: rawType,
-                payloadData: payloadData,
+                payloadData: nil, // 延迟加载：比对时零 Payload 内存开销
                 showData: showData,
                 timestamp: timestamp,
                 group: group,
                 tag: tag,
                 alias: alias,
-                sourceAppName: nil
+                sourceAppName: nil,
+                localRowId: id
             )
         }
     }
@@ -217,13 +253,13 @@ final class SyncEngine: ObservableObject {
                 return nil
             }
 
-            let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
+            let client = getCachedClient(serverURL: serverURL, username: username, password: password)
             let saltPath = "ClipboardSync/vault.meta.enc"
             guard let salt = try? await client.download(from: saltPath) else {
                 addLog("云端尚未初始化密钥元数据", isError: true)
                 return nil
             }
-            let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
+            let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
 
             let indexPath = "ClipboardSync/index.json.enc"
             guard let encIndexData = try? await client.download(from: indexPath),
@@ -276,7 +312,7 @@ final class SyncEngine: ObservableObject {
                 return (false, msg)
             }
 
-            let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
+            let client = getCachedClient(serverURL: serverURL, username: username, password: password)
 
             let saltPath = "ClipboardSync/vault.meta.enc"
             guard let salt = try? await client.download(from: saltPath) else {
@@ -285,7 +321,7 @@ final class SyncEngine: ObservableObject {
                 addLog(msg, isError: true)
                 return (false, msg)
             }
-            let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
+            let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
 
             let indexPath = "ClipboardSync/index.json.enc"
             guard let encIndexData = try? await client.download(from: indexPath),
@@ -359,10 +395,8 @@ final class SyncEngine: ObservableObject {
                     return models
                 }
 
-                for model in downloadedModels {
-                    await PasteDataStore.main.ingestSyncedModel(model)
-                    restoredCount += 1
-                }
+                await PasteDataStore.main.ingestSyncedBatch(downloadedModels)
+                restoredCount += downloadedModels.count
                 syncProgress = "正在还原 (\(restoredCount)/\(total))..."
                 addLog("还原进度: \(restoredCount)/\(total)")
             }
@@ -419,33 +453,30 @@ final class SyncEngine: ObservableObject {
                 return state
             }
 
-            addLog("目标服务器: \(serverURL.host ?? serverURL.absoluteString)，用户: \(username)")
-            let client = WebDAVClient(baseURL: serverURL, username: username, password: password)
+            let client = getCachedClient(serverURL: serverURL, username: username, password: password)
 
-            // 2. 探测连通性与测量延迟
-            syncProgress = "正在连接服务器..."
-            let (_, latency) = try await client.testConnection()
-            addLog(String(format: "服务器连通性正常，网络往返延迟: %.0f ms", latency))
+            // 2. 首次或配置变动后验证目录结构
+            if !hasValidatedDirectoryStructure {
+                syncProgress = "验证云端目录结构..."
+                let (_, latency) = try await client.testConnection()
+                addLog(String(format: "服务器连通性正常，网络往返延迟: %.0f ms", latency))
+                try await client.makeDirectory(path: "ClipboardSync")
+                try await client.makeDirectory(path: "ClipboardSync/items")
+                hasValidatedDirectoryStructure = true
+            }
 
-            // 3. 确保远端同步目录存在
-            syncProgress = "验证云端目录结构..."
-            try await client.makeDirectory(path: "ClipboardSync")
-            try await client.makeDirectory(path: "ClipboardSync/items")
-
-            // 4. 读取或生成加密 Salt 与派生主密钥
-            syncProgress = "正在派生加密主密钥..."
+            // 3. 读取或生成加密 Salt 与复用/派生主密钥
             let saltPath = "ClipboardSync/vault.meta.enc"
             var salt: Data
             if let existingSaltEnc = try? await client.download(from: saltPath) {
                 salt = existingSaltEnc
-                addLog("已获取云端现有 Salt 元数据")
             } else {
                 salt = SyncCryptoEngine.generateSalt()
                 try? await client.upload(data: salt, to: saltPath)
                 addLog("为全新云端空间初始化加密 Salt 元数据")
             }
 
-            let masterKey = try SyncCryptoEngine.deriveKey(passphrase: passphrase, salt: salt)
+            let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
 
             // 5. ETag 极速预检
             let indexPath = "ClipboardSync/index.json.enc"
@@ -509,22 +540,21 @@ final class SyncEngine: ObservableObject {
                         }
                         return list
                     }
-                    for m in models {
-                        await PasteDataStore.main.ingestSyncedModel(m)
-                        downloadedCount += 1
-                    }
+                    await PasteDataStore.main.ingestSyncedBatch(models)
+                    downloadedCount += models.count
                     syncProgress = "正在下载云端条目 (\(downloadedCount)/\(diff.toDownload.count))..."
                     addLog("下载进度: \(downloadedCount)/\(diff.toDownload.count)")
                 }
                 await PasteDataStore.main.reloadHistory()
             }
 
-            // 9. 受控并发传输管线：加密上传本地条目 (限制并发为 3，前缀分片存储并支持检查点保存)
+            // 9. 受控并发传输管线：加密上传本地条目 (限制并发为 3，Payload 延迟按需加载，UI 节流刷新与检查点保存)
             if !diff.toUpload.isEmpty {
                 let maxConcurrency = 3
                 var uploadedCount = 0
                 let totalUploads = diff.toUpload.count
                 var ensuredDirectories = Set<String>()
+                var lastUIUpdateTime = ContinuousClock.now
 
                 for chunk in diff.toUpload.chunked(into: maxConcurrency) {
                     if Task.isCancelled {
@@ -542,25 +572,30 @@ final class SyncEngine: ObservableObject {
                                 ensuredDirectories.insert(dir)
                             }
                             group.addTask {
-                                guard let rawData = try? JSONEncoder().encode(blob),
+                                var uploadBlob = blob
+                                // 关键内存优化：延迟点查 Payload，仅上传时读取，随 chunk 结束即刻释放
+                                if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
+                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId)
+                                }
+                                guard let rawData = try? JSONEncoder().encode(uploadBlob),
                                       let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
                                     return nil
                                 }
-                                let targetPath = SyncIndex.shardedItemPath(for: blob.uniqueId)
+                                let targetPath = SyncIndex.shardedItemPath(for: uploadBlob.uniqueId)
                                 try await client.upload(data: encData, to: targetPath)
-                                let checksum = SyncCryptoEngine.checksum(for: blob.payloadData ?? Data())
-                                let estimatedSize = (blob.payloadData?.count ?? 0) + (blob.showData?.count ?? 0)
+                                let checksum = SyncCryptoEngine.checksum(for: uploadBlob.payloadData ?? Data())
+                                let estimatedSize = (uploadBlob.payloadData?.count ?? 0) + (uploadBlob.showData?.count ?? 0)
                                 let entry = SyncIndexEntry(
-                                    uniqueId: blob.uniqueId,
-                                    updatedAt: blob.timestamp,
+                                    uniqueId: uploadBlob.uniqueId,
+                                    updatedAt: uploadBlob.timestamp,
                                     checksum: checksum,
                                     isDeleted: false,
-                                    group: blob.group,
-                                    type: blob.pasteboardType,
-                                    tag: blob.tag,
+                                    group: uploadBlob.group,
+                                    type: uploadBlob.pasteboardType,
+                                    tag: uploadBlob.tag,
                                     size: estimatedSize
                                 )
-                                return (blob.uniqueId, entry)
+                                return (uploadBlob.uniqueId, entry)
                             }
                         }
                         var results: [(String, SyncIndexEntry)] = []
@@ -574,8 +609,14 @@ final class SyncEngine: ObservableObject {
                         remoteIndex.entries[id] = entry
                         uploadedCount += 1
                     }
-                    syncProgress = "正在加密上传 (\(uploadedCount)/\(totalUploads))..."
-                    addLog("上传进度: \(uploadedCount)/\(totalUploads)")
+
+                    // UI 节流：每上传 25 条或每 400ms 刷新一次主线程，避免 2500+ 次连续通知引发主线程卡顿
+                    let now = ContinuousClock.now
+                    if uploadedCount == totalUploads || uploadedCount % 25 == 0 || now - lastUIUpdateTime >= .milliseconds(400) {
+                        lastUIUpdateTime = now
+                        syncProgress = "正在加密上传 (\(uploadedCount)/\(totalUploads))..."
+                        addLog("上传进度: \(uploadedCount)/\(totalUploads)")
+                    }
 
                     // 每上传 500 条进行检查点保存，保障大批量同步中途意外中断时无需从头重传
                     if uploadedCount > 0 && uploadedCount % 500 == 0 {
