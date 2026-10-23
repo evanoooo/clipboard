@@ -66,6 +66,7 @@ final class SyncEngine: ObservableObject {
     private var lastRemoteETag: String?
     private var isDirty = false
     private var isCancelled = false
+    private var dirtyGeneration: UInt64 = 0
     private var activeSyncTask: Task<SyncState, Never>?
     private var debounceTask: Task<Void, Never>?
     private var powerObservers: [NSObjectProtocol] = []
@@ -219,55 +220,14 @@ final class SyncEngine: ObservableObject {
     static func calculateDiff(
         localItems: [SyncItemBlob],
         remoteIndex: SyncIndex,
-        onlySyncPinned: Bool = false
+        onlySyncPinned: Bool = false,
+        pendingDeletions: Set<String> = []
     ) -> SyncDiffResult {
-        var toUpload: [SyncItemBlob] = []
-        var toDownload: [String] = []
-        var toDeleteLocal: [String] = []
-        var toDeleteRemote: [String] = []
-
-        var localMap: [String: SyncItemBlob] = [:]
-        for item in localItems {
-            localMap[item.uniqueId] = item
-        }
-
-        var handledRemoteKeys = Set<String>()
-
-        // 1. 遍历远端索引项
-        for (uniqueId, remoteEntry) in remoteIndex.entries {
-            handledRemoteKeys.insert(uniqueId)
-
-            if onlySyncPinned && remoteEntry.group < 0 && !remoteEntry.isDeleted {
-                continue
-            }
-
-            if let local = localMap[uniqueId] {
-                if remoteEntry.isDeleted {
-                    toDeleteLocal.append(uniqueId)
-                } else if remoteEntry.updatedAt > local.timestamp {
-                    toDownload.append(uniqueId)
-                } else if local.timestamp > remoteEntry.updatedAt {
-                    toUpload.append(local)
-                }
-            } else {
-                if !remoteEntry.isDeleted {
-                    toDownload.append(uniqueId)
-                }
-            }
-        }
-
-        // 2. 遍历本地存在但远端索引完全缺失的记录
-        for (uniqueId, local) in localMap {
-            if !handledRemoteKeys.contains(uniqueId) {
-                toUpload.append(local)
-            }
-        }
-
-        return SyncDiffResult(
-            toDownload: toDownload,
-            toUpload: toUpload,
-            toDeleteLocal: toDeleteLocal,
-            toDeleteRemote: toDeleteRemote
+        SyncDiffEngine.calculateDiff(
+            localItems: localItems,
+            remoteIndex: remoteIndex,
+            onlySyncPinned: onlySyncPinned,
+            pendingDeletions: pendingDeletions
         )
     }
 
@@ -322,6 +282,7 @@ final class SyncEngine: ObservableObject {
     func markDirtyAndSchedule() {
         guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
         isDirty = true
+        dirtyGeneration &+= 1
         debounceTask?.cancel()
 
         let isPowerSaving = ProcessInfo.processInfo.isLowPowerModeEnabled
@@ -595,6 +556,7 @@ final class SyncEngine: ObservableObject {
         }
         guard currentState != .syncing else { return currentState }
         isCancelled = false
+        let syncStartGeneration = self.dirtyGeneration
         currentState = .syncing
         syncProgress = "准备连接服务器..."
         addLog("====== 开始增量同步流程 ======")
@@ -743,7 +705,13 @@ final class SyncEngine: ObservableObject {
             let localBlobs = await fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
             addLog("本地 SQLite 扫描完成: 共有 \(localBlobs.count) 条待比对记录 (仅同步收藏: \(onlySyncPinned))")
 
-            let diff = Self.calculateDiff(localItems: localBlobs, remoteIndex: remoteIndex, onlySyncPinned: onlySyncPinned)
+            let pendingDeletions = SyncPendingDeletionsStore.shared.getAllDeletions()
+            let diff = Self.calculateDiff(
+                localItems: localBlobs,
+                remoteIndex: remoteIndex,
+                onlySyncPinned: onlySyncPinned,
+                pendingDeletions: pendingDeletions
+            )
             addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理本地 \(diff.toDeleteLocal.count) 条, 待清理远端 \(diff.toDeleteRemote.count) 条")
 
             // 8. 受控滑动窗口并发流水线：下载需拉取条目 (限制并发为 3)
@@ -977,6 +945,10 @@ final class SyncEngine: ObservableObject {
                 )
             }
 
+            if !diff.toDeleteRemote.isEmpty {
+                SyncPendingDeletionsStore.shared.clear(uniqueIds: diff.toDeleteRemote)
+            }
+
             // 10.1 自动修剪 30 天超期墓碑（保持云端索引清单极简轻量，控制内存与网络传输）
             let prunedCount = remoteIndex.pruneExpiredTombstones()
             if prunedCount > 0 {
@@ -1014,7 +986,12 @@ final class SyncEngine: ObservableObject {
             try await client.upload(data: encUpdatedIndex, to: indexPath)
 
             self.lastRemoteETag = try? await client.getETag(path: indexPath)
-            self.isDirty = false
+            if self.dirtyGeneration == syncStartGeneration {
+                self.isDirty = false
+            } else {
+                self.isDirty = true
+                self.markDirtyAndSchedule()
+            }
 
             // 统计并缓存资产看板
             let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)

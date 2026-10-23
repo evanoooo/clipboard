@@ -12,12 +12,17 @@ enum SyncDiffEngine: Sendable {
     static func calculateDiff(
         localItems: [SyncItemBlob],
         remoteIndex: SyncIndex,
-        onlySyncPinned: Bool = false
+        onlySyncPinned: Bool = false,
+        pendingDeletions: Set<String> = []
     ) -> SyncDiffResult {
         var diff = SyncDiffResult()
         var localMap = [String: SyncItemBlob]()
 
         for item in localItems {
+            // 若本地处于待同步删除队列，严格排除出待上传清单
+            if pendingDeletions.contains(item.uniqueId) {
+                continue
+            }
             // 若开启“仅同步收藏/分组”，则过滤掉普通流水 (group == -1)
             if onlySyncPinned && item.group == -1 {
                 continue
@@ -28,6 +33,14 @@ enum SyncDiffEngine: Sendable {
         // 1. 遍历远端索引项
         for (id, remoteEntry) in remoteIndex.entries {
             if onlySyncPinned && remoteEntry.group == -1 {
+                continue
+            }
+
+            // 优先检查本地是否主动删除了该条目：若本地已删除且远端仍存活，加入待删除远端队列
+            if pendingDeletions.contains(id) {
+                if !remoteEntry.isDeleted {
+                    diff.toDeleteRemote.append(id)
+                }
                 continue
             }
 

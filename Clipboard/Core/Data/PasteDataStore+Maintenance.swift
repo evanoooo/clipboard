@@ -47,6 +47,10 @@ extension PasteDataStore {
         let deletedIds = Set(items.compactMap(\.id))
         guard !deletedIds.isEmpty else { return }
 
+        let uids = items.map(\.uniqueId)
+        SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uids)
+        SyncEngine.shared.markDirtyAndSchedule()
+
         if recordUndo {
             let snapshots = items.compactMap { ClipSnapshot(model: $0) }
             ClipUndoStore.shared.push(.deleted(snapshots))
@@ -116,6 +120,9 @@ extension PasteDataStore {
         case let .deleted(snapshots):
             // 恢复在单个事务中执行：要么全部成功，要么全部回滚。
             let restored = await sqlManager.restore(snapshots)
+            let restoredUids = snapshots.filter { restored.contains($0.id) }.map(\.uniqueId)
+            SyncPendingDeletionsStore.shared.removeDeletions(uniqueIds: restoredUids)
+            SyncEngine.shared.markDirtyAndSchedule()
             return UndoOutcome(
                 restoredIds: restored,
                 failedAction: restored.isEmpty ? action : nil

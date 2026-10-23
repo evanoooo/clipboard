@@ -303,3 +303,54 @@ nonisolated struct SyncDiffResult: Sendable {
     /// 本地已从收藏中移除，远端需标记为删除的 uniqueId 清单
     var toDeleteRemote: [String] = []
 }
+
+
+// MARK: - 本地待同步删除存储（保障双端删除一致性，杜绝删除复活）
+
+final class SyncPendingDeletionsStore: @unchecked Sendable {
+    static let shared = SyncPendingDeletionsStore()
+
+    private let queue = DispatchQueue(label: "com.crown.clipboard.sync.deletions", attributes: .concurrent)
+    private var deletedIds: Set<String> = []
+    private let storageKey = "sync_pending_deleted_unique_ids"
+
+    private init() {
+        if let array = UserDefaults.standard.stringArray(forKey: storageKey) {
+            deletedIds = Set(array)
+        }
+    }
+
+    func recordDeletions(uniqueIds: [String]) {
+        guard !uniqueIds.isEmpty else { return }
+        queue.async(flags: .barrier) {
+            self.deletedIds.formUnion(uniqueIds)
+            self.persist()
+        }
+    }
+
+    func removeDeletions(uniqueIds: [String]) {
+        guard !uniqueIds.isEmpty else { return }
+        queue.async(flags: .barrier) {
+            self.deletedIds.subtract(uniqueIds)
+            self.persist()
+        }
+    }
+
+    func getAllDeletions() -> Set<String> {
+        queue.sync {
+            deletedIds
+        }
+    }
+
+    func clear(uniqueIds: [String]) {
+        guard !uniqueIds.isEmpty else { return }
+        queue.async(flags: .barrier) {
+            self.deletedIds.subtract(uniqueIds)
+            self.persist()
+        }
+    }
+
+    private func persist() {
+        UserDefaults.standard.set(Array(deletedIds), forKey: storageKey)
+    }
+}

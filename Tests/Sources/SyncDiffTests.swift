@@ -96,6 +96,20 @@ enum SyncDiffTests {
         runner.assertEqual(diff7.toDownload.count, 1, "Should only download 1 pinned item")
         runner.assertEqual(diff7.toDownload.first, "id-pinned-remote", "Only pinned should be downloaded")
 
+        // 8. Pending Local Deletions -> ToDeleteRemote (No Resurrection)
+        var remoteIndex8 = SyncIndex()
+        remoteIndex8.entries["id-deleted-local"] = SyncIndexEntry(uniqueId: "id-deleted-local", updatedAt: 2000, checksum: checksum1, isDeleted: false, group: -1)
+        let diff8 = SyncDiffEngine.calculateDiff(
+            localItems: [],
+            remoteIndex: remoteIndex8,
+            onlySyncPinned: false,
+            pendingDeletions: ["id-deleted-local"]
+        )
+        runner.assertEqual(diff8.toDeleteRemote.count, 1, "Locally deleted item must be queued for remote tombstone")
+        runner.assertEqual(diff8.toDeleteRemote.first, "id-deleted-local", "Delete remote ID mismatch")
+        runner.assertEqual(diff8.toDownload.count, 0, "Locally deleted item must NOT be resurrected into download queue")
+        runner.assertEqual(diff8.toUpload.count, 0, "No uploads expected for deleted item")
+
         print("✓ SyncEngine Diff Calculation & LWW tests passed!")
     }
 }
