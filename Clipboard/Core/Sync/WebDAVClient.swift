@@ -126,6 +126,14 @@ actor WebDAVClient {
                     throw WebDAVError.unexpectedResponse
                 }
                 if (200...299).contains(http.statusCode) { return }
+                // 遇到 409 Conflict 或 404 Not Found 时，自愈创建父级分片目录并重试
+                if (http.statusCode == 409 || http.statusCode == 404) && attempts < 3 {
+                    let parent = (path as NSString).deletingLastPathComponent
+                    if !parent.isEmpty && parent != "/" && parent != "." {
+                        try? await makeDirectory(path: parent)
+                        continue
+                    }
+                }
                 if http.statusCode == 401 { throw WebDAVError.unauthorized }
                 throw WebDAVError.serverError(code: http.statusCode)
             } catch {

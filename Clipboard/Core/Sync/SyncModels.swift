@@ -178,6 +178,21 @@ nonisolated struct SyncIndex: Codable, Sendable {
     }
 }
 
+// MARK: - 云端路径映射与 Git 风格分片规范
+
+extension SyncIndex {
+    /// Git 风格 2 字符前缀分片子目录路径 (如 ClipboardSync/items/00/0007e2a8....enc)
+    public nonisolated static func shardedItemPath(for uniqueId: String) -> String {
+        let prefix = uniqueId.count >= 2 ? String(uniqueId.prefix(2)) : "misc"
+        return "ClipboardSync/items/\(prefix)/\(uniqueId).enc"
+    }
+
+    /// 历史平铺单目录路径 (向下兼容已上传的条目)
+    public nonisolated static func legacyItemPath(for uniqueId: String) -> String {
+        "ClipboardSync/items/\(uniqueId).enc"
+    }
+}
+
 // MARK: - 单条完整数据实体（存放于云端 items/<uniqueId>.enc）
 
 nonisolated struct SyncItemBlob: Codable, Equatable, Sendable {

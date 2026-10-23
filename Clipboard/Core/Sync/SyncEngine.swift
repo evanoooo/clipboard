@@ -133,6 +133,8 @@ final class SyncEngine: ObservableObject {
 
 
 
+
+
     // MARK: - 从 SQLite 全量加载待同步数据（彻底脱离 UI 分页 50 条限制）
 
     private func fetchLocalBlobsForSync(onlySyncPinned: Bool) async -> [SyncItemBlob] {
@@ -148,7 +150,7 @@ final class SyncEngine: ObservableObject {
         let rows = await PasteReadStore.shared.search(
             filter: filter,
             select: sel,
-            limit: onlySyncPinned ? nil : 5000
+            limit: nil
         )
 
         return rows.compactMap { row in
@@ -335,7 +337,14 @@ final class SyncEngine: ObservableObject {
                 let downloadedModels = try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
                     for id in chunk {
                         group.addTask {
-                            guard let encData = try? await client.download(from: "ClipboardSync/items/\(id).enc"),
+                            let sharded = SyncIndex.shardedItemPath(for: id)
+                            let legacy = SyncIndex.legacyItemPath(for: id)
+                            let encData: Data? = if let d = try? await client.download(from: sharded) {
+                                d
+                            } else {
+                                try? await client.download(from: legacy)
+                            }
+                            guard let encData,
                                   let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                   let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
                                 return nil
@@ -479,7 +488,14 @@ final class SyncEngine: ObservableObject {
                     let models = try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
                         for id in chunk {
                             group.addTask {
-                                guard let encData = try? await client.download(from: "ClipboardSync/items/\(id).enc"),
+                                let sharded = SyncIndex.shardedItemPath(for: id)
+                                let legacy = SyncIndex.legacyItemPath(for: id)
+                                let encData: Data? = if let d = try? await client.download(from: sharded) {
+                                    d
+                                } else {
+                                    try? await client.download(from: legacy)
+                                }
+                                guard let encData,
                                       let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                       let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
                                     return nil
@@ -503,11 +519,12 @@ final class SyncEngine: ObservableObject {
                 await PasteDataStore.main.reloadHistory()
             }
 
-            // 9. 受控并发传输管线：加密上传本地条目 (限制并发为 3，消除跨洋高延时网络下的连接拥塞与超时)
+            // 9. 受控并发传输管线：加密上传本地条目 (限制并发为 3，前缀分片存储并支持检查点保存)
             if !diff.toUpload.isEmpty {
                 let maxConcurrency = 3
                 var uploadedCount = 0
                 let totalUploads = diff.toUpload.count
+                var ensuredDirectories = Set<String>()
 
                 for chunk in diff.toUpload.chunked(into: maxConcurrency) {
                     if Task.isCancelled {
@@ -518,12 +535,19 @@ final class SyncEngine: ObservableObject {
                     }
                     let chunkResults = try await withThrowingTaskGroup(of: (String, SyncIndexEntry)?.self) { group in
                         for blob in chunk {
+                            let prefix = blob.uniqueId.count >= 2 ? String(blob.uniqueId.prefix(2)) : "misc"
+                            let dir = "ClipboardSync/items/\(prefix)"
+                            if !ensuredDirectories.contains(dir) {
+                                try? await client.makeDirectory(path: dir)
+                                ensuredDirectories.insert(dir)
+                            }
                             group.addTask {
                                 guard let rawData = try? JSONEncoder().encode(blob),
                                       let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
                                     return nil
                                 }
-                                try await client.upload(data: encData, to: "ClipboardSync/items/\(blob.uniqueId).enc")
+                                let targetPath = SyncIndex.shardedItemPath(for: blob.uniqueId)
+                                try await client.upload(data: encData, to: targetPath)
                                 let checksum = SyncCryptoEngine.checksum(for: blob.payloadData ?? Data())
                                 let estimatedSize = (blob.payloadData?.count ?? 0) + (blob.showData?.count ?? 0)
                                 let entry = SyncIndexEntry(
@@ -552,12 +576,23 @@ final class SyncEngine: ObservableObject {
                     }
                     syncProgress = "正在加密上传 (\(uploadedCount)/\(totalUploads))..."
                     addLog("上传进度: \(uploadedCount)/\(totalUploads)")
+
+                    // 每上传 500 条进行检查点保存，保障大批量同步中途意外中断时无需从头重传
+                    if uploadedCount > 0 && uploadedCount % 500 == 0 {
+                        remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
+                        if let updatedIndexData = try? JSONEncoder().encode(remoteIndex),
+                           let encUpdatedIndex = try? SyncCryptoEngine.encrypt(data: updatedIndexData, using: masterKey) {
+                            try? await client.upload(data: encUpdatedIndex, to: indexPath)
+                            addLog("已保存阶段性同步索引清单 (\(uploadedCount)/\(totalUploads))")
+                        }
+                    }
                 }
             }
 
             // 10. 远端删除实体文件并写入墓碑
             for id in diff.toDeleteRemote {
-                try? await client.delete(path: "ClipboardSync/items/\(id).enc")
+                try? await client.delete(path: SyncIndex.shardedItemPath(for: id))
+                try? await client.delete(path: SyncIndex.legacyItemPath(for: id))
                 remoteIndex.entries[id] = SyncIndexEntry(
                     uniqueId: id,
                     updatedAt: Int64(Date().timeIntervalSince1970 * 1000),

@@ -164,6 +164,25 @@ enum SyncModelTests {
             runner.assertTrue(false, "SyncSummary encode/decode failed: \(error)")
         }
 
+        // Sharded & Legacy Path Resolution
+        let sha256Id = "0007e2a89e9e2d596ffeeb13823dc7d24dfb94070b98c7c5b0dfceba03bb1828"
+        runner.assertEqual(
+            SyncIndex.shardedItemPath(for: sha256Id),
+            "ClipboardSync/items/00/0007e2a89e9e2d596ffeeb13823dc7d24dfb94070b98c7c5b0dfceba03bb1828.enc",
+            "Sharded path should use first 2 chars as folder"
+        )
+        runner.assertEqual(
+            SyncIndex.legacyItemPath(for: sha256Id),
+            "ClipboardSync/items/0007e2a89e9e2d596ffeeb13823dc7d24dfb94070b98c7c5b0dfceba03bb1828.enc",
+            "Legacy path should remain flat"
+        )
+        let shortId = "a"
+        runner.assertEqual(
+            SyncIndex.shardedItemPath(for: shortId),
+            "ClipboardSync/items/misc/a.enc",
+            "Short ID should fallback to misc folder"
+        )
+
         print("✓ Sync Models, Summary & Index Serialization tests passed!")
     }
 }
