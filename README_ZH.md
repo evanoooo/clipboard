@@ -7,6 +7,10 @@
 
 <img src="examples.png">
 
+| 🔐 端到端加密同步 (E2EE WebDAV) | 📊 存储分析与容量配额 | 🔄 Paste 历史迁移与备份 |
+| :---: | :---: | :---: |
+| <img src="docs/images/sync_settings.png" width="100%" alt="端到端加密同步" /> | <img src="docs/images/storage_dashboard.png" width="100%" alt="存储分析与配额" /> | <img src="docs/images/paste_migration.png" width="100%" alt="Paste 数据迁移" /> |
+
 ## 📥 下载与安装
 
 下载最新版本发布包：[Releases](https://github.com/evanoooo/clipboard/releases/latest)

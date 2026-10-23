@@ -32,6 +32,10 @@ Paste.app 采用 Apple Core Data（底层为 SQLite）存储数据，不同历�
 
 ### 方式一：应用内原生一键迁移（推荐，v2.4.0+ 支持，带 Beta 标识）
 
+<p align="center">
+  <img src="images/paste_migration.png" width="520" alt="Paste.app 迁移历史记录设置入口" />
+</p>
+
 自 **v2.4.0** 版本起，Clipboard 内置了原生安全的 Paste 数据迁移弹窗：
 
 1. 打开 **Clipboard 设置** -> **存储**；

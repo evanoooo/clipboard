@@ -7,6 +7,10 @@
 
 <img src="examples.png">
 
+| 🔐 E2EE Cloud Sync (WebDAV) | 📊 Storage Analytics & Quota | 🔄 Paste Migration & Backup |
+| :---: | :---: | :---: |
+| <img src="docs/images/sync_settings.png" width="100%" alt="E2EE Cloud Sync" /> | <img src="docs/images/storage_dashboard.png" width="100%" alt="Storage Dashboard" /> | <img src="docs/images/paste_migration.png" width="100%" alt="Paste Migration" /> |
+
 ## 📥 Download
 
 Download the latest version from [Releases](https://github.com/evanoooo/clipboard/releases/latest)
