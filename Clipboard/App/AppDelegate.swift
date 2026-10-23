@@ -228,9 +228,16 @@ extension AppDelegate: SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
 
     nonisolated func updater(_: SPUUpdater, didAbortWithError error: Error) {
         log.error("Sparkle 更新检查终止: \(error.localizedDescription) (\(error))")
+        let nsError = error as NSError
         let desc = error.localizedDescription.lowercased()
         Task { @MainActor in
-            if desc.contains("no valid update") || desc.contains("empty") || desc.contains("not found") {
+            // SUSparkleErrorDomain Code 1001 是 SUNoUpdateError（当前使用的就是最新版）
+            if (nsError.domain == "SUSparkleErrorDomain" && nsError.code == 1001) ||
+                error.localizedDescription.contains("最新版") ||
+                desc.contains("no valid update") ||
+                desc.contains("empty") ||
+                desc.contains("up to date") ||
+                desc.contains("not found") {
                 UpdateManager.shared.setUpToDate()
             } else {
                 UpdateManager.shared.setFailed(message: error.localizedDescription)
