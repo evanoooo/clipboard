@@ -47,17 +47,28 @@ def main():
                 length="{enc['length']}"
                 type="application/octet-stream" />\n"""
 
+    if version == "2.4.0":
+        release_notes = """## Version 2.4.0
+
+- 新增 Paste.app 剪贴板历史数据一键迁移功能 (Beta)；
+- 支持自动扫描与手动选取 Paste 本地数据库，全版本兼容（LZFSE / Raw Deflate / bplist / 外部大文件）；
+- 严格基于 SHA-256 指纹智能去重，自动保护已有分组、标签与别名；
+- 采用真实时间线重序算法，历史记录无缝融入而不干扰最新记录；
+- 迁移修改前自动创建本地完整数据库快照备份，安全零风险。"""
+    else:
+        release_notes = f"""## Version {version}
+
+- 架构增强与底层数据增量同步优化；
+- Sparkle 2 自动更新与独立 Ed25519 签名体系；
+- 独立提供 Apple Silicon (arm64)、Intel (x86_64) 与 Universal 原生架构安装包；
+- 现代化标准化 DMG 与 ZIP 双格式制品分发。"""
+
     item_xml = f"""        <!-- Version {version} -->
         <item>
             <title>Version {version}</title>
             <description sparkle:format="markdown">
                 <![CDATA[
-## Version {version}
-
-- 架构增强与底层数据增量同步优化；
-- Sparkle 2 自动更新与独立 Ed25519 签名体系；
-- 独立提供 Apple Silicon (arm64)、Intel (x86_64) 与 Universal 原生架构安装包；
-- 现代化标准化 DMG 与 ZIP 双格式制品分发。
+{release_notes}
 ]]>
             </description>
             <pubDate>{pubdate}</pubDate>

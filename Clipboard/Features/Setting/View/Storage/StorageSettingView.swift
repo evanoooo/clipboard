@@ -19,6 +19,7 @@ struct StorageSettingView: View {
     @State private var isImporting = false
     @State private var isVacuuming = false
     @State private var showInspector = false
+    @State private var showPasteMigration = false
     @State private var showAlert = false
     @State private var alertTitle = ""
     @State private var alertMessage = ""
@@ -283,6 +284,37 @@ struct StorageSettingView: View {
                     ) {
                         importDatabase()
                     }
+
+                    Divider()
+
+                    HStack(alignment: .center, spacing: Const.space12) {
+                        VStack(alignment: .leading, spacing: Const.space4) {
+                            HStack(spacing: Const.space8) {
+                                Text("从 Paste.app 迁移历史记录")
+                                    .font(.callout)
+
+                                Text(verbatim: "Beta")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+
+                            Text("智能扫描并导入 Paste 本地历史数据库，自动保留来源应用、分类与时间线，支持严格防重。")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        SystemButton(title: "开始导入") {
+                            showPasteMigration = true
+                        }
+                    }
+                    .padding(.vertical, Const.space12)
                 }
                 .padding(.horizontal, Const.space16)
                 .settingsStyle()
@@ -409,6 +441,17 @@ struct StorageSettingView: View {
         }
         .sheet(isPresented: $showInspector) {
             StorageInspectorSheet()
+        }
+        .sheet(isPresented: $showPasteMigration) {
+            PasteMigrationSheet()
+        }
+        .onChange(of: showPasteMigration) { _, isPresented in
+            if !isPresented {
+                Task {
+                    totalCount = await PasteSQLManager.manager.getTotalCount()
+                    await storageService.refreshDiskUsage()
+                }
+            }
         }
         .alert(alertTitle, isPresented: $showAlert) {
             Button(.commonConfirm, role: .cancel) {}
