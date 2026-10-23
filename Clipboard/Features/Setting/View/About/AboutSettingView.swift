@@ -20,7 +20,7 @@ struct AboutSettingView: View {
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-            as? String ?? "2.4.0"
+            as? String ?? "2.4.1"
     }
 
     private var buildNumber: String {

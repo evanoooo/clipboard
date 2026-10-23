@@ -38,7 +38,13 @@ def main():
 
     pubdate = formatdate(timeval=None, localtime=False, usegmt=True)
 
-    if version == "2.4.0":
+    if version == "2.4.1":
+        release_notes = """## Version 2.4.1
+
+- 完善文档演示体系与多模块视觉画廊；
+- 优化多架构打包重签名流水线，确保 Sparkle 升级完全自洽无阻；
+- 持续增强 Paste.app 历史数据迁移 (Beta) 健壮性与去重排序算法。"""
+    elif version == "2.4.0":
         release_notes = """## Version 2.4.0
 
 - 新增 Paste.app 剪贴板历史数据一键迁移功能 (Beta)；
