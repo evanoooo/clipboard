@@ -378,43 +378,80 @@ extension PasteDataStore {
 
     func clearAllData() {
         guard !clearingHistory.value else { return }
-        let alert = NSAlert.appAlert()
-        alert.informativeText = String(localized: .clearDataMessage)
-        alert.addButton(withTitle: String(localized: .commonConfirm))
-        alert.addButton(withTitle: String(localized: .commonCancel))
-        let response = alert.runModal()
+        Task { @MainActor in
+            let (normalCount, pinnedCount) = await sqlManager.getHistoryStats()
+            let alert = NSAlert.appAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: .clearHistoryAlertTitle)
 
-        if response == .alertFirstButtonReturn {
+            if pinnedCount > 0 {
+                alert.informativeText = String(localized: .clearHistoryMessageWithPinned(normalCount, pinnedCount))
+            } else {
+                alert.informativeText = String(localized: .clearHistoryMessageNormalOnly(normalCount))
+            }
+
+            alert.addButton(withTitle: String(localized: .commonCancel))
+            let deleteButton = alert.addButton(withTitle: String(localized: .clearHistoryButton))
+            deleteButton.hasDestructiveAction = true
+
+            var checkbox: NSButton?
+            if pinnedCount > 0 {
+                let cb = NSButton(checkboxWithTitle: String(localized: .clearHistoryIncludePinned), target: nil, action: nil)
+                cb.state = .off
+                cb.frame = NSRect(x: 0, y: 0, width: 340, height: 22)
+                alert.accessoryView = cb
+                checkbox = cb
+            }
+
+            let response: NSApplication.ModalResponse
+            if let window = SettingWindowController.shared.window, window.isVisible {
+                response = await alert.beginSheetModal(for: window)
+            } else {
+                response = alert.runModal()
+            }
+
+            guard response == .alertSecondButtonReturn else { return }
+
+            let includePinned = checkbox?.state == .on
             clearingHistory.send(true)
-            Task {
-                do {
-                    let reclaimed = try await sqlManager.clearHistory()
-                    ClipUndoStore.shared.removeAll()
+
+            do {
+                let reclaimed = try await sqlManager.clearHistory(includePinnedAndGrouped: includePinned)
+                ClipUndoStore.shared.removeAll()
+                if includePinned {
                     SourceAppCache.shared.replace([])
                     AppColorService.shared.clearColors()
                     CategoryChipStore.shared.clearUserCategories()
                     resetToDefault()
-                    clearingHistory.send(false)
-                    if reclaimed {
-                        showClearHistoryResult(String(localized: .clearHistorySuccess), style: .informational)
-                    } else {
-                        showClearHistoryResult(String(localized: .clearHistorySpaceFailed))
-                    }
-                } catch {
-                    clearingHistory.send(false)
-                    log.error("清空历史失败：\(error)")
-                    showClearHistoryResult(String(localized: .clearHistoryFailed))
+                } else {
+                    await reloadHistory()
                 }
+                clearingHistory.send(false)
+                if reclaimed {
+                    showClearHistoryResult(String(localized: .clearHistorySuccess), style: .informational)
+                } else {
+                    showClearHistoryResult(String(localized: .clearHistorySpaceFailed))
+                }
+            } catch {
+                clearingHistory.send(false)
+                log.error("清空历史失败：\(error)")
+                showClearHistoryResult(String(localized: .clearHistoryFailed))
             }
         }
     }
 
     private func showClearHistoryResult(_ message: String, style: NSAlert.Style = .warning) {
-        let alert = NSAlert.appAlert()
-        alert.alertStyle = style
-        alert.messageText = message
-        alert.addButton(withTitle: String(localized: .commonConfirm))
-        alert.runModal()
+        Task { @MainActor in
+            let alert = NSAlert.appAlert()
+            alert.alertStyle = style
+            alert.messageText = message
+            alert.addButton(withTitle: String(localized: .commonConfirm))
+            if let window = SettingWindowController.shared.window, window.isVisible {
+                _ = await alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
+            }
+        }
     }
 
     func updateDbItem(id: Int64, item: PasteboardModel) {

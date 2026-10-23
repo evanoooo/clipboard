@@ -6341,6 +6341,91 @@
           }
         }
       }
+    },
+    "clearHistoryAlertTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you sure you want to clear clipboard history?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定要清空剪贴板历史记录吗？"
+          }
+        }
+      }
+    },
+    "clearHistoryMessageWithPinned": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will permanently delete %lld history items. %lld pinned and grouped items will be preserved."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将删除 %lld 条历史流水。已收藏和分组的 %lld 条条目将被保留。"
+          }
+        }
+      }
+    },
+    "clearHistoryMessageNormalOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will permanently delete %lld history items. This action cannot be undone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将删除 %lld 条历史流水。清空后无法恢复。"
+          }
+        }
+      }
+    },
+    "clearHistoryButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear History"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空历史记录"
+          }
+        }
+      }
+    },
+    "clearHistoryIncludePinned": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also clear pinned and grouped items"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时清空已收藏和已分组的条目"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

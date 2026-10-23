@@ -25,8 +25,11 @@ protocol ClipboardRepositoryProtocol: Sendable {
     /// 撤销并恢复快照数据
     func restore(_ snapshots: [ClipSnapshot]) async -> [Int64]
 
-    /// 清空所有历史记录
-    func clearHistory() async throws -> Bool
+    /// 获取历史记录统计（未分组的普通流水数，已收藏/已分组的条目数）
+    func getHistoryStats() async -> (normalCount: Int, pinnedCount: Int)
+
+    /// 清空历史记录（可选是否包含已收藏与已分组的条目）
+    func clearHistory(includePinnedAndGrouped: Bool) async throws -> Bool
 
     /// 更新单条记录
     func update(id: Int64, item: PasteboardModel) async
@@ -42,4 +45,11 @@ protocol ClipboardRepositoryProtocol: Sendable {
 
     /// 更新记录标签
     func updateItemTag(id: Int64, expectedTag: String, newTag: String) async -> Bool
+}
+
+
+extension ClipboardRepositoryProtocol {
+    func clearHistory() async throws -> Bool {
+        try await clearHistory(includePinnedAndGrouped: false)
+    }
 }

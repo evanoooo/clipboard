@@ -112,6 +112,45 @@ enum CRUDOperationTests {
             let remainingTotal = try db.scalar(table.count)
             runner.assertEqual(remainingTotal, 4, "Total count should be 4 after deletion")
 
+            // 7. Clear History with Pinned Protection Logic
+            // Add a pinned/grouped item
+            let pinnedData = "pinned snippet".data(using: .utf8)!
+            _ = try db.run(table.insert(
+                Col.uniqueId <- "clip-pinned-1",
+                Col.type <- "public.utf8-plain-text",
+                Col.data <- pinnedData,
+                Col.showData <- pinnedData,
+                Col.timestamp <- 2000,
+                Col.sortOrder <- 10,
+                Col.appID <- 101,
+                Col.searchText <- "pinnedsnippet",
+                Col.length <- 14,
+                Col.group <- 1,
+                Col.alias <- "my_pin",
+                Col.aliasSearch <- "my_pin",
+                Col.hidden <- 0
+            ))
+
+            let normalCountBefore = try db.scalar(table.filter(Col.group == -1).count)
+            let pinnedCountBefore = try db.scalar(table.filter(Col.group != -1).count)
+            runner.assertEqual(pinnedCountBefore, 2, "Should have 2 pinned/grouped items (group=42 & group=1)")
+            runner.assertEqual(normalCountBefore, 3, "Should have 3 normal items")
+
+            // Simulate clearHistory(includePinnedAndGrouped: false)
+            let deletedNormal = try db.run(table.filter(Col.group == -1).delete())
+            runner.assertEqual(deletedNormal, 3, "Should delete exactly 3 normal history items")
+
+            let normalCountAfter = try db.scalar(table.filter(Col.group == -1).count)
+            let pinnedCountAfter = try db.scalar(table.filter(Col.group != -1).count)
+            runner.assertEqual(normalCountAfter, 0, "All normal history should be cleared")
+            runner.assertEqual(pinnedCountAfter, 2, "Pinned items must be preserved")
+
+            // Simulate clearHistory(includePinnedAndGrouped: true)
+            let deletedAll = try db.run(table.delete())
+            runner.assertEqual(deletedAll, 2, "Should delete the remaining 2 pinned items")
+            let totalAfterAll = try db.scalar(table.count)
+            runner.assertEqual(totalAfterAll, 0, "All records must be completely removed")
+
             print("✓ CRUD operations tests passed!")
         } catch {
             print("❌ CRUDOperationTests failed with error: \(error)")

@@ -172,15 +172,25 @@ extension PasteSQLManager {
         return restored
     }
 
-    /// 无挂起点，清空和空间整理期间同一 actor 上的数据库操作排队执行。
-    func clearHistory() throws -> Bool {
+    /// 清空历史记录：默认仅删除未分组的普通流水（group == -1），保护已收藏和已分组的资产；
+    /// 若 includePinnedAndGrouped 为 true，则彻底全量清空。
+    func clearHistory(includePinnedAndGrouped: Bool = false) throws -> Bool {
         guard let connection else { throw CocoaError(.fileWriteUnknown) }
         try connection.transaction(.immediate) {
-            try connection.run(table.delete())
-            try connection.run("DELETE FROM App")
+            if includePinnedAndGrouped {
+                try connection.run(table.delete())
+                try connection.run("DELETE FROM App")
+            } else {
+                try connection.run(table.filter(Col.group == -1).delete())
+                try connection.run("DELETE FROM App WHERE id NOT IN (SELECT app_id FROM Clip WHERE app_id IS NOT NULL)")
+            }
         }
-        apps.removeAll()
-        appIdentities.removeAll()
+        if includePinnedAndGrouped {
+            apps.removeAll()
+            appIdentities.removeAll()
+        } else {
+            Task { await self.refreshAppCache() }
+        }
         do {
             try connection.execute("VACUUM")
             let busy = try connection.scalar("PRAGMA wal_checkpoint(TRUNCATE)") as? Int64
