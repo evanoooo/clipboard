@@ -38,7 +38,17 @@ def main():
 
     pubdate = formatdate(timeval=None, localtime=False, usegmt=True)
 
-    if version == "2.4.2":
+    if version == "2.4.3":
+        release_notes = """## Version 2.4.3
+
+- 修复编辑窗口保存任务取消时状态锁死导致无法二次保存的问题；
+- 优化图片卡片内存占用，入库生成 300px 压缩缩略图，滚动卡片内存开销骤降 80% 以上；
+- 预编译代码高亮 166 个正则模式并完全下沉后台并发任务，彻底消除列表滚动掉帧；
+- 修复云端同步恢复长文本截断、增量更新字段丢失与本地删除被云端下回的数据一致性缺陷；
+- 建立 CancellableLoadable 强类型协议，消除列表滚动复用时孤儿任务泄露与野指针隐患；
+- SQLite 点查增加 SQLITE_TRANSIENT 指针安全与并发 busy timeout 保障；
+- 全面升级 Swift 6 并发安全架构，采用 OSAllocatedUnfairLock 替代旧式 GCD 并发屏障。"""
+    elif version == "2.4.2":
         release_notes = """## Version 2.4.2
 
 - 重构云端同步调度机制，新增「自动同步策略与频率」多档选择（关闭、实时变动15秒防抖、5分钟~6小时周期同步）；
