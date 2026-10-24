@@ -147,7 +147,8 @@ class HotKeyManager {
                     &hotKeyID
                 )
 
-                let manager = Unmanaged<HotKeyManager>.fromOpaque(userData!)
+                guard let userData else { return noErr }
+                let manager = Unmanaged<HotKeyManager>.fromOpaque(userData)
                     .takeUnretainedValue()
 
                 guard let reg = manager.registrationsByID[hotKeyID.id] else {

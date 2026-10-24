@@ -232,10 +232,9 @@ extension ClipMainViewController {
         updateSelectedItemBorder()
 
         if monitorToken == nil {
-            monitorToken = NSEvent.addLocalMonitorForEvents(
-                matching: .keyDown,
-                handler: keyDownEvent(_:)
-            )
+            monitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.keyDownEvent(event)
+            }
         }
 
         if flagsMonitorToken == nil {

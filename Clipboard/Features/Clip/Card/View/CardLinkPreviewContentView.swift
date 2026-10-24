@@ -312,7 +312,7 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents {
     }
 
     private static func loadImage(from provider: NSItemProvider?) async -> NSImage? {
-        guard let provider else { return nil }
+        guard let provider, provider.canLoadObject(ofClass: NSImage.self) else { return nil }
         return await withCheckedContinuation { continuation in
             provider.loadObject(ofClass: NSImage.self) { image, _ in
                 continuation.resume(returning: image as? NSImage)

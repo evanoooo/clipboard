@@ -92,10 +92,14 @@ enum QuickTransformService: Sendable {
             let prev = i > characters.startIndex ? characters[i - 1] : nil
             let next = i < characters.index(before: characters.endIndex) ? characters[i + 1] : nil
 
-            let isNewWord = ch.isUppercase && (
-                (prev != nil && !prev!.isUppercase) ||
-                (prev != nil && prev!.isUppercase && next != nil && !next!.isUppercase)
-            )
+            var isNewWord = false
+            if ch.isUppercase {
+                if let prev, !prev.isUppercase {
+                    isNewWord = true
+                } else if let prev, prev.isUppercase, let next, !next.isUppercase {
+                    isNewWord = true
+                }
+            }
 
             if isNewWord {
                 flush()

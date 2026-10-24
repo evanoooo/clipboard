@@ -410,8 +410,10 @@ private extension ChipScrollView {
                 btn.layer?.transform = CATransform3DIdentity
             }
         } completionHandler: { [weak self] in
-            button.layer?.zPosition = 0
-            self?.isReordering = false
+            Task { @MainActor [weak self] in
+                button.layer?.zPosition = 0
+                self?.isReordering = false
+            }
         }
     }
 }

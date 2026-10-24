@@ -40,7 +40,7 @@ final class WindowManager {
     private func scheduleIdleMemoryTrim() {
         idleTrimTask?.cancel()
         idleTrimTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 分钟闲置
+            try? await Task.sleep(for: .seconds(300)) // 5 分钟闲置
             guard !Task.isCancelled, !self.isVisible else { return }
             PasteDataStore.main.trimExcessMemory()
         }

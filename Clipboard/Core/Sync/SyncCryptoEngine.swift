@@ -41,8 +41,9 @@ nonisolated final class SyncCryptoEngine: Sendable {
     /// 生成安全的加密强伪随机 Salt
     static func generateSalt(length: Int = defaultSaltLength) -> Data {
         var salt = Data(count: length)
-        let result = salt.withUnsafeMutableBytes {
-            SecRandomCopyBytes(kSecRandomDefault, length, $0.baseAddress!)
+        let result = salt.withUnsafeMutableBytes { buffer -> Int32 in
+            guard let baseAddress = buffer.baseAddress else { return errSecParam }
+            return SecRandomCopyBytes(kSecRandomDefault, length, baseAddress)
         }
         if result != errSecSuccess {
             // 降级为系统随机数

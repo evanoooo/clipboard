@@ -109,7 +109,7 @@ struct MCPTools {
                 let canUseFTS = tokens.allSatisfy { $0.count >= 3 }
                 if canUseFTS {
                     let matchClauses = tokens.map { token in
-                        let escaped = token.replacingOccurrences(of: "\"", with: "\"\"")
+                        let escaped = token.replacing("\"", with: "\"\"")
                         return "\"\(escaped)\""
                     }
                     let matchString = matchClauses.joined(separator: " AND ")

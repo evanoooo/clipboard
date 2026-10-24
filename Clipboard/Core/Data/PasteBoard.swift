@@ -138,7 +138,9 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         pollTimer?.invalidate()
         currentPollInterval = interval
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            self?.performAdaptivePoll()
+            Task { @MainActor in
+                self?.performAdaptivePoll()
+            }
         }
         timer.tolerance = interval * 0.1
         RunLoop.main.add(timer, forMode: .common)

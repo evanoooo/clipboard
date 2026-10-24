@@ -209,18 +209,16 @@ actor PasteMigrationService {
                 let sourceAppPK = row[2] as? Int64 ?? -1
                 let appId = appIdMapping[sourceAppPK] ?? fallbackAppId
                 let title = row[4] as? String
-                guard let blob = row[5] as? Blob else {
-                    skippedCount += 1
-                    continue
+                let extracted: ExtractedClip? = autoreleasepool {
+                    guard let blob = row[5] as? Blob else { return nil }
+                    let blobData = Data(blob.bytes)
+                    guard let parsed = parsePastePayload(blob: blobData, externalDir: hasExternalDir ? externalDir : nil) else {
+                        return nil
+                    }
+                    return extractContent(from: parsed, title: title)
                 }
 
-                let blobData = Data(blob.bytes)
-                guard let parsed = parsePastePayload(blob: blobData, externalDir: hasExternalDir ? externalDir : nil) else {
-                    skippedCount += 1
-                    continue
-                }
-
-                guard let extracted = extractContent(from: parsed, title: title) else {
+                guard let extracted else {
                     skippedCount += 1
                     continue
                 }

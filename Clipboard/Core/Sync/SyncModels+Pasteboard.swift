@@ -32,7 +32,7 @@ extension SyncItemBlob {
             ""
         }
         return PasteboardModel(
-            pasteboardType: PasteboardType(rawValue: pasteboardType) ?? .string,
+            pasteboardType: PasteboardType(rawValue: pasteboardType),
             data: payloadData,
             showData: showData,
             timestamp: timestamp,

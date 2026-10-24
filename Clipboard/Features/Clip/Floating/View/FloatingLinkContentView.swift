@@ -119,7 +119,8 @@ final class FloatingLinkContentView: NSView, CancellableLoadable {
                 unsafeProvider.cancel()
             }
             let icon: NSImage? = await withCheckedContinuation { cont in
-                if let source = metadata.iconProvider ?? metadata.imageProvider {
+                if let source = metadata.iconProvider ?? metadata.imageProvider,
+                   source.canLoadObject(ofClass: NSImage.self) {
                     source.loadObject(ofClass: NSImage.self) { img, _ in
                         cont.resume(returning: img as? NSImage)
                     }
