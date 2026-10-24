@@ -306,8 +306,8 @@ nonisolated struct SyncDiffResult: Sendable {
 
 // MARK: - 本地待同步删除存储（保障双端删除一致性，杜绝删除复活）
 
-final class SyncPendingDeletionsStore: @unchecked Sendable {
-    static let shared = SyncPendingDeletionsStore()
+nonisolated final class SyncPendingDeletionsStore: @unchecked Sendable {
+    nonisolated static let shared = SyncPendingDeletionsStore()
 
     private let storageKey = "sync_pending_deleted_unique_ids"
     private let state: OSAllocatedUnfairLock<Set<String>>

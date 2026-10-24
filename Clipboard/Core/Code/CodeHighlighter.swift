@@ -8,6 +8,7 @@
 import AppKit
 
 /// 纯 Swift 实现的高性能词法高亮引擎
+@MainActor
 enum CodeHighlighter {
     /// 语法高亮的最大字符长度上限，防止超大型文件卡顿
     static let maxHighlightLength = 30_000
@@ -62,11 +63,6 @@ enum CodeHighlighter {
         return attributedString
     }
 
-    private struct SendableAttributedString: @unchecked Sendable {
-        let value: NSAttributedString
-    }
-
-    /// 异步后台执行语法高亮，避免超长代码在主线程引起微秒级掉帧
     /// 异步延迟分帧执行完整语法高亮，先让出主线程保证视图首帧满帧展现，再无缝平滑更新
     static func highlightAsync(
         _ text: String,
@@ -75,17 +71,14 @@ enum CodeHighlighter {
         keyword: String? = nil,
         limitLength: Int? = nil
     ) async -> NSAttributedString {
-        let sendable = await Task.detached(priority: .userInitiated) {
-            let result = highlight(
-                text,
-                language: language,
-                theme: theme,
-                keyword: keyword,
-                limitLength: limitLength
-            )
-            return SendableAttributedString(value: result)
-        }.value
-        return sendable.value
+        await Task.yield()
+        return highlight(
+            text,
+            language: language,
+            theme: theme,
+            keyword: keyword,
+            limitLength: limitLength
+        )
     }
 
     // MARK: - 词法扫描与应用

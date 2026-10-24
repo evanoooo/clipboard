@@ -8,7 +8,7 @@
 import Foundation
 import SQLite3
 
-private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+nonisolated(unsafe) private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 enum PasteDataPointReader {
     nonisolated static var databasePath: String {

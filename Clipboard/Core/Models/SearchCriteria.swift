@@ -66,14 +66,14 @@ enum DateFilterOption: String, CaseIterable, Equatable {
 // MARK: - SearchCriteria
 
 /// 搜索条件：关键词 + 顶栏分组（自定义 chip）+ 原始筛选条件
-struct SearchCriteria: Equatable {
+nonisolated struct SearchCriteria: Equatable, Sendable {
     var keyword: String
     var selectedTypes: Set<PasteModelType>
     var selectedAppIDs: Set<Int64>
     var selectedDateFilter: DateFilterOption?
     var selectedGroupIds: Set<Int>
 
-    static let empty = SearchCriteria(
+    nonisolated static let empty = SearchCriteria(
         keyword: "",
         selectedTypes: [],
         selectedAppIDs: [],
