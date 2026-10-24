@@ -62,6 +62,10 @@ enum CodeHighlighter {
         return attributedString
     }
 
+    private struct SendableAttributedString: @unchecked Sendable {
+        let value: NSAttributedString
+    }
+
     /// 异步后台执行语法高亮，避免超长代码在主线程引起微秒级掉帧
     /// 异步延迟分帧执行完整语法高亮，先让出主线程保证视图首帧满帧展现，再无缝平滑更新
     static func highlightAsync(
@@ -71,15 +75,17 @@ enum CodeHighlighter {
         keyword: String? = nil,
         limitLength: Int? = nil
     ) async -> NSAttributedString {
-        await Task.detached(priority: .userInitiated) {
-            highlight(
+        let sendable = await Task.detached(priority: .userInitiated) {
+            let result = highlight(
                 text,
                 language: language,
                 theme: theme,
                 keyword: keyword,
                 limitLength: limitLength
             )
+            return SendableAttributedString(value: result)
         }.value
+        return sendable.value
     }
 
     // MARK: - 词法扫描与应用

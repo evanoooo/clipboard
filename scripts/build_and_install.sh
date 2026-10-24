@@ -73,9 +73,9 @@ else
 fi
 
 # 2. Release 编译打包
-echo -e "${BLUE}[2/5] 正在构建 ${CONFIGURATION} 生产包 (xcodebuild)...${NC}"
+echo -e "${BLUE}[2/5] 正在构建 ${CONFIGURATION} 生产包 (xcodebuild, ENABLE_HARDENED_RUNTIME=NO)...${NC}"
 BUILD_LOG=$(mktemp /tmp/clipboard_build_XXXXXX)
-if xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" build > "$BUILD_LOG" 2>&1; then
+if xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" ENABLE_HARDENED_RUNTIME=NO build > "$BUILD_LOG" 2>&1; then
     echo -e "${GREEN}✓ Release 编译成功！${NC}"
 else
     echo -e "${RED}❌ 编译失败！日志详情如下:${NC}"
@@ -85,7 +85,7 @@ fi
 rm -f "$BUILD_LOG"
 
 # 解析构建产物路径
-BUILD_SETTINGS=$(xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" -showBuildSettings)
+BUILD_SETTINGS=$(xcodebuild -scheme "$SCHEME" -configuration "$CONFIGURATION" ENABLE_HARDENED_RUNTIME=NO -showBuildSettings)
 BUILD_DIR=$(set +o pipefail; echo "$BUILD_SETTINGS" | grep "CONFIGURATION_BUILD_DIR =" | head -n 1 | awk -F " = " '{print $2}')
 SOURCE_APP="${BUILD_DIR}/${SCHEME}.app"
 
@@ -97,7 +97,7 @@ fi
 # 同步一份到 release/ 目录供归档分发
 mkdir -p "$RELEASE_DIR"
 rm -rf "${RELEASE_DIR}/${SCHEME}.app"
-cp -R "$SOURCE_APP" "${RELEASE_DIR}/"
+ditto "$SOURCE_APP" "${RELEASE_DIR}/${SCHEME}.app"
 echo -e "${GREEN}✓ 产物已归档至 ${RELEASE_DIR}/${SCHEME}.app ($(du -sh "${RELEASE_DIR}/${SCHEME}.app" | cut -f1))${NC}"
 
 # 3. 退出正在运行中的旧进程
@@ -123,10 +123,11 @@ else
     echo -e "未发现运行中的进程，可直接覆盖。"
 fi
 
-# 4. 执行本地覆盖升级
-echo -e "${BLUE}[4/5] 正在安装覆盖到 ${TARGET_APP_PATH}...${NC}"
+# 4. 验证签名并执行本地覆盖升级
+echo -e "${BLUE}[4/5] 验证代码签名并安装覆盖到 ${TARGET_APP_PATH}...${NC}"
+codesign -dv --verbose=4 "${RELEASE_DIR}/${SCHEME}.app/Contents/MacOS/Clipboard" 2>&1 | grep "flags=" || true
 rm -rf "$TARGET_APP_PATH"
-cp -R "${RELEASE_DIR}/${SCHEME}.app" "/Applications/"
+ditto "${RELEASE_DIR}/${SCHEME}.app" "$TARGET_APP_PATH"
 xattr -cr "$TARGET_APP_PATH" 2>/dev/null || true
 echo -e "${GREEN}✓ 已成功覆盖至 ${TARGET_APP_PATH}${NC}"
 
