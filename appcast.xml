@@ -5,6 +5,61 @@
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
 
+        <!-- Version 2.4.3 (Apple Silicon) -->
+        <item>
+            <title>Version 2.4.3 (Apple Silicon)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.3
+
+- 修复编辑窗口保存任务取消时状态锁死导致无法二次保存的问题；
+- 优化图片卡片内存占用，入库生成 300px 压缩缩略图，滚动卡片内存开销骤降 80% 以上；
+- 预编译代码高亮 166 个正则模式并完全下沉后台并发任务，彻底消除列表滚动掉帧；
+- 修复云端同步恢复长文本截断、增量更新字段丢失与本地删除被云端下回的数据一致性缺陷；
+- 建立 CancellableLoadable 强类型协议，消除列表滚动复用时孤儿任务泄露与野指针隐患；
+- SQLite 点查增加 SQLITE_TRANSIENT 指针安全与并发 busy timeout 保障；
+- 全面升级 Swift 6 并发安全架构，采用 OSAllocatedUnfairLock 替代旧式 GCD 并发屏障。
+]]>
+            </description>
+            <pubDate>Sat, 24 Oct 2026 04:04:57 GMT</pubDate>
+            <sparkle:version>932</sparkle:version>
+            <sparkle:shortVersionString>2.4.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.3/Clipboard-2.4.3-arm64.zip"
+                sparkle:edSignature="6ukXdAuTrEEjNJ5vma3maZdTJhATvsMGZ1RdQcrpBb0dYZYdUIFHtgmDrtaahW0f7omD8ZLsDDC4cSyPdz7gDA=="
+                length="4488503"
+                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.4.3 (Intel) -->
+        <item>
+            <title>Version 2.4.3 (Intel)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.3
+
+- 修复编辑窗口保存任务取消时状态锁死导致无法二次保存的问题；
+- 优化图片卡片内存占用，入库生成 300px 压缩缩略图，滚动卡片内存开销骤降 80% 以上；
+- 预编译代码高亮 166 个正则模式并完全下沉后台并发任务，彻底消除列表滚动掉帧；
+- 修复云端同步恢复长文本截断、增量更新字段丢失与本地删除被云端下回的数据一致性缺陷；
+- 建立 CancellableLoadable 强类型协议，消除列表滚动复用时孤儿任务泄露与野指针隐患；
+- SQLite 点查增加 SQLITE_TRANSIENT 指针安全与并发 busy timeout 保障；
+- 全面升级 Swift 6 并发安全架构，采用 OSAllocatedUnfairLock 替代旧式 GCD 并发屏障。
+]]>
+            </description>
+            <pubDate>Sat, 24 Oct 2026 04:04:57 GMT</pubDate>
+            <sparkle:version>932</sparkle:version>
+            <sparkle:shortVersionString>2.4.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.3/Clipboard-2.4.3-x86_64.zip"
+                sparkle:edSignature="w758FIfXgILQFpBDn+At9dvbFVSeM7s2WjToDydDHYCO4CCzj7DyFcBa/Jkh0rv32rOnXIxj/TWU5bR1DtqjBA=="
+                length="4808495"
+                type="application/octet-stream" />
+        </item>
+
         <!-- Version 2.4.2 (Apple Silicon) -->
         <item>
             <title>Version 2.4.2 (Apple Silicon)</title>
