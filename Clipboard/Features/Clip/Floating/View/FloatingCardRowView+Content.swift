@@ -131,7 +131,7 @@ private final class FloatingColorContentView: NSView {
 
 // MARK: - FloatingImageContentView
 
-private final class FloatingImageContentView: NSView {
+private final class FloatingImageContentView: NSView, CancellableLoadable {
     private let imageView = NSView()
     private let placeholder = NSImageView()
     private var loadTask: Task<Void, Never>?

@@ -73,7 +73,7 @@ final class SearchField: NSView {
     // MARK: - Suggestion Window
 
     lazy var suggestionWindow = SearchSuggestionWindow()
-    var suggestionsWorkItem: DispatchWorkItem?
+    var suggestionsTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -288,16 +288,16 @@ final class SearchField: NSView {
     }
 
     func scheduleDebouncedSuggestions() {
-        suggestionsWorkItem?.cancel()
+        suggestionsTask?.cancel()
         if text.isEmpty {
             hideSuggestions()
             return
         }
-        let workItem = DispatchWorkItem { [weak self] in
+        suggestionsTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
             self?.updateSuggestions()
         }
-        suggestionsWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(120), execute: workItem)
     }
 
     private func updateCancelButtonVisibility() {

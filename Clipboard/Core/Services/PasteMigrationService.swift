@@ -96,9 +96,15 @@ actor PasteMigrationService {
         let backupDir = URL.documentsDirectory.appending(path: "Clip/AutoBackup")
         try FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
+        let timestamp = Date.now.formatted(
+            .iso8601
+                .year()
+                .month()
+                .day()
+                .dateSeparator(.omitted)
+                .time(includingFractionalSeconds: false)
+                .timeSeparator(.omitted)
+        )
         let backupURL = backupDir.appending(path: "Clip_AutoBackup_\(timestamp).sqlite3")
 
         let sourceDb = try Connection(sourcePath, readonly: true)

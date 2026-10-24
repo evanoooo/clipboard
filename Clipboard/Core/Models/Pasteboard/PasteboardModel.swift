@@ -202,6 +202,7 @@ final class PasteboardModel: Identifiable, Codable {
     func clearLoadedPayload() {
         _data = nil
         cachedThumbnail = nil
+        cachedLinkMetadata = nil
         thumbnailLoadTask?.cancel()
         thumbnailLoadTask = nil
     }

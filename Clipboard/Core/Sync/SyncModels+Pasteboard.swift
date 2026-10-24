@@ -24,14 +24,21 @@ extension SyncItemBlob {
     }
 
     func toPasteboardModel() -> PasteboardModel {
-        PasteboardModel(
+        let textSource: String = if let payloadData, let str = String(data: payloadData, encoding: .utf8), !str.isEmpty {
+            str
+        } else if let showData, let str = String(data: showData, encoding: .utf8) {
+            str
+        } else {
+            ""
+        }
+        return PasteboardModel(
             pasteboardType: PasteboardType(rawValue: pasteboardType) ?? .string,
             data: payloadData,
             showData: showData,
             timestamp: timestamp,
             appPath: "",
             appName: sourceAppName ?? "",
-            searchText: SearchTextNormalizer.normalize(showData.flatMap { String(data: $0, encoding: .utf8) } ?? ""),
+            searchText: SearchTextNormalizer.normalize(textSource),
             length: payloadData?.count ?? 0,
             group: group,
             tag: tag,

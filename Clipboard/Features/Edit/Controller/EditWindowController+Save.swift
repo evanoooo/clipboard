@@ -11,7 +11,7 @@ extension EditWindowController {
         let inserting = isNewItem
         saveTask = Task {
             defer {
-                if !Task.isCancelled { saveTask = nil }
+                saveTask = nil
             }
             guard !Task.isCancelled else { return }
             let prepared = await makePasteContent(editedContent)

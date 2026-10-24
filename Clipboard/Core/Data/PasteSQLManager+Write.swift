@@ -56,11 +56,16 @@ extension PasteSQLManager {
                         var updates: [Setter] = [
                             Col.timestamp <- r.timestamp,
                             Col.hidden <- 0,
-                            Col.sortOrder <- Col.nextSortOrder
+                            Col.sortOrder <- Col.nextSortOrder,
+                            Col.data <- r.data,
+                            Col.showData <- r.showData,
+                            Col.searchText <- r.searchText,
+                            Col.length <- r.length
                         ]
                         if r.group != -1, r.group != existingGroup {
                             updates.append(Col.group <- r.group)
                         }
+                        updates += Self.aliasSetters(r.alias)
                         try connection.run(table.filter(Col.id == existingId).update(updates))
                     } else {
                         let insert = table.insert(
@@ -178,6 +183,13 @@ extension PasteSQLManager {
     func delete(filter: Expression<Bool>) async {
         let query = table.filter(filter)
         do {
+            let uids = (try? connection?.prepare(query.select(Col.uniqueId)).map { $0[Col.uniqueId] }) ?? []
+            if !uids.isEmpty {
+                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uids)
+                Task { @MainActor in
+                    SyncEngine.shared.markDirtyAndSchedule()
+                }
+            }
             let count = try connection?.run(query.delete())
             await refreshAppCache()
             Log.database.info("删除条目成功，影响行数：\(count ?? 0)")
@@ -189,6 +201,12 @@ extension PasteSQLManager {
     func delete(id: Int64) async {
         let idFilter = table.filter(Col.id == id)
         do {
+            if let uid = try? connection?.pluck(idFilter.select(Col.uniqueId))?[Col.uniqueId] {
+                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [uid])
+                Task { @MainActor in
+                    SyncEngine.shared.markDirtyAndSchedule()
+                }
+            }
             try connection?.run(idFilter.delete())
             await refreshAppCache()
         } catch {

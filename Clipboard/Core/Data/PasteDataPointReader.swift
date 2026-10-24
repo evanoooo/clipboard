@@ -8,6 +8,8 @@
 import Foundation
 import SQLite3
 
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
 enum PasteDataPointReader {
     nonisolated static var databasePath: String {
         PasteSQLManager.databasePath
@@ -19,6 +21,7 @@ enum PasteDataPointReader {
         guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
             return nil
         }
+        sqlite3_busy_timeout(db, 5000)
         defer { sqlite3_close(db) }
 
         var stmt: OpaquePointer?
@@ -29,7 +32,7 @@ enum PasteDataPointReader {
         } else {
             let sql = "SELECT data FROM Clip WHERE unique_id = ? LIMIT 1"
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
-            sqlite3_bind_text(stmt, 1, (uniqueId as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, uniqueId, -1, SQLITE_TRANSIENT)
         }
         defer { sqlite3_finalize(stmt) }
 

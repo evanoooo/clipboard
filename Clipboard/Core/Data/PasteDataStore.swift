@@ -22,10 +22,10 @@ final class PasteDataStore {
     func trimExcessMemory() {
         guard !WindowManager.shared.isVisible else { return }
         if dataList.value.count > pageSize {
-            dataList.value = Array(dataList.value.prefix(pageSize))
             hasMoreData = true
             lastRequestedPage = 0
             pageIndex = 0
+            updateData(with: Array(dataList.value.prefix(pageSize)), changeType: .reset)
         }
         for model in dataList.value {
             model.cachedHighlightedCode = nil
@@ -551,6 +551,9 @@ extension PasteDataStore {
         let searchText = PasteboardModel.normalizeSearchText(rawText)
         model.updateSearchText(val: searchText)
         await sqlManager.update(id: id, item: model)
+        await MainActor.run {
+            SyncEngine.shared.markDirtyAndSchedule()
+        }
     }
 
     private func prepareApp(for model: PasteboardModel) async -> Bool {
@@ -722,6 +725,9 @@ extension PasteDataStore {
         pageIndex = max(0, (list.count - 1) / pageSize)
         lastRequestedPage = pageIndex
         updateData(with: list, changeType: .moveToFirst)
+        await MainActor.run {
+            SyncEngine.shared.markDirtyAndSchedule()
+        }
         return true
     }
 
@@ -729,6 +735,9 @@ extension PasteDataStore {
     @discardableResult
     func updateAlias(id: Int64, alias: String) async -> Bool {
         guard await sqlManager.updateItemAlias(id: id, alias: alias) else { return false }
+        await MainActor.run {
+            SyncEngine.shared.markDirtyAndSchedule()
+        }
 
         let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
         if let model = dataList.value.first(where: { $0.id == id }) {

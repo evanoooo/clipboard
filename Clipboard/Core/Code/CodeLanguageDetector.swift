@@ -13,11 +13,16 @@ import Foundation
 /// 普通特征按权重累计，低于阈值视为噪声，避免把普通文字、URL、
 /// 中英混排的便签误判成代码。
 nonisolated enum CodeLanguageDetector {
-    /// 一条判别信号；`caseSensitive` 用于必须区分大小写的场景（如 SQL 大写语句）
+    /// 一条判别信号；初始化时预编译正则表达式，避免每次检测重复编译
     private struct Signal: Sendable {
-        let pattern: String
+        let regex: NSRegularExpression?
         let weight: Int
-        var caseSensitive = false
+
+        init(pattern: String, weight: Int, caseSensitive: Bool = false) {
+            self.weight = weight
+            let options: NSRegularExpression.Options = caseSensitive ? [] : [.caseInsensitive]
+            self.regex = try? NSRegularExpression(pattern: pattern, options: options)
+        }
     }
 
     /// 判定阈值
@@ -67,8 +72,9 @@ nonisolated enum CodeLanguageDetector {
     // MARK: - Private
 
     private static func matches(_ signal: Signal, in text: String) -> Bool {
-        let options: NSString.CompareOptions = signal.caseSensitive ? [.regularExpression] : [.regularExpression, .caseInsensitive]
-        return text.range(of: signal.pattern, options: options) != nil
+        guard let regex = signal.regex else { return false }
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.firstMatch(in: text, options: [], range: fullRange) != nil
     }
 
     // swiftlint:disable:next cyclomatic_complexity

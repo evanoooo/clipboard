@@ -469,6 +469,9 @@ extension PasteDataStore {
 
     func updateItemGroupInDB(id: Int64, groupId: Int) async {
         await sqlManager.updateItemGroup(id: id, groupId: groupId)
+        await MainActor.run {
+            SyncEngine.shared.markDirtyAndSchedule()
+        }
     }
 
     func updateItemHidden(itemId: Int64, hidden: Bool) {
@@ -479,12 +482,18 @@ extension PasteDataStore {
 
         enqueueMutation { [sqlManager] in
             await sqlManager.updateItemHidden(id: itemId, hidden: hidden)
+            await MainActor.run {
+                SyncEngine.shared.markDirtyAndSchedule()
+            }
         }
     }
 
     func updateItemGroup(id: Int64, groupId: Int) {
         enqueueMutation { [sqlManager] in
             await sqlManager.updateItemGroup(id: id, groupId: groupId)
+            await MainActor.run {
+                SyncEngine.shared.markDirtyAndSchedule()
+            }
         }
     }
 

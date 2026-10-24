@@ -390,8 +390,8 @@ private extension ChipScrollView {
             if targetIndex != fromIndex {
                 _ = CategoryChipStore.shared.moveUserChip(fromIndex: fromIndex, toIndex: targetIndex)
             }
-            DispatchQueue.main.async {
-                self.isReordering = false
+            Task { @MainActor [weak self] in
+                self?.isReordering = false
             }
         }
     }

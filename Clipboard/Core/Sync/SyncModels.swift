@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - 远端云端索引清单中的单条元数据条目
 
@@ -76,9 +77,7 @@ nonisolated struct SyncSummary: Codable, Equatable, Sendable {
 
     var formattedLastUpdated: String {
         let date = Date(timeIntervalSince1970: Double(lastUpdated) / 1000.0)
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.string(from: date)
+        return date.formatted(date: .numeric, time: .standard)
     }
 
     var formattedLastSyncTime: String { formattedLastUpdated }
@@ -310,47 +309,42 @@ nonisolated struct SyncDiffResult: Sendable {
 final class SyncPendingDeletionsStore: @unchecked Sendable {
     static let shared = SyncPendingDeletionsStore()
 
-    private let queue = DispatchQueue(label: "com.crown.clipboard.sync.deletions", attributes: .concurrent)
-    private var deletedIds: Set<String> = []
     private let storageKey = "sync_pending_deleted_unique_ids"
+    private let state: OSAllocatedUnfairLock<Set<String>>
 
     private init() {
+        let initial: Set<String>
         if let array = UserDefaults.standard.stringArray(forKey: storageKey) {
-            deletedIds = Set(array)
+            initial = Set(array)
+        } else {
+            initial = []
         }
+        self.state = OSAllocatedUnfairLock(initialState: initial)
     }
 
     func recordDeletions(uniqueIds: [String]) {
         guard !uniqueIds.isEmpty else { return }
-        queue.async(flags: .barrier) {
-            self.deletedIds.formUnion(uniqueIds)
-            self.persist()
+        let current = state.withLock { ids -> [String] in
+            ids.formUnion(uniqueIds)
+            return Array(ids)
         }
+        UserDefaults.standard.set(current, forKey: storageKey)
     }
 
     func removeDeletions(uniqueIds: [String]) {
         guard !uniqueIds.isEmpty else { return }
-        queue.async(flags: .barrier) {
-            self.deletedIds.subtract(uniqueIds)
-            self.persist()
+        let current = state.withLock { ids -> [String] in
+            ids.subtract(uniqueIds)
+            return Array(ids)
         }
+        UserDefaults.standard.set(current, forKey: storageKey)
     }
 
     func getAllDeletions() -> Set<String> {
-        queue.sync {
-            deletedIds
-        }
+        state.withLock { $0 }
     }
 
     func clear(uniqueIds: [String]) {
-        guard !uniqueIds.isEmpty else { return }
-        queue.async(flags: .barrier) {
-            self.deletedIds.subtract(uniqueIds)
-            self.persist()
-        }
-    }
-
-    private func persist() {
-        UserDefaults.standard.set(Array(deletedIds), forKey: storageKey)
+        removeDeletions(uniqueIds: uniqueIds)
     }
 }

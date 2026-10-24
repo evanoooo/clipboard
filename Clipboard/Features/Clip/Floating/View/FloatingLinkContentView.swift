@@ -9,12 +9,17 @@ import SnapKit
 
 // MARK: - FloatingLinkContentView
 
-final class FloatingLinkContentView: NSView {
+final class FloatingLinkContentView: NSView, CancellableLoadable {
     private let iconView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let urlLabel = NSTextField(labelWithString: "")
     private var loadTask: Task<Void, Never>?
     private let displayMode: FloatingDisplayMode
+
+    func cancelLoad() {
+        loadTask?.cancel()
+        loadTask = nil
+    }
 
     init(model: PasteboardModel, keyword: String, displayMode: FloatingDisplayMode) {
         self.displayMode = displayMode

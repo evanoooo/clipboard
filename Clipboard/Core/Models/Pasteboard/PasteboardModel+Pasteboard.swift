@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ImageIO
 
 extension PasteboardModel {
     convenience init?(with pasteboard: NSPasteboard, sourceApp: NSRunningApplication? = nil) {
@@ -46,6 +47,8 @@ extension PasteboardModel {
             length = text.source.length
             showData = text.showData
             searchText = Self.normalizeSearchText(text.source.string)
+        } else if type.isImage(), let content {
+            showData = Self.generateImageThumbnailData(from: content, maxPixelSize: 300)
         }
 
         let calculatedTag = Self.calculateTag(type: type, content: content ?? Data())
@@ -75,6 +78,28 @@ extension PasteboardModel {
         let preview = text.length > 300
             ? text.attributedSubstring(from: NSRange(location: 0, length: 300)) : text
         return (text, preview.toData(with: type))
+    }
+
+    // MARK: - 缩略图生成
+
+    static func generateImageThumbnailData(from data: Data, maxPixelSize: CGFloat = 300) -> Data? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
+            return nil
+        }
+        let downsampleOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
+            return nil
+        }
+        let rep = NSBitmapImageRep(cgImage: cgImage)
+        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
+            ?? rep.representation(using: .png, properties: [:])
     }
 
     // MARK: - 从剪贴板提取文件路径

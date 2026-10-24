@@ -76,14 +76,8 @@ nonisolated struct DiagnosticLogEntry: Sendable, Identifiable {
     let line: Int
 
     var formattedTimestamp: String {
-        Self.dateFormatter.string(from: timestamp)
+        timestamp.formatted(.iso8601.year().month().day().time(includingFractionalSeconds: true))
     }
-
-    private static let dateFormatter: DateFormatter = {
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        return df
-    }()
 
     var formattedLine: String {
         "[\(formattedTimestamp)] [\(level.rawValue)] [\(category.rawValue)] [\(file):\(line)] \(message)"
@@ -365,7 +359,7 @@ final class AppLogger: Sendable {
     /// 打开访达定位日志目录
     nonisolated func openLogsDirectory() {
         let dir = URL.applicationSupportDirectory.appending(path: "com.crown.clipboard/logs")
-        DispatchQueue.main.async {
+        Task { @MainActor in
             NSWorkspace.shared.open(dir)
         }
     }

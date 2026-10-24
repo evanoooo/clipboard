@@ -208,7 +208,7 @@ extension PasteSQLManager {
     }
 
     /// 用户主动勾选批量删除选中的大体积条目
-    func deleteStorageItems(ids: [Int64]) -> Int64 {
+    func deleteStorageItems(ids: [Int64]) async -> Int64 {
         guard let connection, !ids.isEmpty else { return 0 }
         var totalFreedBytes: Int64 = 0
 
@@ -219,9 +219,26 @@ extension PasteSQLManager {
                 totalFreedBytes = (row[0] as? Int64) ?? 0
             }
 
+            let uidSql = "SELECT unique_id FROM Clip WHERE id IN (\(idList))"
+            var uids: [String] = []
+            if let uidStmt = try? connection.prepare(uidSql) {
+                for row in uidStmt {
+                    if let uid = row[0] as? String {
+                        uids.append(uid)
+                    }
+                }
+            }
+            if !uids.isEmpty {
+                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uids)
+                Task { @MainActor in
+                    SyncEngine.shared.markDirtyAndSchedule()
+                }
+            }
+
             try connection.transaction {
                 try connection.execute("DELETE FROM Clip WHERE id IN (\(idList))")
             }
+            await refreshAppCache()
         } catch {
             log.error("Failed to delete storage items: \(error)")
         }
@@ -284,7 +301,7 @@ extension PasteSQLManager {
     }
 
     /// 执行智能淘汰瘦身：安全删除符合老化条件的未收藏旧图，并自动整理碎片
-    func performAutoEviction(policy: SoftQuotaAgingPolicy, maxBytesToFree: Int64? = nil) -> Int64 {
+    func performAutoEviction(policy: SoftQuotaAgingPolicy, maxBytesToFree: Int64? = nil) async -> Int64 {
         guard let connection else { return 0 }
         let nowSec = Int64(Date().timeIntervalSince1970)
         let cutoffSec = nowSec - Int64(policy.days * 86400)
@@ -315,7 +332,7 @@ extension PasteSQLManager {
             }
 
             if !idsToDelete.isEmpty {
-                _ = deleteStorageItems(ids: idsToDelete)
+                _ = await deleteStorageItems(ids: idsToDelete)
                 _ = try? vacuumDatabase()
                 Log.storage.info("自动淘汰完成：已清理 \(idsToDelete.count) 项未收藏旧图，释放 \(totalBytesFreed) 字节，已执行 VACUUM 回收磁盘")
             }

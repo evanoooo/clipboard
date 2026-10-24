@@ -519,12 +519,12 @@ final class ChipButton: NSView, NSTextFieldDelegate {
             onReorderDragged?(self, translation.x)
         case .ended:
             onReorderDragEnded?(self)
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 self?.isReorderDragging = false
             }
         case .cancelled, .failed:
             onReorderDragCancelled?(self)
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 self?.isReorderDragging = false
             }
         default:

@@ -394,7 +394,8 @@ struct StorageSettingView: View {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(report, forType: .string)
                                 copiedReport = true
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .seconds(2))
                                     copiedReport = false
                                 }
                             }
@@ -690,7 +691,7 @@ struct StorageBreakdownBarView: View {
                     ForEach(proportions) { item in
                         let ratio = CGFloat(item.totalBytes) / CGFloat(totalBytes)
                         let width = max(barWidth * ratio, 6)
-                        let percentStr = String(format: "%.1f%%", (Double(item.totalBytes) / Double(totalBytes)) * 100)
+                        let percentStr = (Double(item.totalBytes) / Double(totalBytes)).formatted(.percent.precision(.fractionLength(1)))
 
                         RoundedRectangle(cornerRadius: 3)
                             .fill(

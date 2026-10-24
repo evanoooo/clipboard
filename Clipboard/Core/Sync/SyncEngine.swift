@@ -25,9 +25,8 @@ nonisolated enum SyncState: Sendable, Equatable {
         case .syncing: return "正在同步..."
         case let .success(time):
             let date = Date(timeIntervalSince1970: Double(time) / 1000.0)
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm:ss"
-            return "已同步 (\(formatter.string(from: date)))"
+            let timeText = date.formatted(date: .omitted, time: .standard)
+            return "已同步 (\(timeText))"
         case let .failed(msg): return "同步失败: \(msg)"
         }
     }
@@ -43,9 +42,7 @@ nonisolated struct SyncLogItem: Identifiable, Sendable {
 
     init(message: String, isError: Bool = false) {
         self.id = UUID()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        self.timestamp = formatter.string(from: Date())
+        self.timestamp = Date().formatted(date: .omitted, time: .standard)
         self.message = message
         self.isError = isError
     }
@@ -638,7 +635,7 @@ final class SyncEngine: ObservableObject {
             if !hasValidatedDirectoryStructure {
                 syncProgress = "验证云端目录结构..."
                 let (_, latency) = try await client.testConnection()
-                addLog(String(format: "服务器连通性正常，网络往返延迟: %.0f ms", latency))
+                addLog("服务器连通性正常，网络往返延迟: \(latency.formatted(.number.precision(.fractionLength(0)))) ms")
                 try await client.makeDirectory(path: "ClipboardSync")
                 try await client.makeDirectory(path: "ClipboardSync/items")
                 hasValidatedDirectoryStructure = true

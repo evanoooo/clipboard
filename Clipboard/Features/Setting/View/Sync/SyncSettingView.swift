@@ -583,7 +583,7 @@ struct SyncSettingView: View {
                 await MainActor.run {
                     self.isTesting = false
                     self.testSuccess = true
-                    self.testResult = String(format: "连接成功 (延时: %.0f ms)", latency)
+                    self.testResult = "连接成功 (延时: \(latency.formatted(.number.precision(.fractionLength(0)))) ms)"
                 }
             } catch {
                 await MainActor.run {

@@ -475,7 +475,7 @@ struct StorageItemPreviewView: View {
                                 .padding(Const.space12)
                         }
                         if isTruncated, let count = totalCharCount {
-                            let formattedCount = NumberFormatter.localizedString(from: NSNumber(value: count), number: .decimal)
+                            let formattedCount = count.formatted(.number)
                             HStack(spacing: Const.space6) {
                                 Image(systemName: "info.circle.fill")
                                     .foregroundStyle(.blue)
@@ -534,7 +534,7 @@ struct StorageItemPreviewView: View {
                         Text("\(Int(dims.width)) × \(Int(dims.height))")
                     } else if let total = totalCharCount {
                         Text("·")
-                        let formattedCount = NumberFormatter.localizedString(from: NSNumber(value: total), number: .decimal)
+                        let formattedCount = total.formatted(.number)
                         Text("\(formattedCount) 字符")
                     }
                 }

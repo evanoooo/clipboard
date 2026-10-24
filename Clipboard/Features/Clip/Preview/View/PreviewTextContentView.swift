@@ -8,10 +8,20 @@
 import AppKit
 import SnapKit
 
-final class PreviewTextContentView: NSView {
+final class PreviewTextContentView: NSView, PreviewResettable {
     private let scrollView = NSScrollView()
     private let textView = NSTextView()
     private let model: PasteboardModel
+    private var highlightTask: Task<Void, Never>?
+
+    deinit {
+        highlightTask?.cancel()
+    }
+
+    func resetPreview() {
+        highlightTask?.cancel()
+        highlightTask = nil
+    }
 
     init(model: PasteboardModel) {
         self.model = model
@@ -138,13 +148,14 @@ final class PreviewTextContentView: NSView {
 
                 // 随后在后台异步计算全量高亮，完成后无缝平滑替换
                 let currentID = model.id
-                Task { @MainActor [weak self] in
+                highlightTask?.cancel()
+                highlightTask = Task { @MainActor [weak self] in
                     let fullAttributed = await CodeHighlighter.highlightAsync(
                         source,
                         language: language,
                         theme: theme
                     )
-                    guard let self, self.model.id == currentID else { return }
+                    guard let self, !Task.isCancelled, self.model.id == currentID else { return }
                     self.setTextViewFormattedContent(fullAttributed, theme: theme)
                 }
             } else {

@@ -88,10 +88,7 @@ nonisolated struct StorageItemSummary: Sendable, Identifiable, Equatable {
             ? TimeInterval(timestamp) / 1000.0
             : TimeInterval(timestamp)
         let date = Date(timeIntervalSince1970: interval)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        return date.formatted(date: .numeric, time: .shortened)
     }
 
     var friendlyTypeName: String {

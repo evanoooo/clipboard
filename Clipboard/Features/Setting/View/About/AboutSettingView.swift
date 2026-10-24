@@ -20,12 +20,12 @@ struct AboutSettingView: View {
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-            as? String ?? "2.4.2"
+            as? String ?? "2.4.3"
     }
 
     private var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-            ?? "915"
+            ?? "916"
     }
 
     private var commitHash: String {
@@ -71,7 +71,8 @@ struct AboutSettingView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(versionDisplay, forType: .string)
                     copiedVersionFeedback = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1.5))
                         copiedVersionFeedback = false
                     }
                 }) {

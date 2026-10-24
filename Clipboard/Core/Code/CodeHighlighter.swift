@@ -71,14 +71,15 @@ enum CodeHighlighter {
         keyword: String? = nil,
         limitLength: Int? = nil
     ) async -> NSAttributedString {
-        await Task.yield()
-        return highlight(
-            text,
-            language: language,
-            theme: theme,
-            keyword: keyword,
-            limitLength: limitLength
-        )
+        await Task.detached(priority: .userInitiated) {
+            highlight(
+                text,
+                language: language,
+                theme: theme,
+                keyword: keyword,
+                limitLength: limitLength
+            )
+        }.value
     }
 
     // MARK: - 词法扫描与应用
