@@ -325,7 +325,7 @@ enum CodeHighlighter {
 
         while searchRange.length > 0 {
             let found = nsString.range(of: trimmed, options: options, range: searchRange, locale: .current)
-            guard found.location != NSNotFound else { break }
+            guard found.location != NSNotFound, found.length > 0 else { break }
 
             mutable.addAttributes(highlightAttributes, range: found)
 

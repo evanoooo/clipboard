@@ -91,6 +91,7 @@ struct MCPTools {
         guard let database = try? Connection(ClipboardPaths.database, readonly: true) else {
             return mcpError("Cannot open clipboard database")
         }
+        database.busyTimeout = 5.0
 
         let table = Table("Clip")
         var queryExpr = table

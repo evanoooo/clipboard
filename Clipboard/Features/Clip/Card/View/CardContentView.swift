@@ -174,13 +174,7 @@ final class CardContentView: NSView, PassthroughMouseEvents {
     }
 
     private func cancelCurrentLoad() {
-        if let imageView = currentContentView as? CardImageContentView {
-            imageView.cancelLoad()
-        } else if let linkView = currentContentView as? CardLinkPreviewContentView {
-            linkView.cancelLoad()
-        } else if let fileView = currentContentView as? CardFileContentView {
-            fileView.cancelLoad()
-        }
+        (currentContentView as? CancellableLoadable)?.cancelLoad()
     }
 
     private func makeContentView(for model: PasteboardModel, kind: ClipContentKind, keyword: String) -> NSView {

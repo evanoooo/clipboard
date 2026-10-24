@@ -315,7 +315,7 @@ private final class CardFileBottomView: NSView, PassthroughMouseEvents {
         var searchRange = NSRange(location: 0, length: source.length)
         while searchRange.length > 0 {
             let found = source.range(of: trimmed, options: options, range: searchRange, locale: .current)
-            guard found.location != NSNotFound else { break }
+            guard found.location != NSNotFound, found.length > 0 else { break }
             mutable.addAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.65), range: found)
             let next = found.location + found.length
             guard next < source.length else { break }

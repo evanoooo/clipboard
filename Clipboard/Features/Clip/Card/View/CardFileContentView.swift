@@ -8,7 +8,7 @@ import SnapKit
 
 // MARK: - CardFileContentView
 
-final class CardFileContentView: NSView, PassthroughMouseEvents {
+final class CardFileContentView: NSView, PassthroughMouseEvents, CancellableLoadable {
     private var thumbnailView: CardFileThumbnailView?
     private var multiView: CardMultipleFilesView?
 

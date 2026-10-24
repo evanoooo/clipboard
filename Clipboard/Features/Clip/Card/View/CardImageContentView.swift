@@ -8,7 +8,7 @@ import SnapKit
 
 // MARK: - CardImageContentView
 
-final class CardImageContentView: NSView, PassthroughMouseEvents {
+final class CardImageContentView: NSView, PassthroughMouseEvents, CancellableLoadable {
     private lazy var checkerboardView = CheckerboardView()
     private lazy var imageContainerView: NSView = {
         let view = NSView()

@@ -22,17 +22,14 @@ enum PasteboardTextPreparation {
     }
 
     nonisolated static func prepare(_ data: Data) -> Content? {
-        autoreleasepool {
-            guard let text = String(data: data, encoding: .utf8),
-                  !text.allSatisfy(\.isWhitespace) else { return nil }
-            let preview = NSAttributedString(string: String(text.prefix(300)))
-            let showText = preview.attributedSubstring(from: NSRange(location: 0, length: min(300, preview.length)))
-            return Content(
-                showData: showText.string.data(using: .utf8) ?? Data(),
-                searchText: PasteboardModel.normalizeSearchText(text),
-                length: text.utf16.count,
-                uniqueId: data.sha256Hex
-            )
-        }
+        guard let text = String(data: data, encoding: .utf8),
+              !text.allSatisfy(\.isWhitespace) else { return nil }
+        let prefixText = String(text.prefix(300))
+        return Content(
+            showData: Data(prefixText.utf8),
+            searchText: PasteboardModel.normalizeSearchText(text),
+            length: text.utf16.count,
+            uniqueId: data.sha256Hex
+        )
     }
 }

@@ -271,12 +271,12 @@ final class ClipFloatingWindowController: NSWindowController {
             win.animator().alphaValue = 0
         }) { [weak self] in
             Task { @MainActor in
+                defer { completionHandler?() }
                 guard let self, let win = self.window else { return }
                 self.isDismissing = false
                 win.setIsVisible(false)
                 win.alphaValue = 1
                 win.orderOut(nil)
-                completionHandler?()
             }
         }
     }

@@ -189,7 +189,7 @@ extension PasteboardModel {
         var searchRange = NSRange(location: 0, length: source.length)
         while searchRange.length > 0 {
             let found = source.range(of: keyword, options: options, range: searchRange, locale: .current)
-            guard found.location != NSNotFound else { break }
+            guard found.location != NSNotFound, found.length > 0 else { break }
             mutable.addAttribute(
                 .backgroundColor,
                 value: NSColor.systemYellow.withAlphaComponent(0.65),

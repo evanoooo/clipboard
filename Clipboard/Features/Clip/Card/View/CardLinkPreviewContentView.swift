@@ -12,7 +12,7 @@ import SnapKit
 
 // MARK: - CardLinkPreviewContentView
 
-final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents {
+final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, CancellableLoadable {
     // MARK: - Subviews
 
     private lazy var imageContainerView: DynamicBackgroundView = {
@@ -273,7 +273,7 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents {
 
         while searchRange.length > 0 {
             let found = plain.range(of: keyword, options: options, range: searchRange, locale: .current)
-            guard found.location != NSNotFound else { break }
+            guard found.location != NSNotFound, found.length > 0 else { break }
             mutable.addAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.65), range: found)
             let next = found.location + found.length
             guard next < plain.length else { break }

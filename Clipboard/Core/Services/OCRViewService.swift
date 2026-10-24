@@ -97,6 +97,14 @@ class OCRViewService {
                     )?.boundingBox {
                         regions.append(OCRTextRegion(text: String(text[range]), boundingBox: box))
                     }
+                    guard !range.isEmpty else {
+                        if searchStart < text.endIndex {
+                            searchStart = text.index(after: searchStart)
+                        } else {
+                            break
+                        }
+                        continue
+                    }
                     searchStart = range.upperBound
                 }
             }
