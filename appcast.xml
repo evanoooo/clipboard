@@ -21,15 +21,15 @@
 - 全面升级 Swift 6 并发安全架构，采用 OSAllocatedUnfairLock 替代旧式 GCD 并发屏障。
 ]]>
             </description>
-            <pubDate>Sat, 24 Oct 2026 04:26:28 GMT</pubDate>
-            <sparkle:version>934</sparkle:version>
+            <pubDate>Sat, 24 Oct 2026 07:47:28 GMT</pubDate>
+            <sparkle:version>936</sparkle:version>
             <sparkle:shortVersionString>2.4.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure
                 url="https://github.com/evanoooo/clipboard/releases/download/v2.4.3/Clipboard-2.4.3-arm64.zip"
-                sparkle:edSignature="LQ8oaibQNOciReD9YM3DtU6oSsQ12DSvE1hJsYaGqLfdzX2Rbb70QxTb487DWl8zGbCCHUQGNWBlW7q6NjTcAg=="
-                length="4490239"
+                sparkle:edSignature="uzFyCB+iZ/DKDgkIwpC/xPDEUwSJWVHDvAiyebDDBWIg5KzjKy/5KhhoRLaDXctAuipkEXeoUSfvs0T2+s/+Ag=="
+                length="4489379"
                 type="application/octet-stream" />
         </item>
 
@@ -49,16 +49,20 @@
 - 全面升级 Swift 6 并发安全架构，采用 OSAllocatedUnfairLock 替代旧式 GCD 并发屏障。
 ]]>
             </description>
-            <pubDate>Sat, 24 Oct 2026 04:26:28 GMT</pubDate>
-            <sparkle:version>934</sparkle:version>
+            <pubDate>Sat, 24 Oct 2026 07:47:28 GMT</pubDate>
+            <sparkle:version>936</sparkle:version>
             <sparkle:shortVersionString>2.4.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <enclosure
                 url="https://github.com/evanoooo/clipboard/releases/download/v2.4.3/Clipboard-2.4.3-x86_64.zip"
-                sparkle:edSignature="HcKZt49TJRaiNCXt3SzS2NIMSNERNxO1faeNThOJNMGj5WZCmnaK6rwwyxsBmfwQ/j4lFHv4n4Ln82LEBXH1CA=="
-                length="4809159"
+                sparkle:edSignature="/wcnbtHHbBNbIK9wqqW3LC2qEuan5Di2HEsJRA1H1J/g9NGuBkCkBYLJXzGlqJJK+3LbREiPRdCIywExyo+6Aw=="
+                length="4809287"
                 type="application/octet-stream" />
         </item>
+
+        <!-- Version 2.4.3 (Apple Silicon) -->
+
+        <!-- Version 2.4.3 (Intel) -->
 
         <!-- Version 2.4.3 (Apple Silicon) -->
 
