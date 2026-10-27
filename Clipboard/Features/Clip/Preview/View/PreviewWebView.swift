@@ -236,6 +236,8 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
 
     /// 加载“成功”但页面无可见内容时（常见于反爬拦截页或重定向壳），不要把白屏当成功。
     private func inspectContent() {
+        guard !isDownloadBlocked, webView.navigationDelegate != nil else { return }
+
         let script = """
         (function() {
           var body = document.body;
@@ -248,7 +250,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
         """
 
         webView.evaluateJavaScript(script) { [weak self] result, _ in
-            guard let self else { return }
+            guard let self, !isDownloadBlocked, webView.navigationDelegate != nil else { return }
             let payload = result as? [String: Any]
             let title = payload?["title"] as? String ?? ""
             let textLength = (payload?["text"] as? NSNumber)?.intValue ?? -1
@@ -272,6 +274,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
     }
 
     private func finishLoading() {
+        guard !isDownloadBlocked, webView.navigationDelegate != nil else { return }
         loadingIndicator.stopAnimation(nil)
         loadingIndicator.isHidden = true
         NSAnimationContext.runAnimationGroup { context in

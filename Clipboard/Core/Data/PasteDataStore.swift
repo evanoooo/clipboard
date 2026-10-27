@@ -658,7 +658,7 @@ extension PasteDataStore {
         list.removeAll(where: { $0.uniqueId == model.uniqueId })
         list.insert(model, at: 0)
         let truncated = Array(list.prefix(pageSize))
-        hasMoreData = list.count >= pageSize
+        hasMoreData = isInFilterMode ? (list.count >= pageSize) : (totalCount > truncated.count)
 
         pageIndex = 0
         lastRequestedPage = 0

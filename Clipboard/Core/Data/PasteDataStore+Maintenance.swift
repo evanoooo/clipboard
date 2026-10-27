@@ -307,6 +307,8 @@ extension PasteDataStore {
     }
 
     func clearExpiredData() {
+        clearDragTempDirectory()
+
         let lastDate = PasteUserDefaults.lastClearDate
         let dateStr = Date().formatted(date: .numeric, time: .omitted)
         if lastDate == dateStr {
@@ -317,6 +319,27 @@ extension PasteDataStore {
         let currentValue = PasteUserDefaults.historyTime
         let timeUnit = HistoryTimeUnit(rawValue: currentValue)
         clearData(for: timeUnit)
+    }
+
+    private func clearDragTempDirectory() {
+        Task.detached(priority: .background) {
+            let tempURL = FileManager.default.temporaryDirectory.appending(path: "ClipboardDrag")
+            let fileManager = FileManager.default
+            guard let enumerator = fileManager.enumerator(
+                at: tempURL,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else { return }
+
+            let oneDayAgo = Date().addingTimeInterval(-86400)
+            while let fileURL = enumerator.nextObject() as? URL {
+                guard let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let modDate = resourceValues.contentModificationDate,
+                      modDate < oneDayAgo
+                else { continue }
+                try? fileManager.removeItem(at: fileURL)
+            }
+        }
     }
 
     func clearData(for timeUnit: HistoryTimeUnit) {

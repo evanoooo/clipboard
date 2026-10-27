@@ -207,6 +207,13 @@ extension String {
     }
 
     nonisolated var smartWordCount: Int {
+        guard !isEmpty else { return 0 }
+
+        // 对于超大文本（>50,000 字符），避免 NLTokenizer 的重度分词造成主线程卡顿，采用高效单趟扫描
+        if count > 50_000 {
+            return fastSmartWordCount
+        }
+
         var count = 0
 
         let tokenizer = NLTokenizer(unit: .word)
@@ -228,11 +235,42 @@ extension String {
         }
         return count
     }
+
+    nonisolated private var fastSmartWordCount: Int {
+        var count = 0
+        var inWord = false
+
+        for scalar in unicodeScalars {
+            guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return count }
+            let val = scalar.value
+            // CJK 统一表意文字：每个汉字单独计词
+            if val >= 0x4E00 && val <= 0x9FFF {
+                if inWord {
+                    count += 1
+                    inWord = false
+                }
+                count += 1
+            } else if CharacterSet.wordDelimiters.contains(scalar) {
+                if inWord {
+                    count += 1
+                    inWord = false
+                }
+            } else {
+                inWord = true
+            }
+        }
+        if inWord {
+            count += 1
+        }
+        return count
+    }
 }
 
 extension CharacterSet {
     nonisolated static let cjkUnifiedIdeographs =
         CharacterSet(charactersIn: "\u{4E00}" ... "\u{9FFF}")
+    nonisolated static let wordDelimiters =
+        CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
 }
 
 // MARK: - Localized Prefix Matching

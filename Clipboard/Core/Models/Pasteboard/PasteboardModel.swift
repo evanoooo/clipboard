@@ -217,13 +217,16 @@ final class PasteboardModel: Identifiable, Codable {
         }
 
         let task = Task<NSImage?, Never> { @MainActor in
+            guard !Task.isCancelled else { return nil }
             // 性能优化：优先使用轻量缩略图 showData（几十KB），避免无节制触发 loadData 将数十兆原图常驻内存
             let thumbnailSourceData = (showData != nil && !(showData?.isEmpty ?? true)) ? showData! : data
 
-            let image = await Task.detached(priority: .userInitiated) {
-                Self.downsampledImage(from: thumbnailSourceData, maxPixelSize: 600) ?? NSImage(data: thumbnailSourceData)
+            let image = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                guard !Task.isCancelled else { return nil }
+                return Self.downsampledImage(from: thumbnailSourceData, maxPixelSize: 600) ?? NSImage(data: thumbnailSourceData)
             }.value
 
+            guard !Task.isCancelled else { return nil }
             cachedThumbnail = image
             thumbnailLoadTask = nil
             return image
@@ -234,10 +237,12 @@ final class PasteboardModel: Identifiable, Codable {
     }
 
     nonisolated private static func downsampledImage(from data: Data, maxPixelSize: CGFloat) -> NSImage? {
+        guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return nil }
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
             return nil
         }
+        guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return nil }
         let downsampleOptions = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceShouldCacheImmediately: true,
