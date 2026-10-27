@@ -74,12 +74,15 @@ If the Xcode MCP is configured, prefer its tools over generic alternatives when 
 
 ## Packaging (local builds)
 
-Distribute local builds with **ad-hoc signing only**; never require a Developer ID for local packaging.
+Distribute local builds signed with the **`NativeToolbox Dev`** certificate; fallback to ad-hoc (`-`) only if the certificate is completely unavailable. Never require an Apple Developer ID for local packaging.
 
 - Always build Release with hardened runtime disabled:
-  `ENABLE_HARDENED_RUNTIME=NO`. Local ad-hoc distribution uses this flag so the packaged bundle matches the verified local setup.
-- Verify the signature has ad-hoc flags without the `runtime` flag before installing:
-  `codesign -dv --verbose=4 <app>/Contents/MacOS/Clipboard` should print `flags=0x2(adhoc)`.
+  `ENABLE_HARDENED_RUNTIME=NO`.
+- Sign the app bundle and embedded frameworks with `NativeToolbox Dev`:
+  `codesign --force --deep -s "NativeToolbox Dev" <app>`
+  (specify `--keychain /Users/opm/Library/Keychains/login.keychain-db` if running in a non-interactive shell where the login keychain is not in the default search list).
+- Verify the signature before installing:
+  `codesign -dv --verbose=4 <app>/Contents/MacOS/Clipboard` should print `Authority=NativeToolbox Dev`.
 - Install by replacing the bundle atomically: quit the running app, `ditto` the built `.app` to `/Applications/Clipboard.app`, then relaunch.
 - Keep the packaging reproducible; do not change the project's signing settings just to make a local build launch.
 

@@ -100,8 +100,34 @@ rm -rf "${RELEASE_DIR}/${SCHEME}.app"
 ditto "$SOURCE_APP" "${RELEASE_DIR}/${SCHEME}.app"
 echo -e "${GREEN}✓ 产物已归档至 ${RELEASE_DIR}/${SCHEME}.app ($(du -sh "${RELEASE_DIR}/${SCHEME}.app" | cut -f1))${NC}"
 
-# 3. 退出正在运行中的旧进程
-echo -e "${BLUE}[3/5] 检查正在运行的 Clipboard 进程...${NC}"
+# 3. 签名处理（优先使用 NativeToolbox Dev 证书）
+echo -e "${BLUE}[3/6] 正在为应用执行代码签名 (NativeToolbox Dev)...${NC}"
+KEYCHAIN_FLAG=()
+for kc in "/Users/opm/Library/Keychains/login.keychain-db" "${HOME}/Library/Keychains/login.keychain-db" "${HOME}/Library/Keychains/login.keychain"; do
+    if [ -f "$kc" ]; then
+        KEYCHAIN_FLAG=(--keychain "$kc")
+        break
+    fi
+done
+
+SIGN_IDENTITY="${SIGN_IDENTITY:-NativeToolbox Dev}"
+TARGET_BUNDLE="${RELEASE_DIR}/${SCHEME}.app"
+
+if [ -d "${TARGET_BUNDLE}/Contents/Frameworks" ]; then
+    find "${TARGET_BUNDLE}/Contents/Frameworks" -type d -name "*.framework" -o -type f -name "*.dylib" 2>/dev/null | while read -r fw; do
+        codesign "${KEYCHAIN_FLAG[@]}" --force --deep -s "$SIGN_IDENTITY" "$fw" 2>/dev/null || codesign --force --deep -s - "$fw" 2>/dev/null || true
+    done
+fi
+
+if codesign "${KEYCHAIN_FLAG[@]}" --force --deep -s "$SIGN_IDENTITY" "$TARGET_BUNDLE" 2>/dev/null; then
+    echo -e "${GREEN}✓ 成功使用 '${SIGN_IDENTITY}' 签名完成！${NC}"
+else
+    echo -e "${YELLOW}未找到 '${SIGN_IDENTITY}' 证书，回退至 Ad-hoc 签名...${NC}"
+    codesign --force --deep -s - "$TARGET_BUNDLE"
+fi
+
+# 4. 退出正在运行中的旧进程
+echo -e "${BLUE}[4/6] 检查正在运行的 Clipboard 进程...${NC}"
 RUNNING_PIDS=$(pgrep -f "${TARGET_APP_PATH}/Contents/MacOS/Clipboard" || true)
 if [ -n "$RUNNING_PIDS" ]; then
     echo -e "${YELLOW}发现正在运行的 Clipboard 实例 (PID: ${RUNNING_PIDS})，正在安全关闭...${NC}"
@@ -123,17 +149,17 @@ else
     echo -e "未发现运行中的进程，可直接覆盖。"
 fi
 
-# 4. 验证签名并执行本地覆盖升级
-echo -e "${BLUE}[4/5] 验证代码签名并安装覆盖到 ${TARGET_APP_PATH}...${NC}"
-codesign -dv --verbose=4 "${RELEASE_DIR}/${SCHEME}.app/Contents/MacOS/Clipboard" 2>&1 | grep "flags=" || true
+# 5. 验证签名并执行本地覆盖升级
+echo -e "${BLUE}[5/6] 验证代码签名并安装覆盖到 ${TARGET_APP_PATH}...${NC}"
+codesign -dv --verbose=4 "${RELEASE_DIR}/${SCHEME}.app/Contents/MacOS/Clipboard" 2>&1 | grep -E "Authority|flags=" || true
 rm -rf "$TARGET_APP_PATH"
 ditto "${RELEASE_DIR}/${SCHEME}.app" "$TARGET_APP_PATH"
 xattr -cr "$TARGET_APP_PATH" 2>/dev/null || true
 echo -e "${GREEN}✓ 已成功覆盖至 ${TARGET_APP_PATH}${NC}"
 
-# 5. 重启应用
+# 6. 重启应用
 if [ "$AUTO_LAUNCH" = true ]; then
-    echo -e "${BLUE}[5/5] 正在重新拉起应用...${NC}"
+    echo -e "${BLUE}[6/6] 正在重新拉起应用...${NC}"
     open "$TARGET_APP_PATH"
     sleep 1
     NEW_PID=$(pgrep -f "${TARGET_APP_PATH}/Contents/MacOS/Clipboard" || true)
@@ -143,7 +169,7 @@ if [ "$AUTO_LAUNCH" = true ]; then
         echo -e "${YELLOW}已触发启动命令，若未看到菜单栏图标请手动双击 /Applications/Clipboard.app${NC}"
     fi
 else
-    echo -e "${BLUE}[5/5] 已根据参数跳过自动拉起。${NC}"
+    echo -e "${BLUE}[6/6] 已根据参数跳过自动拉起。${NC}"
 fi
 
 echo ""

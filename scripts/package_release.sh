@@ -28,16 +28,30 @@ thin_app() {
   done
 }
 
+KEYCHAIN_FLAG=()
+for kc in "/Users/opm/Library/Keychains/login.keychain-db" "${HOME}/Library/Keychains/login.keychain-db" "${HOME}/Library/Keychains/login.keychain"; do
+  if [ -f "$kc" ]; then
+    KEYCHAIN_FLAG=(--keychain "$kc")
+    break
+  fi
+done
+
+DEFAULT_IDENTITY="NativeToolbox Dev"
+IDENTITY_TO_USE="${SIGN_IDENTITY:-$DEFAULT_IDENTITY}"
+
 sign_bundle() {
   local app_bundle="$1"
-  local identity="${SIGN_IDENTITY:--}"
+  local identity="$IDENTITY_TO_USE"
   echo "==> Re-signing bundle with identity '${identity}': $app_bundle"
   if [ -d "$app_bundle/Contents/Frameworks" ]; then
     find "$app_bundle/Contents/Frameworks" -type d -name "*.framework" -o -type f -name "*.dylib" 2>/dev/null | while read -r fw; do
-      codesign --force --deep -s "${identity}" "$fw" 2>/dev/null || true
+      codesign "${KEYCHAIN_FLAG[@]}" --force --deep -s "${identity}" "$fw" 2>/dev/null || codesign --force --deep -s - "$fw" 2>/dev/null || true
     done
   fi
-  codesign --force --deep -s "${identity}" "$app_bundle"
+  if ! codesign "${KEYCHAIN_FLAG[@]}" --force --deep -s "${identity}" "$app_bundle" 2>/dev/null; then
+    echo "==> Identity '${identity}' failed or not found, falling back to ad-hoc (-)"
+    codesign --force --deep -s - "$app_bundle"
+  fi
 }
 
 make_dmg() {
