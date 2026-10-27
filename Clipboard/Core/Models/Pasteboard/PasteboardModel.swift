@@ -278,6 +278,11 @@ final class PasteboardModel: Identifiable, Codable {
         alias = val
     }
 
+    /// 是否已归类至用户标签
+    var hasCategoryChip: Bool {
+        group != -1
+    }
+
     func getGroupChip() -> CategoryChip? {
         guard group != -1 else { return nil }
         return CategoryChipStore.shared.chips.first(where: { $0.id == group })

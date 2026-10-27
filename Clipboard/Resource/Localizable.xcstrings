@@ -1048,6 +1048,60 @@
         }
       }
     },
+    "deleteTaggedTitle": {
+      "comment": "Delete tagged item confirmation title",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm deletion?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认删除吗？"
+          }
+        }
+      }
+    },
+    "deleteTaggedMessage": {
+      "comment": "Delete tagged item confirmation message showing chip name",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This item is categorized under “%@”. This action cannot be undone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此记录已归类至标签「%@」，删除后无法恢复。"
+          }
+        }
+      }
+    },
+    "deleteMultipleTaggedMessage": {
+      "comment": "Delete multiple items confirmation message when tagged items are included",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected items include %lld tagged entries. This action cannot be undone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选中的记录中包含 %lld 个标签分类条目，删除后无法恢复。"
+          }
+        }
+      }
+    },
     "dropOverlaySub": {
       "comment": "Drop overlay subtitle shown while dragging content into the main list",
       "extractionState": "manual",
@@ -4765,13 +4819,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask for confirmation before deleting an item."
+            "value": "Ask for confirmation when deleting untagged history items (tagged items always require confirmation)."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "删除记录时是否弹窗确认。"
+            "value": "删除未带标签的历史记录时是否也弹窗确认（带标签的记录始终二次确认）。"
           }
         }
       }

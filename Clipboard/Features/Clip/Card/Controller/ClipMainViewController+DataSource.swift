@@ -321,13 +321,8 @@ extension ClipMainViewController: CollectionViewItemDelegate {
     }
 
     func delete(_ item: PasteboardModel, indexPath: IndexPath) {
-        guard PasteUserDefaults.delConfirm else {
-            deleteItem(item, indexPath: indexPath)
-            return
-        }
-        if confirmDelete() {
-            deleteItem(item, indexPath: indexPath)
-        }
+        guard NSAlert.confirmDeleteIfNeeded(for: item) else { return }
+        deleteItem(item, indexPath: indexPath)
     }
 
     func deleteItem(_ item: PasteboardModel, indexPath: IndexPath) {

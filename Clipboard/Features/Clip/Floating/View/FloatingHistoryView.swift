@@ -254,13 +254,7 @@ final class FloatingHistoryView: NSView {
     func requestDelete(at index: Int) {
         let items = selectedModels
         if items.count > 1 {
-            if PasteUserDefaults.delConfirm,
-               !NSAlert.runConfirm(
-                   title: String(localized: .deleteTitle),
-                   message: String(localized: .deleteMessage)
-               ) {
-                return
-            }
+            guard NSAlert.confirmDeleteIfNeeded(for: items) else { return }
             let minIndex = collectionView.selectionIndexPaths.map(\.item).min() ?? index
             let countAfterDelete = dataList.count - items.count
             if countAfterDelete > 0 {
@@ -271,13 +265,8 @@ final class FloatingHistoryView: NSView {
         }
         guard index < dataList.count else { return }
         let item = dataList[index]
-        guard PasteUserDefaults.delConfirm else {
-            dataStore.deleteItems(item)
-            return
-        }
-        if NSAlert.runConfirm(title: String(localized: .deleteTitle), message: String(localized: .deleteMessage)) {
-            dataStore.deleteItems(item)
-        }
+        guard NSAlert.confirmDeleteIfNeeded(for: item) else { return }
+        dataStore.deleteItems(item)
     }
 
     func openEditWindow(at index: Int) {

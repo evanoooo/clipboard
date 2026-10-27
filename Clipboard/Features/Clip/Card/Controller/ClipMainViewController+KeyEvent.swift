@@ -206,7 +206,7 @@ extension ClipMainViewController {
 
         let items = selectedModels
         if items.count > 1 {
-            if PasteUserDefaults.delConfirm, !confirmDelete() { return nil }
+            guard NSAlert.confirmDeleteIfNeeded(for: items) else { return nil }
             let minIndex =
                 collectionView.selectionIndexPaths.map(\.item).min()
                     ?? selectIndexPath.item
