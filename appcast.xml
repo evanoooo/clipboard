@@ -5,6 +5,57 @@
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
 
+        <!-- Version 2.4.4 (Apple Silicon) -->
+        <item>
+            <title>Version 2.4.4 (Apple Silicon)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.4
+
+- 修复网页链接中文件下载 URL 预览触发自动下载的问题，限制仅对简单网页展示 Web 预览；
+- 针对常见下载文件及带 Query 参数的下载链接，在预览中直接展示文本视图，杜绝异常下载与内存占用；
+- WebKit 运行时增加对附件响应、非网页 MIME 类型与下载行为的多重拦截防护；
+- 优化卡片与浮动窗口对下载文件的元数据请求，避免大文件不必要的网络开销；
+- CI 构建流程支持自签名证书导入签名，保障本地 Sparkle 更新与系统权限继承。
+]]>
+            </description>
+            <pubDate>Tue, 27 Oct 2026 12:08:01 GMT</pubDate>
+            <sparkle:version>938</sparkle:version>
+            <sparkle:shortVersionString>2.4.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.4/Clipboard-2.4.4-arm64.zip"
+                sparkle:edSignature="U694yvVRvoxAt++YrJ7rzWUltUQ75HA9UB0LO7Ft7er2oT+LcWOsIw4Uph7m/2itcOKBu2rS0OViUX1Difu2Dw=="
+                length="4505451"
+                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.4.4 (Intel) -->
+        <item>
+            <title>Version 2.4.4 (Intel)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.4
+
+- 修复网页链接中文件下载 URL 预览触发自动下载的问题，限制仅对简单网页展示 Web 预览；
+- 针对常见下载文件及带 Query 参数的下载链接，在预览中直接展示文本视图，杜绝异常下载与内存占用；
+- WebKit 运行时增加对附件响应、非网页 MIME 类型与下载行为的多重拦截防护；
+- 优化卡片与浮动窗口对下载文件的元数据请求，避免大文件不必要的网络开销；
+- CI 构建流程支持自签名证书导入签名，保障本地 Sparkle 更新与系统权限继承。
+]]>
+            </description>
+            <pubDate>Tue, 27 Oct 2026 12:08:01 GMT</pubDate>
+            <sparkle:version>938</sparkle:version>
+            <sparkle:shortVersionString>2.4.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.4/Clipboard-2.4.4-x86_64.zip"
+                sparkle:edSignature="4PioXPShQx+duJRJi9G80/5EFjCYrQUBZtIPz6gUW+wvc379mXkLXvYmfFjnAr7eFLBhz++J9asXrbFCBhrpDg=="
+                length="4829023"
+                type="application/octet-stream" />
+        </item>
+
         <!-- Version 2.4.3 (Apple Silicon) -->
         <item>
             <title>Version 2.4.3 (Apple Silicon)</title>
