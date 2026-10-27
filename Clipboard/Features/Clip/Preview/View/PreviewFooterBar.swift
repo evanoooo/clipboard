@@ -120,18 +120,16 @@ final class PreviewFooterBar: NSView {
     ) {
         statisticsTask?.cancel()
         let isSingleFile = model.type == .file && model.fileSize() == 1
-        let showLinkPreview = model.type == .link
-            && PasteUserDefaults.enableLinkPreview
-            && model.isLink
+        let isLink = model.type == .link && model.isLink
 
         firstLineLabel.maximumNumberOfLines = 1
         firstLineLabel.preferredMaxLayoutWidth = 0
 
         if isSingleFile, let path = model.cachedFilePaths?.first {
             setWrappedText(path, suffix: fileSize.map { " · \($0)" } ?? "")
-        } else if showLinkPreview {
+        } else if isLink {
             setWrappedText(model.attributeString.string)
-        } else if model.pasteboardType.isText(), !showLinkPreview {
+        } else if model.pasteboardType.isText() {
             firstLineLabel.stringValue = model.introString()
             secondLineLabel.stringValue = ""
             secondLineLabel.isHidden = true
@@ -158,7 +156,7 @@ final class PreviewFooterBar: NSView {
 
         finderButton.isHidden = !isSingleFile
 
-        if showLinkPreview, let name = browserName {
+        if isLink, let name = browserName {
             browserButton.title = String(localized: .openInApp(name))
             browserButton.isHidden = false
         } else {

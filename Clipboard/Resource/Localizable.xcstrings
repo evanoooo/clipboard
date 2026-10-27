@@ -3262,6 +3262,24 @@
     "MCP": {
       "shouldTranslate": false
     },
+    "linkPreviewDownloadNotSupported": {
+      "comment": "Link preview cannot preview file downloads, only simple web pages are supported",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File downloads cannot be previewed\nOnly simple web pages are supported"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该链接为文件下载，无法直接预览网页\n仅支持预览简单的网页"
+          }
+        }
+      }
+    },
     "linkPreviewEmpty": {
       "comment": "Link preview loaded but the page has no visible content",
       "extractionState": "manual",

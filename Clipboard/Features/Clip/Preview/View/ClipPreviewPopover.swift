@@ -134,8 +134,18 @@ final class ClipPreviewPopover: NSPopover {
         switch model.type {
         case .color:
             return 400
-        case .file, .link:
+        case .file:
             return Const.maxPreviewWidth
+        case .link:
+            if PasteUserDefaults.enableLinkPreview, model.isLink,
+               model.attributeString.string.isSimpleWebPageURL {
+                return Const.maxPreviewWidth
+            }
+            let textWidth = estimatedTextWidth(for: model, measuredText: measuredText)
+            return min(
+                max(textWidth, Const.minPreviewWidth),
+                Const.maxTextWidth
+            )
         case .image:
             guard let size = model.cachedImageSize, size.width > 0 else {
                 return Const.maxPreviewWidth
@@ -183,8 +193,12 @@ final class ClipPreviewPopover: NSPopover {
         switch model.type {
         case .string, .rich:
             return ClipPreviewContentView.measuringAttributedString(for: model)
-        case .link where !PasteUserDefaults.enableLinkPreview || !model.isLink:
-            return ClipPreviewContentView.measuringAttributedString(for: model)
+        case .link:
+            let isSimpleWeb = model.attributeString.string.isSimpleWebPageURL
+            if !PasteUserDefaults.enableLinkPreview || !model.isLink || !isSimpleWeb {
+                return ClipPreviewContentView.measuringAttributedString(for: model)
+            }
+            return nil
         default:
             return nil
         }

@@ -38,7 +38,15 @@ def main():
 
     pubdate = formatdate(timeval=None, localtime=False, usegmt=True)
 
-    if version == "2.4.3":
+    if version == "2.4.4":
+        release_notes = """## Version 2.4.4
+
+- 修复网页链接中文件下载 URL 预览触发自动下载的问题，限制仅对简单网页展示 Web 预览；
+- 针对常见下载文件及带 Query 参数的下载链接，在预览中直接展示文本视图，杜绝异常下载与内存占用；
+- WebKit 运行时增加对附件响应、非网页 MIME 类型与下载行为的多重拦截防护；
+- 优化卡片与浮动窗口对下载文件的元数据请求，避免大文件不必要的网络开销；
+- CI 构建流程支持自签名证书导入签名，保障本地 Sparkle 更新与系统权限继承。"""
+    elif version == "2.4.3":
         release_notes = """## Version 2.4.3
 
 - 修复编辑窗口保存任务取消时状态锁死导致无法二次保存的问题；

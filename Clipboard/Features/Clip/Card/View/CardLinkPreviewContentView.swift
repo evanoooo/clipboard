@@ -284,6 +284,10 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, Cancella
     }
 
     private static func fetchMetadata(for url: URL) async -> LinkPreviewMetadata {
+        guard url.isLikelySimpleWebPage else {
+            return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+        }
+
         let provider = LPMetadataProvider()
         provider.timeout = 5.0
 

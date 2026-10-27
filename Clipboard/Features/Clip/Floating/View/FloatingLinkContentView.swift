@@ -109,6 +109,10 @@ final class FloatingLinkContentView: NSView, CancellableLoadable {
 
     @preconcurrency
     private static func fetchMetadata(for url: URL) async -> LinkPreviewMetadata {
+        guard url.isLikelySimpleWebPage else {
+            return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+        }
+
         let provider = LPMetadataProvider()
         provider.timeout = 5.0
         nonisolated(unsafe) let unsafeProvider = provider

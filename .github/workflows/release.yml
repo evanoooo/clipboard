@@ -57,8 +57,49 @@ jobs:
             exit 1
           }
 
+      - name: Import Signing Certificate (if configured)
+        id: import_cert
+        env:
+          P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          CERT_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+        run: |
+          if [ -z "$P12_BASE64" ]; then
+            echo "::notice::MACOS_CERTIFICATE_P12 secret is not set. Defaulting to Ad-hoc signing."
+            echo "SIGN_IDENTITY=-" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          echo "Importing code signing certificate into temporary keychain..."
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PWD="temporary-ci-password"
+          P12_PATH="$RUNNER_TEMP/certificate.p12"
+
+          echo "$P12_BASE64" | base64 --decode -o "$P12_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+
+          security import "$P12_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          
+          # 将临时钥匙串加入钥匙串搜索列表
+          ORIG_KEYCHAINS=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $ORIG_KEYCHAINS
+
+          IDENTITY="${CERT_NAME}"
+          if [ -z "$IDENTITY" ]; then
+            IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -o '".*"' | head -n 1 | tr -d '"')
+          fi
+
+          echo "Using Code Signing Identity: ${IDENTITY}"
+          echo "SIGN_IDENTITY=${IDENTITY}" >> $GITHUB_ENV
+
       - name: Archive Artifacts (arm64, x86_64, Universal)
         id: archive
+        env:
+          SIGN_IDENTITY: ${{ env.SIGN_IDENTITY }}
         run: |
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG_NAME#v}"
@@ -121,3 +162,10 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up Temporary Keychain
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/app-signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+          fi

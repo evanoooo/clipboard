@@ -14,6 +14,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
     private let loadingIndicator: NSProgressIndicator
     private let errorLabel: NSTextField
     private let url: URL
+    private var isDownloadBlocked = false
 
     init(url: URL) {
         let configuration = WKWebViewConfiguration()
@@ -74,6 +75,7 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
     }
 
     func stopLoading() {
+        isDownloadBlocked = false
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
@@ -96,18 +98,32 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
         show(error)
     }
 
-    // MARK: - 导航边界
+    // MARK: - 导航与下载边界
 
     private static let externalSchemes: Set<String> = ["http", "https", "mailto"]
 
-    /// 与 `PreviewMarkdownView` 保持一致：只拦截用户点击的链接，
-    /// 重定向与脚本跳转交给页面，避免把预览变成“什么都点不动”。
+    /// 限制仅能预览简单网页，并彻底禁止触发下载动作。
     func webView(
         _: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
+        // 坚决阻止下载请求
+        if navigationAction.shouldPerformDownload {
+            log.info("[linkPreview] 拦截 shouldPerformDownload 请求: \(navigationAction.request.url?.absoluteString ?? "-")")
+            showDownloadBlocked()
+            decisionHandler(.cancel)
+            return
+        }
+
         guard navigationAction.navigationType == .linkActivated else {
+            // 对于非用户直接点击的跳转（如初始请求、重定向等），检测是否属于文件下载链接
+            if let targetURL = navigationAction.request.url, !targetURL.isLikelySimpleWebPage {
+                log.info("[linkPreview] 拦截非简单网页目标: \(targetURL.absoluteString)")
+                showDownloadBlocked()
+                decisionHandler(.cancel)
+                return
+            }
             decisionHandler(.allow)
             return
         }
@@ -121,6 +137,60 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
 
         NSWorkspace.shared.open(url)
         decisionHandler(.cancel)
+    }
+
+    /// 拦截服务器响应：防止文件下载响应，仅允许简单网页的 MIME 类型。
+    func webView(
+        _: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
+    ) {
+        // 1. 若 WebKit 原生无法直接展示（常见于压缩包、磁盘镜像、二进制文件等），绝对不能调用 .download
+        guard navigationResponse.canShowMIMEType else {
+            log.info("[linkPreview] 拦截 WebKit 不可展示的 MIME 类型: \(navigationResponse.response.mimeType ?? "")")
+            showDownloadBlocked()
+            decisionHandler(.cancel)
+            return
+        }
+
+        // 2. 检查响应头 Content-Disposition 是否要求作为附件下载
+        if let httpResponse = navigationResponse.response as? HTTPURLResponse,
+           let disposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition")?.lowercased(),
+           disposition.contains("attachment") {
+            log.info("[linkPreview] 拦截 Content-Disposition attachment: \(httpResponse.url?.absoluteString ?? "")")
+            showDownloadBlocked()
+            decisionHandler(.cancel)
+            return
+        }
+
+        // 3. 限制只预览简单网页（MIME 类型必须为网页相关）
+        if let mimeType = navigationResponse.response.mimeType {
+            let cleanMime = mimeType.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+            let isSimpleWebMime = cleanMime == "text/html"
+                || cleanMime == "application/xhtml+xml"
+                || cleanMime == "text/plain"
+            guard isSimpleWebMime else {
+                log.info("[linkPreview] 拦截非简单网页 MIME 类型: \(cleanMime)")
+                showDownloadBlocked()
+                decisionHandler(.cancel)
+                return
+            }
+        }
+
+        decisionHandler(.allow)
+    }
+
+    /// 兜底防护：若任何途径生成了 WKDownload，立即取消，绝不下载任何文件到磁盘。
+    func webView(_: WKWebView, navigationAction _: WKNavigationAction, didBecome download: WKDownload) {
+        log.warn("[linkPreview] 强制取消 WKNavigationAction download")
+        download.cancel()
+        showDownloadBlocked()
+    }
+
+    func webView(_: WKWebView, navigationResponse _: WKNavigationResponse, didBecome download: WKDownload) {
+        log.warn("[linkPreview] 强制取消 WKNavigationResponse download")
+        download.cancel()
+        showDownloadBlocked()
     }
 
     /// `target=_blank` / `window.open`：不开新窗口，交给系统浏览器。
@@ -137,8 +207,22 @@ final class PreviewWebView: NSView, WKNavigationDelegate, WKUIDelegate, PreviewR
         return nil
     }
 
+    private func showDownloadBlocked() {
+        guard !isDownloadBlocked else { return }
+        isDownloadBlocked = true
+        loadingIndicator.stopAnimation(nil)
+        loadingIndicator.isHidden = true
+        errorLabel.stringValue = String(localized: .linkPreviewDownloadNotSupported)
+        errorLabel.isHidden = false
+        webView.alphaValue = 0
+    }
+
     private func show(_ error: Error) {
+        guard !isDownloadBlocked else { return }
         let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+            return
+        }
         log.error(
             "[linkPreview] 加载失败 host=\(url.host() ?? "-") "
                 + "domain=\(nsError.domain) code=\(nsError.code) desc=\(nsError.localizedDescription)"

@@ -245,4 +245,67 @@ extension String {
             locale: .current
         ) != nil
     }
+
+    nonisolated var isSimpleWebPageURL: Bool {
+        asCompleteURL()?.isLikelySimpleWebPage ?? false
+    }
+}
+
+// MARK: - Web Page & Download URL Detection
+
+extension URL {
+    /// 常见简单网页扩展名
+    nonisolated private static let webPageExtensions: Set<String> = [
+        "html", "htm", "shtml", "xhtml", "php", "asp", "aspx", "jsp"
+    ]
+
+    /// 常见属于下载文件或非网页资源的扩展名
+    nonisolated private static let downloadFileExtensions: Set<String> = [
+        // 压缩包与磁盘镜像
+        "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "tbz2", "xz", "txz", "z", "iso", "dmg", "img",
+        // 安装包与可执行程序
+        "pkg", "exe", "msi", "msix", "apk", "ipa", "deb", "rpm", "bin", "run", "appxbundle",
+        // 办公文档与电子书
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "epub", "mobi", "azw3", "csv",
+        // 音视频媒体
+        "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "3gp",
+        "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma",
+        // 脚本与二进制
+        "sh", "bash", "bat", "cmd", "ps1", "torrent", "crx", "wasm",
+        // 字体
+        "ttf", "otf", "woff", "woff2", "eot"
+    ]
+
+    /// 是否可能是简单的网页（仅支持 http/https，且不属于文件下载 URL）
+    nonisolated var isLikelySimpleWebPage: Bool {
+        guard let scheme = scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else {
+            return false
+        }
+
+        let ext = pathExtension.lowercased()
+        if !ext.isEmpty {
+            // 如果具有明确的扩展名，且不是标准网页扩展名，则判定为非简单网页（文件下载或媒体/文档资源）
+            if !Self.webPageExtensions.contains(ext) {
+                return false
+            }
+        }
+
+        // 进一步检查 query 参数中是否包含明确的下载文件特征（例如 ?file=test.zip 或 ?name=app.dmg）
+        if let query = query?.lowercased() {
+            for downloadExt in Self.downloadFileExtensions {
+                if query.contains(".\(downloadExt)") {
+                    return false
+                }
+            }
+        }
+
+        return true
+    }
+
+    /// 是否明确为文件下载链接
+    nonisolated var isLikelyDownloadURL: Bool {
+        !isLikelySimpleWebPage
+    }
 }

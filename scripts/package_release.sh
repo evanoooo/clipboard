@@ -30,13 +30,14 @@ thin_app() {
 
 sign_bundle() {
   local app_bundle="$1"
-  echo "==> Re-signing bundle with ad-hoc signature: $app_bundle"
+  local identity="${SIGN_IDENTITY:--}"
+  echo "==> Re-signing bundle with identity '${identity}': $app_bundle"
   if [ -d "$app_bundle/Contents/Frameworks" ]; then
     find "$app_bundle/Contents/Frameworks" -type d -name "*.framework" -o -type f -name "*.dylib" 2>/dev/null | while read -r fw; do
-      codesign --force --deep -s - "$fw" 2>/dev/null || true
+      codesign --force --deep -s "${identity}" "$fw" 2>/dev/null || true
     done
   fi
-  codesign --force --deep -s - "$app_bundle"
+  codesign --force --deep -s "${identity}" "$app_bundle"
 }
 
 make_dmg() {
@@ -70,7 +71,7 @@ cp -R "$UNIVERSAL_APP" "${UNIVERSAL_DIR}/Clipboard.app"
 thin_app "arm64" "${ARM64_DIR}/Clipboard.app"
 thin_app "x86_64" "${X86_DIR}/Clipboard.app"
 
-echo "==> Signing bundles with ad-hoc signature..."
+echo "==> Signing bundles with identity '${SIGN_IDENTITY:--}'..."
 sign_bundle "${ARM64_DIR}/Clipboard.app"
 sign_bundle "${X86_DIR}/Clipboard.app"
 sign_bundle "${UNIVERSAL_DIR}/Clipboard.app"

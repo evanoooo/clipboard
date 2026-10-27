@@ -7,3 +7,4 @@ Tests/.build/
 release/
 .sparkle_keys.json
 __pycache__/
+skills/

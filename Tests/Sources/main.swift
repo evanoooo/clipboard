@@ -66,6 +66,7 @@ final class TestRunner {
         SyncModelTests.run(runner: TestRunner.self)
         SyncDiffTests.run(runner: TestRunner.self)
         PasteMigrationTests.run(runner: TestRunner.self)
+        WebPageURLTests.run(runner: TestRunner.self)
 
         print("\n==================================")
         print("🎉 All \(testsPassed)/\(testsRun) unit tests passed successfully!")
