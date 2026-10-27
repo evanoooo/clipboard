@@ -8,3 +8,9 @@ release/
 .sparkle_keys.json
 __pycache__/
 skills/
+*.p12
+*.pfx
+*.cer
+*.crt
+*.key
+*.keychain*
