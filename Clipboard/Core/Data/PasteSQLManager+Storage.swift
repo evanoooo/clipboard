@@ -265,8 +265,7 @@ extension PasteSQLManager {
         let sql = """
             SELECT COUNT(*), COALESCE(SUM(LENGTH(data)), 0) FROM Clip
             WHERE (`group` IS NULL OR `group` = -1)
-              AND (tag IS NULL OR tag = '' OR lower(tag) IN ('image', 'rich', 'string', 'file', 'link', 'color', 'unknown'))
-              AND (lower(type) LIKE '%image%' OR lower(type) LIKE '%png%' OR lower(type) LIKE '%tiff%' OR lower(type) LIKE '%jpeg%' OR lower(type) LIKE '%jpg%')
+              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
               AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
         """
 
@@ -292,8 +291,7 @@ extension PasteSQLManager {
         let querySql = """
             SELECT id, LENGTH(data) FROM Clip
             WHERE (`group` IS NULL OR `group` = -1)
-              AND (tag IS NULL OR tag = '' OR lower(tag) IN ('image', 'rich', 'string', 'file', 'link', 'color', 'unknown'))
-              AND (lower(type) LIKE '%image%' OR lower(type) LIKE '%png%' OR lower(type) LIKE '%tiff%' OR lower(type) LIKE '%jpeg%' OR lower(type) LIKE '%jpg%')
+              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
               AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
             ORDER BY timestamp ASC
         """

@@ -109,6 +109,9 @@ nonisolated final class SyncCryptoEngine: Sendable {
     /// 计算数据的 SHA-256 哈希值前 16 位 Hex（用于轻量索引比对数据是否变动）
     static func checksum(for data: Data) -> String {
         let digest = SHA256.hash(data: data)
-        return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+        return digest.prefix(8).map { byte in
+            let hex = String(byte, radix: 16)
+            return hex.count == 1 ? "0" + hex : hex
+        }.joined()
     }
 }

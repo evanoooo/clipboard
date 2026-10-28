@@ -221,6 +221,11 @@ final class PasteboardModel: Identifiable, Codable {
         thumbnailLoadTask?.cancel()
         thumbnailLoadTask = nil
         runtimeCache.plainText = nil
+        runtimeCache.richForegrounds.removeAll()
+        runtimeCache.previewForegrounds = nil
+        runtimeCache.filePaths = nil
+        runtimeCache.highlightedCode = nil
+        runtimeCache.plainTextAttributedString = nil
     }
 
     func loadThumbnail() async -> NSImage? {
@@ -237,30 +242,28 @@ final class PasteboardModel: Identifiable, Codable {
         let uId = uniqueId
         let loadedData = _data
 
-        let task = Task<NSImage?, Never> { @MainActor [weak self] in
+        let task = Task.detached(priority: .userInitiated) { [weak self] () -> NSImage? in
             guard !Task.isCancelled else { return nil }
+            // 性能极致优化：数据读取与解码完全在后台线程，杜绝主线程 I/O 阻塞
+            let sourceData: Data
+            if let sData, !sData.isEmpty {
+                sourceData = sData
+            } else if let loadedData {
+                sourceData = loadedData
+            } else if let diskData = PasteDataPointReader.loadData(id: modelId, uniqueId: uId) {
+                sourceData = diskData
+            } else {
+                return nil
+            }
 
-            let image = await Task.detached(priority: .userInitiated) { () -> NSImage? in
-                guard !Task.isCancelled else { return nil }
-                // 性能极致优化：数据读取与解码完全在后台线程，杜绝主线程 I/O 阻塞
-                let sourceData: Data
-                if let sData, !sData.isEmpty {
-                    sourceData = sData
-                } else if let loadedData {
-                    sourceData = loadedData
-                } else if let diskData = PasteDataPointReader.loadData(id: modelId, uniqueId: uId) {
-                    sourceData = diskData
-                } else {
-                    return nil
-                }
+            guard !Task.isCancelled else { return nil }
+            let image = Self.downsampledImage(from: sourceData, maxPixelSize: 600) ?? NSImage(data: sourceData)
 
-                guard !Task.isCancelled else { return nil }
-                return Self.downsampledImage(from: sourceData, maxPixelSize: 600) ?? NSImage(data: sourceData)
-            }.value
-
-            guard !Task.isCancelled, let self else { return nil }
-            cachedThumbnail = image
-            thumbnailLoadTask = nil
+            guard !Task.isCancelled, let self else { return image }
+            await MainActor.run {
+                self.cachedThumbnail = image
+                self.thumbnailLoadTask = nil
+            }
             return image
         }
 

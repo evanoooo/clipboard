@@ -14,7 +14,22 @@ extension PasteSQLManager {
         return ids.compactMap { apps[$0] }
     }
 
-    func refreshAppCache() async {
+    func refreshAppCache(debounce: Bool = false) async {
+        if debounce {
+            pendingRefreshTask?.cancel()
+            pendingRefreshTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled, let self else { return }
+                await self.performRefreshAppCache()
+            }
+        } else {
+            pendingRefreshTask?.cancel()
+            pendingRefreshTask = nil
+            await performRefreshAppCache()
+        }
+    }
+
+    private func performRefreshAppCache() async {
         let records = getDistinctAppInfo()
         await MainActor.run { SourceAppCache.shared.synchronize(records) }
     }

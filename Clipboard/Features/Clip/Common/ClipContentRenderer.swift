@@ -19,6 +19,13 @@ enum ClipContentKind: Equatable {
 }
 
 enum ClipContentRenderer {
+    /// 搜索关键字高亮结果缓存（防止快速输入或滚动时重复构建 AttributedString）
+    private static let keywordHighlightCache: NSCache<NSString, NSAttributedString> = {
+        let cache = NSCache<NSString, NSAttributedString>()
+        cache.countLimit = 64
+        return cache
+    }()
+
     /// Resolves high-level semantic content kind from model properties and preferences.
     static func resolveKind(for model: PasteboardModel) -> ClipContentKind {
         switch model.type {
@@ -52,11 +59,19 @@ enum ClipContentRenderer {
         isRich: Bool,
         isCardSnippet: Bool = false
     ) -> NSAttributedString {
+        let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedKeyword.isEmpty {
+            let cacheKey = "\(model.uniqueId):\(trimmedKeyword):\(isRich):\(isCardSnippet)" as NSString
+            if let cached = keywordHighlightCache.object(forKey: cacheKey) {
+                return cached
+            }
+        }
+
+        let result: NSAttributedString
         if isRich {
-            return model.highlightedRichText(keyword: keyword)
+            result = model.highlightedRichText(keyword: keyword)
         } else {
             if let language = model.detectedCodeLanguage {
-                let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
                 let limit = isCardSnippet ? cardHighlightLimit : nil
 
                 if trimmedKeyword.isEmpty {
@@ -74,17 +89,25 @@ enum ClipContentRenderer {
                     }
                     return highlighted
                 } else {
-                    return CodeHighlighter.highlight(
+                    result = CodeHighlighter.highlight(
                         model.attributeString.string,
                         language: language,
                         keyword: trimmedKeyword,
                         limitLength: limit
                     )
                 }
+            } else {
+                result = trimmedKeyword.isEmpty
+                    ? model.plainTextAttributedString
+                    : model.highlightedNSAttributedString(keyword: keyword)
             }
-            return keyword.isEmpty
-                ? model.plainTextAttributedString
-                : model.highlightedNSAttributedString(keyword: keyword)
         }
+
+        if !trimmedKeyword.isEmpty {
+            let cacheKey = "\(model.uniqueId):\(trimmedKeyword):\(isRich):\(isCardSnippet)" as NSString
+            keywordHighlightCache.setObject(result, forKey: cacheKey)
+        }
+
+        return result
     }
 }

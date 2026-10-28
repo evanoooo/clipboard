@@ -11,8 +11,9 @@ import Foundation
 extension Data {
     nonisolated var sha256Hex: String {
         let digest = SHA256.hash(data: self)
-        return digest.reduce(into: "") { result, byte in
-            result += String(format: "%02hhx", byte)
-        }
+        return digest.map { byte in
+            let hex = String(byte, radix: 16)
+            return hex.count == 1 ? "0" + hex : hex
+        }.joined()
     }
 }

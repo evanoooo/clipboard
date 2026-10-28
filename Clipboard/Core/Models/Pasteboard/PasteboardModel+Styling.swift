@@ -115,18 +115,9 @@ extension PasteboardModel {
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return plainTextAttributedString }
 
-        let source = attributeString.string
-        let mutable = NSMutableAttributedString(string: source)
-        attributeString.enumerateAttributes(
-            in: NSRange(location: 0, length: attributeString.length)
-        ) { attrs, range, _ in
-            mutable.addAttributes(attrs, range: range)
-        }
-
-        let fullRange = NSRange(location: 0, length: mutable.length)
-        mutable.addAttribute(.foregroundColor, value: NSColor.labelColor, range: fullRange)
-
-        applyHighlight(to: mutable, source: source as NSString, keyword: trimmed)
+        let mutable = NSMutableAttributedString(attributedString: plainTextAttributedString)
+        let source = mutable.string as NSString
+        applyHighlight(to: mutable, source: source, keyword: trimmed)
         return mutable
     }
 

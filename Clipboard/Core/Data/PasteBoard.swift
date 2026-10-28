@@ -324,9 +324,11 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             }
         }
 
+        let declared = declaredSource()
+        let sourceBundleID = resolveSourceBundleID(declared: declared)
+
         // 机密与安全增强：自动拦截已知密码管理软件与高危敏感凭证（如私钥、Token）
         if checkSensitive {
-            let sourceBundleID = resolveSourceBundleID()
             if PasteboardContentFilter.isPasswordManager(bundleID: sourceBundleID) {
                 log.info("检测到来自密码管理器(\(sourceBundleID ?? ""))的机密内容，跳过记录")
                 changeCount = pasteboard.changeCount
@@ -345,15 +347,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         // 检查隐私设置：忽略特定应用
         let ignoredApps = PasteUserDefaults.ignoredApps
         if !ignoredApps.isEmpty {
-            let declared = declaredSource()
             let isPathValue = declared?.hasPrefix("/") == true
-            let sourceBundleID: String? =
-                if let declared {
-                    isPathValue ? nil : declared
-                } else {
-                    NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                }
-
             var sourcePath: String?
             if isPathValue {
                 sourcePath = declared
@@ -402,7 +396,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             }
         #endif
 
-        PasteDataStore.main.addNewItem(pasteboard, sourceApp: resolveSourceApp())
+        PasteDataStore.main.addNewItem(pasteboard, sourceApp: resolveSourceApp(declared: declared))
         changeCount = pasteboard.changeCount
 
         StatusBarController.shared.triggerPulseAnimation()
@@ -425,12 +419,13 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     private static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
 
     /// 解析当前剪贴板写入来源的 Bundle Identifier
-    private func resolveSourceBundleID() -> String? {
-        if let declared = declaredSource() {
-            if declared.hasPrefix("/") {
-                return Bundle(path: declared)?.bundleIdentifier
+    private func resolveSourceBundleID(declared: String? = nil) -> String? {
+        let dec = declared ?? declaredSource()
+        if let dec {
+            if dec.hasPrefix("/") {
+                return Bundle(path: dec)?.bundleIdentifier
             }
-            return declared
+            return dec
         }
         return NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     }
@@ -445,15 +440,16 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     }
 
     /// 入库归属用：优先按声明的来源找运行中的实例，找不到再回退前台
-    private func resolveSourceApp() -> NSRunningApplication? {
-        if let declared = declaredSource() {
-            if declared.hasPrefix("/") {
+    private func resolveSourceApp(declared: String? = nil) -> NSRunningApplication? {
+        let dec = declared ?? declaredSource()
+        if let dec {
+            if dec.hasPrefix("/") {
                 return NSWorkspace.shared.runningApplications.first {
-                    $0.bundleURL?.path == declared
+                    $0.bundleURL?.path == dec
                 }
             }
             if let app = NSRunningApplication
-                .runningApplications(withBundleIdentifier: declared).first {
+                .runningApplications(withBundleIdentifier: dec).first {
                 return app
             }
         }
@@ -746,11 +742,14 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
 extension NSMutableAttributedString {
     func trimTrailingNewlines() {
-        let nsString = string as NSString
         var currentLength = length
-        while currentLength > 0 {
-            let char = nsString.character(at: currentLength - 1)
-            if char == 0x0A || char == 0x0D { // '\n' or '\r'
+        let scalars = string.unicodeScalars
+        var index = scalars.endIndex
+        while index > scalars.startIndex {
+            let prev = scalars.index(before: index)
+            let val = scalars[prev].value
+            if val == 0x0A || val == 0x0D { // '\n' or '\r'
+                index = prev
                 currentLength -= 1
             } else {
                 break

@@ -64,6 +64,10 @@ extension PasteDataStore {
                 )
                 pasteModel.id = id
                 pasteModel.sortOrder = sortOrder
+                // 后台预热代码语言嗅探，避免主线程渲染 Cell 时发生同步正则计算
+                if pasteModel.type == .string, pasteModel.length >= 10 {
+                    _ = pasteModel.detectedCodeLanguage
+                }
                 repairTagIfNeeded(pasteModel)
                 return pasteModel
             }

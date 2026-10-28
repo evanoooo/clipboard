@@ -191,6 +191,16 @@ extension ClipMainViewController {
             .sink { [weak self] _ in self?.updatePauseState() }
             .store(in: &cancellables)
 
+        TimeManager.shared.tick
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                for item in collectionView.visibleItems() {
+                    (item as? CollectionViewItem)?.refreshTimestamp()
+                }
+            }
+            .store(in: &cancellables)
+
         appearanceObservation = view.observe(\.effectiveAppearance) { [weak self] _, _ in
             Task { @MainActor [weak self] in
                 guard let self, !pauseStack.isHidden else { return }

@@ -35,7 +35,6 @@ final class CollectionViewItem: NSCollectionViewItem {
     private(set) var item: PasteboardModel?
     private var iconLoadTask: Task<Void, Never>?
     private var isFocused = true
-    private var tickCancellable: AnyCancellable?
 
     isolated deinit {
         if isViewLoaded {
@@ -149,13 +148,12 @@ final class CollectionViewItem: NSCollectionViewItem {
 
         cardContentView.configure(with: model, keyword: keyword)
         cardBottomView.configure(with: model, keyword: keyword)
-
-        tickCancellable = TimeManager.shared.tick
-            .sink { [weak self] _ in
-                guard let self, let model = item else { return }
-                headView.refreshTimestamp(for: model)
-            }
         updateAccessibility(with: model)
+    }
+
+    func refreshTimestamp() {
+        guard let model = item else { return }
+        headView.refreshTimestamp(for: model)
     }
 
     func setFocused(_ focused: Bool) {
@@ -265,8 +263,6 @@ extension CollectionViewItem {
     override func prepareForReuse() {
         super.prepareForReuse()
         item = nil
-        tickCancellable?.cancel()
-        tickCancellable = nil
         iconLoadTask?.cancel()
         iconLoadTask = nil
         headView.reset()

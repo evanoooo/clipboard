@@ -180,9 +180,10 @@ final class PasteDataStore {
 
     func focusIndex(in list: [PasteboardModel], ids: [Int64]) -> Int? {
         guard !ids.isEmpty else { return nil }
+        let idSet = Set(ids)
         return list.firstIndex { model in
             guard let id = model.id else { return false }
-            return ids.contains(id)
+            return idSet.contains(id)
         }
     }
 }
@@ -245,8 +246,16 @@ extension PasteDataStore {
             }
 
             var list = self.dataList.value
-            let existingUniqueIds = Set(list.map(\.uniqueId))
-            let existingDbIds = Set(list.compactMap(\.id))
+            var existingUniqueIds = Set<String>()
+            var existingDbIds = Set<Int64>()
+            existingUniqueIds.reserveCapacity(list.count)
+            existingDbIds.reserveCapacity(list.count)
+            for item in list {
+                existingUniqueIds.insert(item.uniqueId)
+                if let id = item.id {
+                    existingDbIds.insert(id)
+                }
+            }
             let deduplicated = newItems.filter { item in
                 if existingUniqueIds.contains(item.uniqueId) { return false }
                 if let id = item.id, existingDbIds.contains(id) { return false }
@@ -627,9 +636,10 @@ extension PasteDataStore {
         )
         guard result.id >= 0 else { return }
         model.appID = result.appID
-        await sqlManager.refreshAppCache()
+        await sqlManager.refreshAppCache(debounce: true)
         AppColorService.shared.updateColor(for: model)
-        let count = await sqlManager.getTotalCount()
+        totalCount += 1
+        let count = totalCount
 
         model.id = result.id
         model.sortOrder = result.sortOrder

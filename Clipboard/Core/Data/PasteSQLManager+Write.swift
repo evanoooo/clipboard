@@ -191,7 +191,7 @@ extension PasteSQLManager {
                 }
             }
             let count = try connection?.run(query.delete())
-            await refreshAppCache()
+            await refreshAppCache(debounce: true)
             Log.database.info("删除条目成功，影响行数：\(count ?? 0)")
         } catch {
             log.error("删除失败：\(error)")
@@ -208,7 +208,7 @@ extension PasteSQLManager {
                 }
             }
             try connection?.run(idFilter.delete())
-            await refreshAppCache()
+            await refreshAppCache(debounce: true)
         } catch {
             log.error("删除失败：\(error)，id：\(id)")
         }
@@ -455,7 +455,7 @@ extension PasteSQLManager {
                 )
             }
             try connection.run("COMMIT")
-            await refreshAppCache()
+            await refreshAppCache(debounce: true)
             log.debug("更新文本内容成功：\(id)")
             return true
         } catch {

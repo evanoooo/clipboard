@@ -27,6 +27,7 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
     let table: Table
     var apps: [Int64: SourceApp] = [:]
     var appIdentities: [String: Int64] = [:]
+    var pendingRefreshTask: Task<Void, Never>?
 
     private init() {
         table = Table("Clip")
