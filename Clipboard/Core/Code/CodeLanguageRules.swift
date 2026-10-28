@@ -20,6 +20,10 @@ nonisolated struct CodeLanguageRules: Sendable {
     let strings: [(open: String, close: String, escapes: Bool)]
     /// 按注释呈现的多行字符串（如 Python 文档字符串）
     let multiLineStrings: [(open: String, close: String)]
+    /// 预计算的各多行前缀，避免在扫描循环中高频 map(\.open)
+    let multiLineOpenPrefixes: [String]
+    /// 预计算的块注释前缀
+    let blockCommentOpenPrefixes: [String]
     let keywords: Set<String>
     /// 字面量（true/false/null…）
     let literals: Set<String>
@@ -36,6 +40,36 @@ nonisolated struct CodeLanguageRules: Sendable {
     /// 首字母大写的标识符按类型呈现
     let uppercaseMeansType: Bool
 
+    init(
+        lineComments: [String],
+        blockComments: [(open: String, close: String)],
+        strings: [(open: String, close: String, escapes: Bool)],
+        multiLineStrings: [(open: String, close: String)],
+        keywords: Set<String>,
+        literals: Set<String>,
+        caseInsensitiveWords: Bool,
+        tagNamesAsKeywords: Bool,
+        atSignAsKeyword: Bool,
+        hexColorAsNumber: Bool,
+        charLiterals: Bool,
+        uppercaseMeansType: Bool
+    ) {
+        self.lineComments = lineComments
+        self.blockComments = blockComments
+        self.strings = strings
+        self.multiLineStrings = multiLineStrings
+        self.multiLineOpenPrefixes = multiLineStrings.map(\.open)
+        self.blockCommentOpenPrefixes = blockComments.map(\.open)
+        self.keywords = keywords
+        self.literals = literals
+        self.caseInsensitiveWords = caseInsensitiveWords
+        self.tagNamesAsKeywords = tagNamesAsKeywords
+        self.atSignAsKeyword = atSignAsKeyword
+        self.hexColorAsNumber = hexColorAsNumber
+        self.charLiterals = charLiterals
+        self.uppercaseMeansType = uppercaseMeansType
+    }
+
     func isKeyword(_ word: String) -> Bool {
         caseInsensitiveWords ? keywords.contains(word.lowercased()) : keywords.contains(word)
     }
@@ -44,9 +78,22 @@ nonisolated struct CodeLanguageRules: Sendable {
         caseInsensitiveWords ? literals.contains(word.lowercased()) : literals.contains(word)
     }
 
-    // MARK: - 各语言规则
+    // MARK: - 各语言规则缓存
+
+    private static let cachedRules: [CodeLanguage: CodeLanguageRules] = {
+        var map = [CodeLanguage: CodeLanguageRules]()
+        map.reserveCapacity(CodeLanguage.allCases.count)
+        for language in CodeLanguage.allCases {
+            map[language] = createRules(for: language)
+        }
+        return map
+    }()
 
     static func rules(for language: CodeLanguage) -> CodeLanguageRules {
+        cachedRules[language] ?? createRules(for: language)
+    }
+
+    private static func createRules(for language: CodeLanguage) -> CodeLanguageRules {
         switch language {
         case .java:
             cFamily(

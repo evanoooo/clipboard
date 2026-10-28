@@ -288,16 +288,16 @@ extension CollectionViewItem {
         updateShadow()
     }
 
+    private static let unselectedShadow: NSShadow = {
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.shadowColor.withAlphaComponent(0.1)
+        shadow.shadowBlurRadius = 2
+        shadow.shadowOffset = CGSize(width: 0, height: -1)
+        return shadow
+    }()
+
     private func updateShadow() {
-        if isSelected {
-            selectionBorderView.shadow = nil
-        } else {
-            let shadow = NSShadow()
-            shadow.shadowColor = NSColor.shadowColor.withAlphaComponent(0.1)
-            shadow.shadowBlurRadius = 2
-            shadow.shadowOffset = CGSize(width: 0, height: -1)
-            selectionBorderView.shadow = shadow
-        }
+        selectionBorderView.shadow = isSelected ? nil : Self.unselectedShadow
     }
 
     private func updateContentInset() {

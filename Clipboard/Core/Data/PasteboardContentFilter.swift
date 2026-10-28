@@ -33,7 +33,7 @@ struct PasteboardContentFilter: Sendable {
         "com.apple.pasteboard.promised-file-content-type",
     ]
 
-    /// 主流密码管理软件与系统凭证工具 Bundle ID
+    /// 主流密码管理软件与系统凭证工具 Bundle ID（全小写）
     static let passwordManagerBundleIDs: Set<String> = [
         "com.agilebits.onepassword",
         "com.agilebits.onepassword7",
@@ -41,18 +41,18 @@ struct PasteboardContentFilter: Sendable {
         "com.1password.onepassword",
         "com.bitwarden.desktop",
         "org.keepassxc.keepassxc",
-        "app.macpass.MacPass",
-        "com.enpass.Enpass",
-        "io.enpass.Enpass",
+        "app.macpass.macpass",
+        "com.enpass.enpass",
+        "io.enpass.enpass",
         "com.nordpass.macos",
         "com.lastpass.mac",
-        "com.lastpass.LastPass",
+        "com.lastpass.lastpass",
         "com.dashlane.dashlanephonefinal",
-        "com.dashlane.Dashlane",
-        "com.keepersecurity.KeeperPasswordManager",
-        "com.keeper.KeeperPassManager",
+        "com.dashlane.dashlane",
+        "com.keepersecurity.keeperpasswordmanager",
+        "com.keeper.keeperpassmanager",
         "com.apple.keychainaccess",
-        "com.apple.Passwords",
+        "com.apple.passwords",
     ]
 
     /// 检查应用 Bundle ID 是否为已知密码管理器或凭证工具
@@ -60,8 +60,7 @@ struct PasteboardContentFilter: Sendable {
         guard let bundleID = bundleID?.trimmingCharacters(in: .whitespacesAndNewlines), !bundleID.isEmpty else {
             return false
         }
-        let lower = bundleID.lowercased()
-        return passwordManagerBundleIDs.contains(where: { $0.lowercased() == lower })
+        return passwordManagerBundleIDs.contains(bundleID.lowercased())
     }
 
     // MARK: - 敏感凭证高危正则表达式规则

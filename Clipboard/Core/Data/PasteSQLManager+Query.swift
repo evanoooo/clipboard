@@ -113,12 +113,10 @@ extension PasteSQLManager {
         guard let connection else { return [] }
         do {
             let ids = try connection.prepare("""
-                SELECT a.id FROM App a
-                WHERE EXISTS (SELECT 1 FROM Clip WHERE app_id = a.id)
-                ORDER BY MAX(
-                    COALESCE((SELECT MAX(timestamp) FROM Clip WHERE app_id = a.id AND hidden = 0), -1),
-                    COALESCE((SELECT MAX(timestamp) FROM Clip WHERE app_id = a.id AND hidden = 1), -1)
-                ) DESC, a.id DESC
+                SELECT app_id FROM Clip
+                WHERE app_id IS NOT NULL
+                GROUP BY app_id
+                ORDER BY MAX(timestamp) DESC, app_id DESC
                 """).compactMap { $0[0] as? Int64 }
             return ids.compactMap { apps[$0] }
         } catch {
@@ -129,19 +127,17 @@ extension PasteSQLManager {
 
     func getDistinctTags() async -> [String] {
         do {
-            var tags: Set<String> = []
             let query = table.select(distinct: Col.tag)
                 .filter(Col.tag != nil)
 
-            if let result = try connection?.prepare(query) {
-                for row in result {
-                    if let tag = try? row.get(Col.tag),
-                       !tag.isEmpty {
-                        tags.insert(tag)
-                    }
+            guard let result = try connection?.prepare(query) else { return [] }
+            var tags: [String] = []
+            for row in result {
+                if let tag = try? row.get(Col.tag), !tag.isEmpty {
+                    tags.append(tag)
                 }
             }
-            return Array(tags).sorted()
+            return tags.sorted()
         } catch {
             log.error("获取 tag 列表失败：\(error)")
             return []

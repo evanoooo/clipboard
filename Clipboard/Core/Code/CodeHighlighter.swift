@@ -97,7 +97,7 @@ enum CodeHighlighter {
             let remainder = text[currentIndex...]
 
             // 1. 检查多行字符串（例如 Python 三引号 """ 或 '''）
-            if let match = matchPrefix(in: remainder, prefixes: rules.multiLineStrings.map(\.open)) {
+            if let match = matchPrefix(in: remainder, prefixes: rules.multiLineOpenPrefixes) {
                 let openDelimiter = match
                 let closeDelimiter = rules.multiLineStrings.first { $0.open == openDelimiter }?.close ?? openDelimiter
                 let tokenStart = currentIndex
@@ -114,7 +114,7 @@ enum CodeHighlighter {
             }
 
             // 2. 检查块注释（/* ... */, <!-- ... -->）
-            if let match = matchPrefix(in: remainder, prefixes: rules.blockComments.map(\.open)) {
+            if let match = matchPrefix(in: remainder, prefixes: rules.blockCommentOpenPrefixes) {
                 let openDelimiter = match
                 let closeDelimiter = rules.blockComments.first { $0.open == openDelimiter }?.close ?? openDelimiter
                 let tokenStart = currentIndex
@@ -317,6 +317,7 @@ enum CodeHighlighter {
 
         let nsString = fullText as NSString
         let options: NSString.CompareOptions = [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]
+        let currentLocale = Locale.current
         var searchRange = NSRange(location: 0, length: nsString.length)
 
         let highlightAttributes: [NSAttributedString.Key: Any] = [
@@ -324,7 +325,7 @@ enum CodeHighlighter {
         ]
 
         while searchRange.length > 0 {
-            let found = nsString.range(of: trimmed, options: options, range: searchRange, locale: .current)
+            let found = nsString.range(of: trimmed, options: options, range: searchRange, locale: currentLocale)
             guard found.location != NSNotFound, found.length > 0 else { break }
 
             mutable.addAttributes(highlightAttributes, range: found)

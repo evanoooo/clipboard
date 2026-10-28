@@ -145,6 +145,23 @@ final class CardImageContentView: NSView, PassthroughMouseEvents, CancellableLoa
 
         loadTask?.cancel()
         currentModelId = model.uniqueId
+
+        // 缓存极速快查：若缩略图已就绪，立即同步装配，0 延迟、0 闪烁
+        if let image = model.cachedThumbnail {
+            loadingIndicator.stopAnimation(nil)
+            loadingIndicator.isHidden = true
+            placeholderImageView.isHidden = true
+
+            isFillMode = shouldUseFillMode(for: image.size)
+            currentImageSize = image.size
+
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.image = image
+            imageView.isHidden = false
+            applyImageLayout(imageSize: image.size)
+            return
+        }
+
         imageView.isHidden = true
         placeholderImageView.isHidden = true
         loadingIndicator.isHidden = false

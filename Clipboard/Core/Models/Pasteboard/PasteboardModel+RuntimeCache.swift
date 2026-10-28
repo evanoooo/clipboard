@@ -28,6 +28,9 @@ struct PasteboardModelRuntimeCache {
     var codeDetectionState: CodeDetectionState = .uncomputed
     var plainTextAttributedString: NSAttributedString?
     var highlightedCode: NSAttributedString?
+    var isLink: Bool?
+    var isCSS: Bool?
+    var plainText: String?
 }
 
 extension PasteboardModel {

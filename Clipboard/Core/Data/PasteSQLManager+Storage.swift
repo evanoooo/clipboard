@@ -37,27 +37,10 @@ extension PasteSQLManager {
         }
 
         do {
-            // 获取 freelist_count (空闲碎片页数) 和 page_size (页大小)
-            var pageSize: Int64 = 4096
-            var freelistCount: Int64 = 0
-
-            if let pageStmt = try? connection.prepare("PRAGMA page_size"),
-               let row = pageStmt.makeIterator().next() {
-                pageSize = (row[0] as? Int64) ?? 4096
-            }
-
-            if let freeStmt = try? connection.prepare("PRAGMA freelist_count"),
-               let row = freeStmt.makeIterator().next() {
-                freelistCount = (row[0] as? Int64) ?? 0
-            }
-
+            let pageSize = (try? connection.scalar("PRAGMA page_size") as? Int64) ?? 4096
+            let freelistCount = (try? connection.scalar("PRAGMA freelist_count") as? Int64) ?? 0
             reclaimableFreeBytes = freelistCount * pageSize
-
-            // 统计条目总数
-            if let countStmt = try? connection.prepare("SELECT COUNT(*) FROM Clip"),
-               let row = countStmt.makeIterator().next() {
-                totalItemCount = Int((row[0] as? Int64) ?? 0)
-            }
+            totalItemCount = (try? connection.scalar(table.count)) ?? 0
         }
 
         return StorageDiskUsage(

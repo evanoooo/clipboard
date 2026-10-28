@@ -64,8 +64,8 @@ nonisolated enum CodeLanguageDetector {
 
         guard best.score >= threshold else { return nil }
         // 与第二名完全同分则视为不确定，宁可展示纯文本
-        let others = ranked.filter { $0.language != best.language }.map(\.score)
-        guard let runnerUp = others.max() else { return best.language }
+        let runnerUp = ranked.lazy.filter { $0.language != best.language }.map(\.score).max()
+        guard let runnerUp else { return best.language }
         return runnerUp >= best.score ? nil : best.language
     }
 

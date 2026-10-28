@@ -746,12 +746,11 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
 extension NSMutableAttributedString {
     func trimTrailingNewlines() {
+        let nsString = string as NSString
         var currentLength = length
         while currentLength > 0 {
-            let lastCharRange = NSRange(location: currentLength - 1, length: 1)
-            let lastChar = attributedSubstring(from: lastCharRange).string
-
-            if lastChar == "\n" || lastChar == "\r" {
+            let char = nsString.character(at: currentLength - 1)
+            if char == 0x0A || char == 0x0D { // '\n' or '\r'
                 currentLength -= 1
             } else {
                 break

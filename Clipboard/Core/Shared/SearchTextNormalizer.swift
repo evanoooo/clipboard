@@ -12,7 +12,7 @@ enum SearchTextNormalizer {
     ///
     /// 归一化结果不会包含 LIKE 通配符 `%` 与 `_`（二者分别是 `.otherPunctuation` 与
     /// `.connectorPunctuation`），因此查询侧无需额外转义。
-    nonisolated static func normalize(_ raw: String) -> String {
+    nonisolated static func normalize(_ raw: some StringProtocol) -> String {
         var output = ""
         output.reserveCapacity(raw.utf8.count)
         for character in raw {
@@ -40,7 +40,7 @@ enum SearchTextNormalizer {
         var seen = Set<String>()
         var tokens: [String] = []
         for part in raw.split(whereSeparator: \.isWhitespace) {
-            let token = normalize(String(part))
+            let token = normalize(part)
             guard !token.isEmpty, seen.insert(token).inserted else { continue }
             tokens.append(token)
         }

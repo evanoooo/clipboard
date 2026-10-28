@@ -76,12 +76,20 @@ final class PasteboardModel: Identifiable, Codable {
         cachedHasBackgroundColor
     }
 
+    /// 是否为纯链接文本；基于 `attributeString` 计算后缓存，避免每次调用重复扫描
     var isLink: Bool {
-        attributeString.string.isLink()
+        if let cached = runtimeCache.isLink { return cached }
+        let result = attributeString.string.isLink()
+        runtimeCache.isLink = result
+        return result
     }
 
+    /// 是否为 CSS 十六进制颜色值；基于 `attributeString` 计算后缓存
     var isCSS: Bool {
-        attributeString.string.isCSSHexColor
+        if let cached = runtimeCache.isCSS { return cached }
+        let result = attributeString.string.isCSSHexColor
+        runtimeCache.isCSS = result
+        return result
     }
 
     init(
@@ -146,11 +154,18 @@ final class PasteboardModel: Identifiable, Codable {
     // MARK: - 纯文本（粘贴用）
 
     var plainText: String {
+        if let cached = runtimeCache.plainText {
+            return cached
+        }
+        let text: String
         if pasteboardType.isText() {
             let att = NSAttributedString(with: data, type: pasteboardType)
-            return att?.string ?? (String(data: data, encoding: .utf8) ?? "")
+            text = att?.string ?? (String(data: data, encoding: .utf8) ?? "")
+        } else {
+            text = String(data: data, encoding: .utf8) ?? ""
         }
-        return String(data: data, encoding: .utf8) ?? ""
+        runtimeCache.plainText = text
+        return text
     }
 
     // MARK: - 搜索文本格式化
@@ -205,6 +220,7 @@ final class PasteboardModel: Identifiable, Codable {
         cachedLinkMetadata = nil
         thumbnailLoadTask?.cancel()
         thumbnailLoadTask = nil
+        runtimeCache.plainText = nil
     }
 
     func loadThumbnail() async -> NSImage? {
@@ -216,17 +232,33 @@ final class PasteboardModel: Identifiable, Codable {
             return await existingTask.value
         }
 
-        let task = Task<NSImage?, Never> { @MainActor in
+        let sData = showData
+        let modelId = id
+        let uId = uniqueId
+        let loadedData = _data
+
+        let task = Task<NSImage?, Never> { @MainActor [weak self] in
             guard !Task.isCancelled else { return nil }
-            // 性能优化：优先使用轻量缩略图 showData（几十KB），避免无节制触发 loadData 将数十兆原图常驻内存
-            let thumbnailSourceData = (showData != nil && !(showData?.isEmpty ?? true)) ? showData! : data
 
             let image = await Task.detached(priority: .userInitiated) { () -> NSImage? in
                 guard !Task.isCancelled else { return nil }
-                return Self.downsampledImage(from: thumbnailSourceData, maxPixelSize: 600) ?? NSImage(data: thumbnailSourceData)
+                // 性能极致优化：数据读取与解码完全在后台线程，杜绝主线程 I/O 阻塞
+                let sourceData: Data
+                if let sData, !sData.isEmpty {
+                    sourceData = sData
+                } else if let loadedData {
+                    sourceData = loadedData
+                } else if let diskData = PasteDataPointReader.loadData(id: modelId, uniqueId: uId) {
+                    sourceData = diskData
+                } else {
+                    return nil
+                }
+
+                guard !Task.isCancelled else { return nil }
+                return Self.downsampledImage(from: sourceData, maxPixelSize: 600) ?? NSImage(data: sourceData)
             }.value
 
-            guard !Task.isCancelled else { return nil }
+            guard !Task.isCancelled, let self else { return nil }
             cachedThumbnail = image
             thumbnailLoadTask = nil
             return image

@@ -7,6 +7,7 @@
 //
 
 import AppKit
+import ImageIO
 @preconcurrency import LinkPresentation
 import SnapKit
 
@@ -300,10 +301,12 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, Cancella
                 unsafeProvider.cancel()
             }
 
-            let previewImage: NSImage? = await loadImage(from: metadata.imageProvider)
-            let iconImage: NSImage? = previewImage == nil
+            let rawPreview: NSImage? = await loadImage(from: metadata.imageProvider)
+            let previewImage = downscaleIfNeeded(rawPreview, maxPixelSize: 600)
+            let rawIcon: NSImage? = previewImage == nil
                 ? await loadImage(from: metadata.iconProvider)
                 : nil
+            let iconImage = downscaleIfNeeded(rawIcon, maxPixelSize: 128)
 
             return LinkPreviewMetadata(
                 title: metadata.title,
@@ -313,6 +316,25 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, Cancella
         } catch {
             return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
         }
+    }
+
+    private static func downscaleIfNeeded(_ image: NSImage?, maxPixelSize: CGFloat) -> NSImage? {
+        guard let image else { return nil }
+        guard let tiffData = image.tiffRepresentation,
+              let source = CGImageSourceCreateWithData(tiffData as CFData, nil) else {
+            return image
+        }
+        let options = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+            return image
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     private static func loadImage(from provider: NSItemProvider?) async -> NSImage? {
