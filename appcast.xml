@@ -5,6 +5,63 @@
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
 
+        <!-- Version 2.4.5 (Apple Silicon) -->
+        <item>
+            <title>Version 2.4.5 (Apple Silicon)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.5
+
+- 词法高亮引擎异步化改造，消除大段代码及长文本解析对主线程的阻塞；
+- 语言嗅探管道前移至后台数据映射阶段，彻底消除列表首次展示与快速滚动正则卡顿；
+- 缩略图后台解码与生命周期管理深度优化，闲置与收起时彻底释放大对象常驻内存；
+- 引入搜索高亮结果复用缓存，杜绝连续关键字输入与滚动重排时重复构建属性字符串；
+- 应用列表刷新增加异步防抖，消除单条频繁写操作引发的全表扫描与无谓重查；
+- 消除单条记录入库时的多重 COUNT(*) 磁盘查询，存储分析模块改用等值索引加速扫描；
+- 汇聚全局心跳广播至视图控制器统一调度，将每个卡片单元的独立 Combine 订阅从 O(N) 降至 O(1)；
+- 换行清理与集合去重原生算法重构，移除 Objective-C 桥接与 C 风格数字格式化。
+]]>
+            </description>
+            <pubDate>Wed, 28 Oct 2026 12:47:17 GMT</pubDate>
+            <sparkle:version>945</sparkle:version>
+            <sparkle:shortVersionString>2.4.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.5/Clipboard-2.4.5-arm64.zip"
+                sparkle:edSignature="dgukkZHrXqkYaGdRaz6UAQDEdLj6O9FHFUQGB+/a56IAWo125aiKiep5+/gWwYK3FgjSrFqoUJZx6R24hwVKAA=="
+                length="4514536"
+                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.4.5 (Intel) -->
+        <item>
+            <title>Version 2.4.5 (Intel)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.4.5
+
+- 词法高亮引擎异步化改造，消除大段代码及长文本解析对主线程的阻塞；
+- 语言嗅探管道前移至后台数据映射阶段，彻底消除列表首次展示与快速滚动正则卡顿；
+- 缩略图后台解码与生命周期管理深度优化，闲置与收起时彻底释放大对象常驻内存；
+- 引入搜索高亮结果复用缓存，杜绝连续关键字输入与滚动重排时重复构建属性字符串；
+- 应用列表刷新增加异步防抖，消除单条频繁写操作引发的全表扫描与无谓重查；
+- 消除单条记录入库时的多重 COUNT(*) 磁盘查询，存储分析模块改用等值索引加速扫描；
+- 汇聚全局心跳广播至视图控制器统一调度，将每个卡片单元的独立 Combine 订阅从 O(N) 降至 O(1)；
+- 换行清理与集合去重原生算法重构，移除 Objective-C 桥接与 C 风格数字格式化。
+]]>
+            </description>
+            <pubDate>Wed, 28 Oct 2026 12:47:17 GMT</pubDate>
+            <sparkle:version>945</sparkle:version>
+            <sparkle:shortVersionString>2.4.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.4.5/Clipboard-2.4.5-x86_64.zip"
+                sparkle:edSignature="3ftmvK/bQIoaAhHElCQ7hpVRlOrrs6sfZrobZfu8fx/RDzpMEC4nCbpepoTKyFGQhcyFiUQMbzoQOBpcSb/DCg=="
+                length="4839987"
+                type="application/octet-stream" />
+        </item>
+
         <!-- Version 2.4.4 (Apple Silicon) -->
         <item>
             <title>Version 2.4.4 (Apple Silicon)</title>
