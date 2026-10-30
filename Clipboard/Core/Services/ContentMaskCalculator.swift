@@ -24,8 +24,13 @@ enum ContentMaskCalculator {
         let availableWidth = Const.cardSize - Const.space10 * 4
 
         // 修复：用 NSLayoutManager + NSTextContainer 代替 boundingRect
-        // 对混合字体、行高、富文本的测量结果更准确
-        let attrString = preparedAttributedString(from: model.attributeString)
+        // 对混合字体、行高、富文本的测量结果更准确；
+        // 对于长文本截取前 800 字符计算已远超卡片遮罩阈值，杜绝主线程全文排版卡顿
+        let rawAttr = model.attributeString
+        let measureAttr = rawAttr.length > 800
+            ? rawAttr.attributedSubstring(from: NSRange(location: 0, length: 800))
+            : rawAttr
+        let attrString = preparedAttributedString(from: measureAttr)
 
         let textStorage = NSTextStorage(attributedString: attrString)
         let layoutManager = NSLayoutManager()

@@ -504,6 +504,19 @@ extension PasteDataStore {
         }
     }
 
+    /// 批量更新条目的时间戳（仅更新 timestamp 列，杜绝反复读写大 BLOB）
+    func updateItemsTimestamp(items: [PasteboardModel]) {
+        let validIds = items.compactMap(\.id)
+        let now = Int64(Date().timeIntervalSince1970)
+        for item in items {
+            item.updateDate(to: now)
+        }
+        guard !validIds.isEmpty else { return }
+        Task {
+            await sqlManager.updateTimestamps(ids: validIds, timestamp: now)
+        }
+    }
+
     func updateDbItem(id: Int64, item: PasteboardModel) {
         Task {
             await sqlManager.update(id: id, item: item)

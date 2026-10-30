@@ -56,10 +56,11 @@ actor WebDAVClient {
         }
 
         let config = URLSessionConfiguration.ephemeral
-        // 针对海外/代理或高延迟网络（往返延迟数秒级别），放宽超时限制保障大文件/索引完整传输
+        // 针对海外/代理或高延迟网络（往返延迟数秒级别），放宽超时限制保障大文件/索引完整传输；
+        // 离线时不长时间阻塞等待连接，快速感知网络状态
         config.timeoutIntervalForRequest = 120
         config.timeoutIntervalForResource = 300
-        config.waitsForConnectivity = true
+        config.waitsForConnectivity = false
         self.session = URLSession(configuration: config)
     }
 
@@ -126,6 +127,7 @@ actor WebDAVClient {
 
         var attempts = 0
         while true {
+            try Task.checkCancellation()
             attempts += 1
             do {
                 let (_, response) = try await session.upload(for: request, from: data)
@@ -144,17 +146,21 @@ actor WebDAVClient {
                 if http.statusCode == 401 { throw WebDAVError.unauthorized }
                 if http.statusCode == 403 { throw WebDAVError.forbidden }
                 throw WebDAVError.serverError(code: http.statusCode)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let err as URLError where err.code == .cancelled {
+                throw CancellationError()
             } catch let err as WebDAVError {
                 if case .unauthorized = err { throw err }
                 if case .forbidden = err { throw err }
                 if attempts < 3 {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    try await Task.sleep(nanoseconds: 1_500_000_000)
                     continue
                 }
                 throw err
             } catch {
                 if attempts < 3 {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    try await Task.sleep(nanoseconds: 1_500_000_000)
                     continue
                 }
                 throw error
@@ -168,6 +174,7 @@ actor WebDAVClient {
 
         var attempts = 0
         while true {
+            try Task.checkCancellation()
             attempts += 1
             do {
                 let (data, response) = try await perform(request)
@@ -179,6 +186,10 @@ actor WebDAVClient {
                 if http.statusCode == 401 { throw WebDAVError.unauthorized }
                 if http.statusCode == 403 { throw WebDAVError.forbidden }
                 throw WebDAVError.serverError(code: http.statusCode)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let err as URLError where err.code == .cancelled {
+                throw CancellationError()
             } catch let err as WebDAVError {
                 switch err {
                 case .notFound, .unauthorized, .forbidden, .invalidURL:
@@ -186,14 +197,14 @@ actor WebDAVClient {
                     throw err
                 default:
                     if attempts < 3 {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        try await Task.sleep(nanoseconds: 1_500_000_000)
                         continue
                     }
                     throw err
                 }
             } catch {
                 if attempts < 3 {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    try await Task.sleep(nanoseconds: 1_500_000_000)
                     continue
                 }
                 throw error
@@ -232,7 +243,12 @@ actor WebDAVClient {
     private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
         do {
             return try await session.data(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let err as NSError {
+            if err.domain == NSURLErrorDomain && err.code == NSURLErrorCancelled {
+                throw CancellationError()
+            }
             if err.domain == NSURLErrorDomain {
                 throw WebDAVError.networkError(err.localizedDescription)
             }

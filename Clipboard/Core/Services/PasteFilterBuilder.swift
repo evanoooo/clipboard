@@ -24,7 +24,7 @@ enum PasteFilterBuilder {
                 // 关键词归一化后为空（纯标点/空白）：与任何入库文本都不可能匹配
                 clauses.append(Expression<Bool>(value: false))
             } else {
-                let canUseFTS = tokens.allSatisfy { $0.count >= 3 }
+                let canUseFTS = tokens.allSatisfy { $0.utf8.count >= 3 }
                 if canUseFTS {
                     let matchClauses = tokens.map { token in
                         let escaped = token.replacing("\"", with: "\"\"")

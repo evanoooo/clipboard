@@ -8,8 +8,13 @@ final class SourceAppCache {
     private var orderedIDs: [Int64] = []
     let changes = PassthroughSubject<Void, Never>()
 
+    private var _cachedOrderedApps: [SourceApp]?
+
     var orderedApps: [SourceApp] {
-        orderedIDs.compactMap { apps[$0] }.filter { !$0.name.isEmpty }
+        if let cached = _cachedOrderedApps { return cached }
+        let result = orderedIDs.compactMap { apps[$0] }.filter { !$0.name.isEmpty }
+        _cachedOrderedApps = result
+        return result
     }
     private var warmingTask: Task<Void, Never>?
 
@@ -17,6 +22,7 @@ final class SourceAppCache {
         warmingTask?.cancel()
         apps = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
         orderedIDs = records.map(\.id)
+        _cachedOrderedApps = nil
         AppIconCache.shared.clearCache()
         changes.send()
     }
@@ -33,6 +39,7 @@ final class SourceAppCache {
         }
         orderedIDs = ids
         apps = updated
+        _cachedOrderedApps = nil
         changes.send()
     }
 
@@ -42,6 +49,7 @@ final class SourceAppCache {
         guard let index = orderedIDs.firstIndex(of: appID) else {
             if apps[appID] != nil {
                 orderedIDs.insert(appID, at: 0)
+                _cachedOrderedApps = nil
                 changes.send()
             }
             return
@@ -49,6 +57,7 @@ final class SourceAppCache {
         if index > 0 {
             orderedIDs.remove(at: index)
             orderedIDs.insert(appID, at: 0)
+            _cachedOrderedApps = nil
             changes.send()
         }
     }
@@ -58,6 +67,7 @@ final class SourceAppCache {
         if let previous = apps[app.id], previous.path != app.path { AppIconCache.shared.clearCache() }
         guard apps[app.id] != nil else { return }
         apps[app.id] = app
+        _cachedOrderedApps = nil
     }
 
     func warmMissingIcons() {

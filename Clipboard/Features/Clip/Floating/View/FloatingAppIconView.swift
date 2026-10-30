@@ -28,11 +28,14 @@ final class FloatingAppIconView: NSView {
 
     func configure(appID: Int64?, appPath: String) {
         loadTask?.cancel()
-        imageView.image = nil
-        loadTask = Task { @MainActor [weak self] in
-            let icon = await AppIconCache.shared.loadIcon(forAppID: appID, path: appPath)
-            guard !Task.isCancelled else { return }
-            self?.imageView.image = icon
+        let cached = AppIconCache.shared.getCachedIcon(forAppID: appID, path: appPath)
+        imageView.image = cached
+        if cached == nil {
+            loadTask = Task { @MainActor [weak self] in
+                let icon = await AppIconCache.shared.loadIcon(forAppID: appID, path: appPath)
+                guard !Task.isCancelled else { return }
+                self?.imageView.image = icon
+            }
         }
     }
 }

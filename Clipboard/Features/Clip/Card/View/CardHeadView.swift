@@ -18,6 +18,10 @@ final class CardHeadView: NSView {
     var onAliasCommit: ((String) -> Void)?
     /// 进入/退出别名编辑，外层据此切换键盘焦点区域。
     var onAliasEditingChanged: ((Bool) -> Void)?
+    /// 检查是否允许进入别名编辑（例如仅在已选中状态下响应单机重命名）
+    var canBeginEditing: (() -> Bool)?
+    /// 未选中时点击标题栏请求先选中卡片
+    var onRequestSelect: (() -> Void)?
 
     // MARK: - Subviews
 
@@ -265,6 +269,10 @@ private extension CardHeadView {
     }
 
     @objc func handleTitleClick() {
+        if let canBegin = canBeginEditing, !canBegin() {
+            onRequestSelect?()
+            return
+        }
         beginAliasEditing()
     }
 }

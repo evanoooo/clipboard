@@ -295,7 +295,7 @@ extension ClipMainViewController {
         ClipActionService.shared.copyMultiple(items)
         HUDManager.shared.show(
             icon: NSImage(systemSymbolName: "doc.on.doc.fill", accessibilityDescription: nil),
-            text: "已合并复制 \(items.count) 项"
+            text: String(localized: .mergedCopyCount(items.count))
         )
         WindowManager.shared.dismiss()
         return nil

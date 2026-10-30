@@ -74,9 +74,11 @@ final class CardFileThumbnailView: NSView, PassthroughMouseEvents {
         let fileURL = URL(fileURLWithPath: filePath)
         imageView.image = FileThumbnailService.shared.systemIcon(for: fileURL)
 
-        guard FileManager.default.fileExists(atPath: filePath) else { return }
-
-        loadTask = Task { @MainActor [weak self] in
+        loadTask = Task(priority: .userInitiated) { @MainActor [weak self] in
+            let exists = await Task.detached(priority: .utility) {
+                FileManager.default.fileExists(atPath: filePath)
+            }.value
+            guard exists, !Task.isCancelled else { return }
             let image = await FileThumbnailService.shared.generateThumbnail(for: fileURL)
             guard !Task.isCancelled else { return }
             self?.imageView.image = image

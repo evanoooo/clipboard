@@ -11,8 +11,8 @@ final class AppIconCache {
     ) ?? NSImage()
 
     private init() {
-        cache.countLimit = 200
-        cache.totalCostLimit = 40 * 1024 * 1024
+        cache.countLimit = 60
+        cache.totalCostLimit = 15 * 1024 * 1024
     }
 
     func getCachedIcon(forAppID id: Int64?, path: String = "") -> NSImage? {
@@ -46,12 +46,10 @@ final class AppIconCache {
             return loaded.image ?? fallback
         }
         inFlightTasks[key] = task
-        defer {
-            if inFlightTasks[key] == task {
-                inFlightTasks[key] = nil
-            }
-        }
         let image = await task.value
+        if inFlightTasks[key] == task {
+            inFlightTasks[key] = nil
+        }
         if generation == currentGeneration {
             cache.setObject(image, forKey: key as NSString, cost: SourceAppIcon.cacheCost)
         }
@@ -63,6 +61,10 @@ final class AppIconCache {
         inFlightTasks.values.forEach { $0.cancel() }
         inFlightTasks.removeAll()
         cache.removeAllObjects()
+    }
+
+    func trimMemory() {
+        inFlightTasks.removeAll()
     }
 
     private func key(id: Int64?, path: String) -> String {

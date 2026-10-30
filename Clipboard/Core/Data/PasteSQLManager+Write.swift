@@ -46,13 +46,26 @@ extension PasteSQLManager {
         guard let connection, !records.isEmpty else { return }
         do {
             try connection.transaction {
+                // 性能极致优化：批量查重索引映射，由单行逐条 pluck 优化为批量 IN 查询，消除 N 次单行 SQL 往返
+                var existingMap: [String: (id: Int64, group: Int)] = [:]
+                let uids = records.map(\.uniqueId)
+                let chunkSize = 500
+                for start in stride(from: 0, to: uids.count, by: chunkSize) {
+                    let end = Swift.min(start + chunkSize, uids.count)
+                    let chunk = Array(uids[start..<end])
+                    let query = table.select(Col.id, Col.uniqueId, Col.group)
+                        .filter(chunk.contains(Col.uniqueId))
+                    if let rows = try? connection.prepare(query) {
+                        for row in rows {
+                            existingMap[row[Col.uniqueId]] = (row[Col.id], row[Col.group])
+                        }
+                    }
+                }
+
                 for r in records {
-                    let existing = try? connection.pluck(
-                        table.select(Col.id, Col.group, Col.appID).filter(Col.uniqueId == r.uniqueId)
-                    )
-                    if let existing {
-                        let existingId = existing[Col.id]
-                        let existingGroup = existing[Col.group]
+                    if let existing = existingMap[r.uniqueId] {
+                        let existingId = existing.id
+                        let existingGroup = existing.group
                         var updates: [Setter] = [
                             Col.timestamp <- r.timestamp,
                             Col.hidden <- 0,
@@ -302,6 +315,22 @@ extension PasteSQLManager {
             return busy == 0
         } catch {
             log.error("历史已清空，空间回收失败：\(error)")
+            return false
+        }
+    }
+
+    /// 批量更新指定条目的时间戳（纯元数据更新，杜绝重复覆写大 BLOB 与冗余 I/O）
+    @discardableResult
+    func updateTimestamps(ids: [Int64], timestamp: Int64) async -> Bool {
+        guard !ids.isEmpty, let database = connection else { return false }
+        let query = table.filter(ids.contains(Col.id))
+        let update = query.update(Col.timestamp <- timestamp)
+        do {
+            let count = try database.run(update)
+            Log.database.debug("批量更新条目时间戳成功，条目数: \(ids.count)，影响行数: \(count)")
+            return count > 0
+        } catch {
+            log.error("批量更新条目时间戳失败：\(error)")
             return false
         }
     }

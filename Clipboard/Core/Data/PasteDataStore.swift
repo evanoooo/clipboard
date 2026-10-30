@@ -7,7 +7,9 @@
 
 import AppKit
 import Combine
+import Darwin
 import SQLite
+import SQLite3
 import SwiftUI
 
 typealias Expression = SQLite.Expression
@@ -33,6 +35,10 @@ final class PasteDataStore {
             model.clearLoadedPayload()
         }
         ClipUndoStore.shared.removeAll()
+        AppIconCache.shared.trimMemory()
+        FileThumbnailService.shared.clearCache()
+        sqlite3_release_memory(Int32.max)
+        malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }
     /// 截断扫描查询行数上限（达到 501 即可提前终止）
     static let countScanLimit = filteredCountCap + 1
@@ -563,23 +569,6 @@ extension PasteDataStore {
         return true
     }
 
-    func runOCRIfNeeded(_ model: PasteboardModel) async {
-        guard model.type == .image, let id = model.id else { return }
-
-        let rawText = await OCRViewService.shared.recognizeText(
-            from: model.data
-        )
-
-        guard !rawText.isEmpty else { return }
-
-        let searchText = PasteboardModel.normalizeSearchText(rawText)
-        model.updateSearchText(val: searchText)
-        _ = await sqlManager.updateSearchText(id: id, searchText: searchText)
-        await MainActor.run {
-            SyncEngine.shared.markDirtyAndSchedule()
-        }
-    }
-
     private func prepareApp(for model: PasteboardModel) async -> Bool {
         do {
             let id: Int64
@@ -613,6 +602,26 @@ extension PasteDataStore {
         await MainActor.run {
             model.evictRawData()
         }
+    }
+
+    /// 批量静默录入由云端同步下载的纯净 Blob（后台直通入库，彻底免除主线程调度与中间模型对象开销）
+    func ingestSyncedBlobs(_ blobs: [SyncItemBlob]) async {
+        guard !blobs.isEmpty else { return }
+        var records: [SyncIngestionRecord] = []
+        for blob in blobs {
+            let appID: Int64
+            do {
+                appID = try await sqlManager.resolveApp(
+                    name: blob.sourceAppName ?? "",
+                    path: "",
+                    bundleID: nil
+                )
+            } catch {
+                appID = 1
+            }
+            records.append(blob.toIngestionRecord(appID: appID))
+        }
+        await sqlManager.ingestSyncedBatch(records)
     }
 
     /// 批量静默录入由云端同步拉取的条目（单事务提交，解决海量数据恢复时逐条写入的 I/O 阻塞）
@@ -680,7 +689,7 @@ extension PasteDataStore {
                 countUpdated.send()
             }
             guard let id = model.id,
-                  await PasteReadStore.shared.getCount(filter: filter && Col.id == id) > 0
+                  await modelMatchesActiveFilter(model, filter: filter, modelId: id)
             else { return }
         } else {
             filterState.filteredCount = count
@@ -700,6 +709,31 @@ extension PasteDataStore {
         isLoadingPage = false
 
         updateData(with: truncated, changeType: .new)
+    }
+
+    /// 判定条目是否匹配当前激活的筛选规则（无关键词检索时优先内存零开销核定，彻底省去一次 SQLite 往返）
+    private func modelMatchesActiveFilter(_ model: PasteboardModel, filter: Expression<Bool>, modelId: Int64) async -> Bool {
+        let criteria = filterState.criteria
+        if criteria.keyword.isEmpty {
+            if !criteria.selectedGroupIds.isEmpty {
+                if !criteria.selectedGroupIds.contains(model.group) { return false }
+            } else if model.hidden {
+                return false
+            }
+            if !criteria.selectedTypes.isEmpty, !criteria.selectedTypes.contains(model.type) {
+                return false
+            }
+            if !criteria.selectedAppIDs.isEmpty {
+                guard let appID = model.appID, criteria.selectedAppIDs.contains(appID) else { return false }
+            }
+            if let dateFilter = criteria.selectedDateFilter {
+                let (start, end) = dateFilter.timestampRange()
+                if model.timestamp < start { return false }
+                if let end, model.timestamp >= end { return false }
+            }
+            return true
+        }
+        return await PasteReadStore.shared.getCount(filter: filter && Col.id == modelId) > 0
     }
 
     func reloadHistory() async {

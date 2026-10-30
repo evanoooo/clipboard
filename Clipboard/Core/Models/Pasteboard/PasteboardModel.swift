@@ -48,6 +48,14 @@ final class PasteboardModel: Identifiable, Codable {
     var appPath: String { appID.flatMap { SourceAppCache.shared.apps[$0]?.path } ?? sourcePath }
     var appName: String { appID.flatMap { SourceAppCache.shared.apps[$0]?.name } ?? sourceName }
     private(set) var searchText: String
+    /// 特殊占位符：表示该图片已完成 OCR 扫描，但未识别到任何有效文字（区分于“未扫描”）。
+    static let emptyOCRMarker = "\u{1E}"
+
+    /// 是否拥有有效的用户搜索文本（排除未识别与无文字占位符）
+    var hasValidSearchText: Bool {
+        !searchText.isEmpty && searchText != Self.emptyOCRMarker
+    }
+
     let length: Int
     private var _attributeString: NSAttributedString?
     /// 截取后的富文本预览（支持闲置释放）
@@ -81,7 +89,7 @@ final class PasteboardModel: Identifiable, Codable {
     /// 用户别名（原文），空串表示未设置；不影响 `tag` 的类型语义。
     private(set) var alias: String
     private(set) var hidden: Bool
-    var runtimeCache = PasteboardModelRuntimeCache()
+    let runtimeCache = PasteboardModelRuntimeCache()
 
     var hasBgColor: Bool {
         cachedHasBackgroundColor
@@ -246,20 +254,14 @@ final class PasteboardModel: Identifiable, Codable {
         _data = nil
         _attributeString = nil
         _writeItem = nil
-        cachedThumbnail = nil
-        cachedLinkMetadata = nil
-        thumbnailLoadTask?.cancel()
-        thumbnailLoadTask = nil
-        runtimeCache.plainText = nil
-        runtimeCache.richForegrounds.removeAll()
-        runtimeCache.previewForegrounds = nil
-        runtimeCache.highlightedCode = nil
-        runtimeCache.plainTextAttributedString = nil
+        runtimeCache.clear()
     }
 
     /// 轻量入库后清理：在数据持久化落盘与 OCR 识别完成后，释放内存中常驻的原始大二进制，保留缩略图与渲染元数据供首屏即时展示
     func evictRawData() {
         _data = nil
+        _writeItem = nil
+        _attributeString = nil
         runtimeCache.plainText = nil
     }
 
@@ -292,7 +294,7 @@ final class PasteboardModel: Identifiable, Codable {
             }
 
             guard !Task.isCancelled else { return nil }
-            let image = Self.downsampledImage(from: sourceData, maxPixelSize: 600) ?? NSImage(data: sourceData)
+            let image = Self.downsampledImage(from: sourceData, maxPixelSize: 400) ?? NSImage(data: sourceData)
 
             guard !Task.isCancelled, let self else { return image }
             await MainActor.run {
@@ -336,8 +338,8 @@ final class PasteboardModel: Identifiable, Codable {
         hidden = val
     }
 
-    func updateDate() {
-        timestamp = Int64(Date().timeIntervalSince1970)
+    func updateDate(to ts: Int64 = Int64(Date().timeIntervalSince1970)) {
+        timestamp = ts
     }
 
     func updateSearchText(val: String) {

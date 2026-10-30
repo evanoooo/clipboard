@@ -135,7 +135,7 @@ extension ClipMainViewController {
         presenter.reconfigureItems = { [weak self] items in
             guard let self else { return }
             let identifiers = diffableDataSource.snapshot().itemIdentifiers
-            let indexMap = Dictionary(uniqueKeysWithValues: identifiers.enumerated().map { ($1.uniqueId, $0) })
+            let indexMap = Dictionary(identifiers.enumerated().map { ($1.uniqueId, $0) }, uniquingKeysWith: { first, _ in first })
             for item in items {
                 guard let idx = indexMap[item.uniqueId] else { continue }
                 (collectionView.item(at: IndexPath(item: idx, section: 0)) as? CollectionViewItem)?
@@ -211,7 +211,7 @@ extension ClipMainViewController {
         }
     }
 
-    private func updatePauseState() {
+    func updatePauseState() {
         let isPaused = PasteBoard.main.isPaused
         pauseStack.isHidden = !isPaused
         pauseButton.isHidden = !isPaused

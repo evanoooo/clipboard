@@ -5,6 +5,7 @@ scripts/build.sh
 .build/
 Tests/.build/
 release/
+build/
 .sparkle_keys.json
 __pycache__/
 skills/

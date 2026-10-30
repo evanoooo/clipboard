@@ -112,13 +112,27 @@ extension PasteSQLManager {
     func getDistinctAppInfo() -> [SourceApp] {
         guard let connection else { return [] }
         do {
-            let ids = try connection.prepare("""
+            // 利用 idx_hidden_ts 索引直接快速扫描最近使用的前 2000 条记录按时间降序去重提取应用 ID，
+            // 避免整表全量无索引聚合排序建 Temp B-Tree 产生额外内存与 I/O 开销
+            var orderedSet = [Int64]()
+            var seen = Set<Int64>()
+            let recentQuery = """
                 SELECT app_id FROM Clip
-                WHERE app_id IS NOT NULL
-                GROUP BY app_id
-                ORDER BY MAX(timestamp) DESC, app_id DESC
-                """).compactMap { $0[0] as? Int64 }
-            return ids.compactMap { apps[$0] }
+                WHERE hidden = 0 AND app_id IS NOT NULL
+                ORDER BY timestamp DESC
+                LIMIT 2000
+            """
+            for row in try connection.prepare(recentQuery) {
+                if let id = row[0] as? Int64, seen.insert(id).inserted {
+                    orderedSet.append(id)
+                }
+            }
+            if orderedSet.count < apps.count {
+                for id in apps.keys where !seen.contains(id) {
+                    orderedSet.append(id)
+                }
+            }
+            return orderedSet.compactMap { apps[$0] }
         } catch {
             log.error("获取应用列表失败：\(error)")
             return []

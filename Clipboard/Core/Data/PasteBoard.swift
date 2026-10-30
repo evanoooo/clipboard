@@ -44,6 +44,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     // MARK: - 暂停功能
 
     @Published private(set) var isPaused: Bool = false
+    private(set) var isListening: Bool = false
     private(set) var pausedAt: Date?
     /// 暂停持续时长（秒），nil 表示无限期
     private var pauseDuration: TimeInterval?
@@ -63,12 +64,14 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         stopListening()
         guard !isPaused else { return }
 
+        isListening = true
         idleTicks = 0
         scheduleNextPoll(interval: currentEnergyProfile.activeInterval)
         registerEventMonitors()
     }
 
     func stopListening() {
+        isListening = false
         pollTimer?.invalidate()
         pollTimer = nil
         currentPollInterval = 0
@@ -255,13 +258,13 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
         // 监听系统能耗模式（低电量/发热降频）动态调整
         energyMonitor.onProfileDidChange = { [weak self] profile in
-            guard let self, !self.isPaused else { return }
+            guard let self, self.isListening, !self.isPaused else { return }
             self.scheduleNextPoll(interval: profile.activeInterval)
         }
     }
 
     private func handleSystemAwake() {
-        guard !isPaused else { return }
+        guard isListening, !isPaused else { return }
         changeCount = pasteboard.changeCount
         idleTicks = 0
         scheduleNextPoll(interval: currentEnergyProfile.activeInterval)
@@ -378,19 +381,23 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             }
         }
 
+        guard let firstItem = pasteboard.pasteboardItems?.first else {
+            changeCount = pasteboard.changeCount
+            return
+        }
+
         #if DEBUG
-            guard let item = pasteboard.pasteboardItems?.first else { return }
-            log.debug("可用类型 \(item.types)")
-            for t in item.types {
-                if let data = item.data(forType: t), data.count > 4096 {
+            log.debug("可用类型 \(firstItem.types)")
+            for t in firstItem.types {
+                if let data = firstItem.data(forType: t), data.count > 4096 {
                     log.debug("  [\(t.rawValue)] data(\(data.count) bytes)")
-                } else if let plist = item.propertyList(forType: t) {
+                } else if let plist = firstItem.propertyList(forType: t) {
                     log.debug("  [\(t.rawValue)] propertyList = \(plist)")
-                } else if let str = item.string(forType: t) {
+                } else if let str = firstItem.string(forType: t) {
                     let preview =
                         str.prefix(201).count > 200 ? String(str.prefix(200)) + "..." : str
                     log.debug("  [\(t.rawValue)] string = \(preview)")
-                } else if let data = item.data(forType: t) {
+                } else if let data = firstItem.data(forType: t) {
                     log.debug("  [\(t.rawValue)] data(\(data.count) bytes)")
                 }
             }
@@ -468,19 +475,14 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     ) {
         guard !items.isEmpty else { return }
 
-        for item in items {
-            item.updateDate()
-            if let itemId = item.id {
-                PasteDataStore.main.updateDbItem(id: itemId, item: item)
-            }
-        }
+        PasteDataStore.main.updateItemsTimestamp(items: items)
 
         NSPasteboard.general.clearContents()
 
         let success = writeMultipleToPasteboard(items, isAttribute: isAttribute)
-        guard success else { return }
-        // 写入成功后才记录，失败时不留标记，下一次外部复制照常入库
         ownWriteChangeCount = pasteboard.changeCount
+        changeCount = pasteboard.changeCount
+        guard success else { return }
 
         PasteDataStore.main.moveItemsToFirst(items)
         SoundManager.shared.play(.paste)
@@ -517,7 +519,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         // 图片类型
         if !imageItems.isEmpty {
             if !isAttribute {
-                let text = imageItems.map(\.searchText).filter { !$0.isEmpty }.joined(separator: "\n")
+                let text = imageItems.filter(\.hasValidSearchText).map(\.searchText).joined(separator: "\n")
                 guard !text.isEmpty else { return false }
                 NSPasteboard.general.setString(text, forType: .string)
                 return true

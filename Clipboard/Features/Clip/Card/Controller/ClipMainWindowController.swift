@@ -7,6 +7,7 @@
 
 import AppKit
 import Combine
+import Darwin
 
 final class ClipMainWindowController: NSWindowController {
     static let shared = ClipMainWindowController()
@@ -99,6 +100,7 @@ extension ClipMainWindowController {
                 AppEnvironment.shared.previousApp?.activate(options: [])
             }
             self.window?.orderOut(nil)
+            malloc_zone_pressure_relief(malloc_default_zone(), 0)
         }
     }
 

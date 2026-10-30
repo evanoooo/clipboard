@@ -118,6 +118,8 @@ extension AppDelegate {
 
         PasteBoard.main.startListening()
 
+        DeferredOCRCoordinator.shared.bootstrapPendingTasks()
+
         initLocalEvent()
 
         HotKeyManager.shared.initialize()

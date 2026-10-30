@@ -5118,6 +5118,24 @@
         }
       }
     },
+    "mergedCopyCount": {
+      "comment": "HUD message when merged copying multiple items",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merged %lld items to clipboard"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已合并复制 %lld 项"
+          }
+        }
+      }
+    },
     "recentHalfMinute": {
       "comment": "Relative time for around half a minute ago",
       "extractionState": "manual",

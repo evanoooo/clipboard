@@ -40,7 +40,8 @@ enum PasteFTSMigration {
                 VALUES('delete', old.id, old.search_text, old.alias_search);
             END;
 
-            CREATE TRIGGER IF NOT EXISTS clip_au AFTER UPDATE ON Clip BEGIN
+            DROP TRIGGER IF EXISTS clip_au;
+            CREATE TRIGGER clip_au AFTER UPDATE OF search_text, alias_search ON Clip BEGIN
                 INSERT INTO clip_fts(clip_fts, rowid, search_text, alias_search)
                 VALUES('delete', old.id, old.search_text, old.alias_search);
                 INSERT INTO clip_fts(rowid, search_text, alias_search)

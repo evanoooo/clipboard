@@ -37,6 +37,7 @@ final class ClipMainViewController: NSViewController {
     let pauseButton = NSButton()
     var pauseTimerCancellable: AnyCancellable?
     var appearanceObservation: NSKeyValueObservation?
+    weak var activeAliasEditingItem: CollectionViewItem?
 
     // MARK: - Preview
 
@@ -244,6 +245,8 @@ extension ClipMainViewController {
                 self?.flagsChangedEvent(event)
             }
         }
+
+        updatePauseState()
     }
 
     func setSearchFocusRingSuppressed(_ suppressed: Bool) {
@@ -261,6 +264,7 @@ extension ClipMainViewController {
     override func viewDidDisappear() {
         super.viewDidDisappear()
         lastEscapeTime = 0
+        pauseTimerCancellable = nil
         PasteDataStore.main.clearExpiredData()
         if let token = monitorToken {
             NSEvent.removeMonitor(token)

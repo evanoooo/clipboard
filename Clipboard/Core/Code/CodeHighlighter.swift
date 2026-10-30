@@ -7,6 +7,12 @@
 
 import AppKit
 
+/// 分词结果片段（非隔离且 Sendable，支持跨 Actor 安全传递）
+nonisolated struct CodeTokenSpan: Sendable {
+    let kind: CodeTokenKind
+    let range: NSRange
+}
+
 /// 纯 Swift 实现的高性能词法高亮引擎
 @MainActor
 enum CodeHighlighter {
@@ -35,25 +41,24 @@ enum CodeHighlighter {
         }
 
         let rules = CodeLanguageRules.rules(for: language)
-        let attributedString = NSMutableAttributedString(
-            string: text,
-            attributes: theme.attributes(for: .plain)
-        )
-
-        // 仅在安全长度阈值内进行词法扫描着色
         let effectiveLimit = min(limitLength ?? maxHighlightLength, maxHighlightLength)
         let scanLength = min(text.count, effectiveLimit)
         let scanEndIndex = text.index(text.startIndex, offsetBy: scanLength)
         let scanSubstring = text[..<scanEndIndex]
 
-        tokenizeAndApply(
-            to: attributedString,
+        let spans = tokenize(
             text: scanSubstring,
             fullText: text,
             language: language,
-            rules: rules,
-            theme: theme
+            rules: rules
         )
+
+        let attributedString = NSMutableAttributedString(
+            string: text,
+            attributes: theme.attributes(for: .plain)
+        )
+
+        applySpans(spans, to: attributedString, theme: theme)
 
         // 叠加搜索关键字高亮
         if let keyword, !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -63,7 +68,7 @@ enum CodeHighlighter {
         return attributedString
     }
 
-    /// 异步延迟分帧执行完整语法高亮，先让出主线程保证视图首帧满帧展现，再无缝平滑更新
+    /// 异步延迟分帧执行完整语法高亮：核心词法分词移至后台 detached 线程，消除主线程密集扫描卡顿
     static func highlightAsync(
         _ text: String,
         language: CodeLanguage,
@@ -71,26 +76,61 @@ enum CodeHighlighter {
         keyword: String? = nil,
         limitLength: Int? = nil
     ) async -> NSAttributedString {
-        await Task.yield()
-        return highlight(
-            text,
-            language: language,
-            theme: theme,
-            keyword: keyword,
-            limitLength: limitLength
+        guard !text.isEmpty else {
+            return NSAttributedString(string: "", attributes: theme.attributes(for: .plain))
+        }
+
+        let effectiveLimit = min(limitLength ?? maxHighlightLength, maxHighlightLength)
+        let scanLength = min(text.count, effectiveLimit)
+        let scanEndIndex = text.index(text.startIndex, offsetBy: scanLength)
+        let scanText = String(text[..<scanEndIndex])
+        let rules = CodeLanguageRules.rules(for: language)
+
+        // 词法分词计算在后台并发池执行
+        let spans = await Task.detached(priority: .userInitiated) {
+            tokenize(
+                text: scanText[...],
+                fullText: text,
+                language: language,
+                rules: rules
+            )
+        }.value
+
+        let attributedString = NSMutableAttributedString(
+            string: text,
+            attributes: theme.attributes(for: .plain)
         )
+
+        applySpans(spans, to: attributedString, theme: theme)
+
+        if let keyword, !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            applySearchHighlight(to: attributedString, fullText: text, keyword: keyword)
+        }
+
+        return attributedString
     }
 
     // MARK: - 词法扫描与应用
 
-    private static func tokenizeAndApply(
+    private static func applySpans(
+        _ spans: [CodeTokenSpan],
         to attributedString: NSMutableAttributedString,
+        theme: CodeTheme
+    ) {
+        for span in spans {
+            guard span.range.location != NSNotFound, span.range.length > 0 else { continue }
+            attributedString.addAttributes(theme.attributes(for: span.kind), range: span.range)
+        }
+    }
+
+    nonisolated private static func tokenize(
         text: Substring,
         fullText: String,
         language: CodeLanguage,
-        rules: CodeLanguageRules,
-        theme: CodeTheme
-    ) {
+        rules: CodeLanguageRules
+    ) -> [CodeTokenSpan] {
+        var spans: [CodeTokenSpan] = []
+        spans.reserveCapacity(min(text.count / 6, 2048))
         var currentIndex = text.startIndex
 
         while currentIndex < text.endIndex {
@@ -109,7 +149,7 @@ enum CodeHighlighter {
                 } else {
                     currentIndex = text.endIndex
                 }
-                apply(token: .string, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                appendSpan(kind: .string, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 continue
             }
 
@@ -125,7 +165,7 @@ enum CodeHighlighter {
                 } else {
                     currentIndex = text.endIndex
                 }
-                apply(token: .comment, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                appendSpan(kind: .comment, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 continue
             }
 
@@ -138,7 +178,7 @@ enum CodeHighlighter {
                 while currentIndex < text.endIndex, text[currentIndex] != "\n", text[currentIndex] != "\r" {
                     currentIndex = text.index(after: currentIndex)
                 }
-                apply(token: .comment, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                appendSpan(kind: .comment, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 continue
             }
 
@@ -164,7 +204,7 @@ enum CodeHighlighter {
                     escaped = false
                     currentIndex = text.index(after: currentIndex)
                 }
-                apply(token: .string, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                appendSpan(kind: .string, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 continue
             }
 
@@ -179,14 +219,14 @@ enum CodeHighlighter {
                     // 形如 ${variable} 或 ${VAR:-default}
                     if let closeBrace = text[nextIndex...].firstIndex(of: "}") {
                         currentIndex = text.index(after: closeBrace)
-                        apply(token: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                        appendSpan(kind: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                         continue
                     }
                 } else if nextIndex < text.endIndex && "?@#*!$-".contains(text[nextIndex]) {
                     // Shell 特殊单字符变量：$?, $@, $#, $$, $*, $!, $-
                     nextIndex = text.index(after: nextIndex)
                     currentIndex = nextIndex
-                    apply(token: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                    appendSpan(kind: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                     continue
                 } else {
                     // 形如 $host, $1, $remote_addr
@@ -200,7 +240,7 @@ enum CodeHighlighter {
                     }
                     if nextIndex > text.index(after: tokenStart) {
                         currentIndex = nextIndex
-                        apply(token: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                        appendSpan(kind: .variable, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                         continue
                     }
                 }
@@ -237,7 +277,7 @@ enum CodeHighlighter {
                 }
 
                 currentIndex = nextIndex
-                apply(token: .number, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                appendSpan(kind: .number, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 continue
             }
 
@@ -254,11 +294,11 @@ enum CodeHighlighter {
                 currentIndex = nextIndex
 
                 if rules.isKeyword(word) {
-                    apply(token: .keyword, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                    appendSpan(kind: .keyword, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 } else if rules.isLiteral(word) {
-                    apply(token: .literal, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                    appendSpan(kind: .literal, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 } else if rules.uppercaseMeansType && word.first?.isUppercase == true {
-                    apply(token: .type, from: tokenStart, to: currentIndex, fullText: fullText, in: attributedString, theme: theme)
+                    appendSpan(kind: .type, from: tokenStart, to: currentIndex, fullText: fullText, in: &spans)
                 }
                 continue
             }
@@ -266,13 +306,15 @@ enum CodeHighlighter {
             // 8. 其他字符前进一位
             currentIndex = text.index(after: currentIndex)
         }
+
+        return spans
     }
 
-    private static func isIdentifierStart(_ c: Character, language: CodeLanguage) -> Bool {
+    nonisolated private static func isIdentifierStart(_ c: Character, language: CodeLanguage) -> Bool {
         c.isLetter || c == "_"
     }
 
-    private static func isIdentifierPart(_ c: Character, language: CodeLanguage) -> Bool {
+    nonisolated private static func isIdentifierPart(_ c: Character, language: CodeLanguage) -> Bool {
         if c.isLetter || c.isNumber || c == "_" {
             return true
         }
@@ -283,7 +325,7 @@ enum CodeHighlighter {
         return false
     }
 
-    private static func matchPrefix(in remainder: Substring, prefixes: [String]) -> String? {
+    nonisolated private static func matchPrefix(in remainder: Substring, prefixes: [String]) -> String? {
         for prefix in prefixes where !prefix.isEmpty {
             if remainder.hasPrefix(prefix) {
                 return prefix
@@ -292,17 +334,16 @@ enum CodeHighlighter {
         return nil
     }
 
-    private static func apply(
-        token: CodeTokenKind,
+    nonisolated private static func appendSpan(
+        kind: CodeTokenKind,
         from start: String.Index,
         to end: String.Index,
         fullText: String,
-        in attributedString: NSMutableAttributedString,
-        theme: CodeTheme
+        in spans: inout [CodeTokenSpan]
     ) {
         let nsRange = NSRange(start..<end, in: fullText)
         guard nsRange.location != NSNotFound, nsRange.length > 0 else { return }
-        attributedString.addAttributes(theme.attributes(for: token), range: nsRange)
+        spans.append(CodeTokenSpan(kind: kind, range: nsRange))
     }
 
     // MARK: - 搜索关键字高亮

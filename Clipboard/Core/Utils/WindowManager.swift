@@ -40,7 +40,7 @@ final class WindowManager {
     private func scheduleIdleMemoryTrim() {
         idleTrimTask?.cancel()
         idleTrimTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(30)) // 窗口关闭闲置 30 秒后自动回收富文本与翻页堆积缓存
+            try? await Task.sleep(for: .seconds(10)) // 窗口关闭闲置 10 秒后自动回收富文本与翻页堆积缓存
             guard !Task.isCancelled, !self.isVisible else { return }
             PasteDataStore.main.trimExcessMemory()
         }
@@ -50,7 +50,7 @@ final class WindowManager {
         frame: NSRect? = nil,
         _ completionHandler: (@MainActor @Sendable () -> Void)? = nil
     ) {
-        idleTrimTask?.cancel()
+        let wasVisible = isVisible
         switch displayMode {
         case .drawer:
             dismissFloatingIfNeeded()
@@ -58,6 +58,11 @@ final class WindowManager {
         case .floating:
             dismissDrawerIfNeeded()
             floatingController.toggleWindow(completionHandler)
+        }
+        if wasVisible {
+            scheduleIdleMemoryTrim()
+        } else {
+            idleTrimTask?.cancel()
         }
     }
 

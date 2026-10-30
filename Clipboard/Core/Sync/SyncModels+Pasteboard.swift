@@ -49,4 +49,28 @@ extension SyncItemBlob {
             sourceBundleID: nil
         )
     }
+
+    func toIngestionRecord(appID: Int64) -> SyncIngestionRecord {
+        let textSource: String = if let payloadData, let str = String(data: payloadData, encoding: .utf8), !str.isEmpty {
+            str
+        } else if let showData, let str = String(data: showData, encoding: .utf8) {
+            str
+        } else {
+            ""
+        }
+        return SyncIngestionRecord(
+            uniqueId: uniqueId,
+            type: pasteboardType,
+            data: payloadData ?? Data(),
+            showData: showData,
+            timestamp: timestamp,
+            appID: appID,
+            searchText: SearchTextNormalizer.normalize(textSource),
+            length: payloadData?.count ?? 0,
+            group: group,
+            tag: tag,
+            hidden: false,
+            alias: alias
+        )
+    }
 }

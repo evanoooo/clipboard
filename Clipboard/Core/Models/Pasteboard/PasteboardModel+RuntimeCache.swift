@@ -13,7 +13,7 @@ enum CodeDetectionState: Sendable, Equatable {
     case none
 }
 
-struct PasteboardModelRuntimeCache {
+final class PasteboardModelRuntimeCache: @unchecked Sendable {
     var thumbnail: NSImage?
     var imageSize: CGSize?
     var backgroundColor: NSColor?
@@ -31,6 +31,20 @@ struct PasteboardModelRuntimeCache {
     var isLink: Bool?
     var isCSS: Bool?
     var plainText: String?
+
+    func clear() {
+        thumbnail = nil
+        thumbnailLoadTask?.cancel()
+        thumbnailLoadTask = nil
+        linkMetadata = nil
+        plainText = nil
+        richForegrounds.removeAll()
+        previewForegrounds = nil
+        highlightedCode = nil
+        plainTextAttributedString = nil
+        isLink = nil
+        isCSS = nil
+    }
 }
 
 extension PasteboardModel {

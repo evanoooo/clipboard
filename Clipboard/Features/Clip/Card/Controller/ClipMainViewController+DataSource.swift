@@ -350,12 +350,16 @@ extension ClipMainViewController: CollectionViewItemDelegate {
         }
     }
 
-    func aliasEditingDidChange(_ isEditing: Bool) {
+    func aliasEditingDidChange(_ isEditing: Bool, from item: CollectionViewItem) {
         if isEditing {
+            activeAliasEditingItem = item
             guard focusRegion != .aliasEditing else { return }
             setFocusRegion(.aliasEditing)
-        } else if focusRegion == .aliasEditing {
-            setFocusRegion(.collection)
+        } else if activeAliasEditingItem === item {
+            activeAliasEditingItem = nil
+            if focusRegion == .aliasEditing {
+                setFocusRegion(.collection)
+            }
         }
     }
 

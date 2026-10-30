@@ -112,24 +112,40 @@ extension FloatingHistoryView {
                 displayMode: displayMode
             )
             item.setShowPlainTextIndicator(isPlainTextModifierPressed)
-            item.onPaste = { [weak self] in self?.pasteItem(at: row) }
-            item.onPastePlainText = { [weak self] in
-                self?.pasteItem(at: row, isAttribute: false)
+            item.onPaste = { [weak self, weak item] in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item else { return }
+                self.pasteItem(at: currentRow)
             }
-            item.onCopy = { [weak self] in self?.copyItem(at: row) }
-            item.onEdit = { [weak self] in self?.openEditWindow(at: row) }
-            item.onDelete = { [weak self] in self?.requestDelete(at: row) }
-            item.onTogglePreview = { [weak self] in self?.onTogglePreview?(row) }
-            item.onAssignToChip = { [weak self] chipId in
-                guard let self, row < dataList.count else { return }
-                _ = topVM?.assignModelToChip(model: dataList[row], chipId: chipId)
+            item.onPastePlainText = { [weak self, weak item] in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item else { return }
+                self.pasteItem(at: currentRow, isAttribute: false)
+            }
+            item.onCopy = { [weak self, weak item] in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item else { return }
+                self.copyItem(at: currentRow)
+            }
+            item.onEdit = { [weak self, weak item] in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item else { return }
+                self.openEditWindow(at: currentRow)
+            }
+            item.onDelete = { [weak self, weak item] in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item else { return }
+                self.requestDelete(at: currentRow)
+            }
+            item.onTogglePreview = { [weak self, weak item] in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item else { return }
+                self.onTogglePreview?(currentRow)
+            }
+            item.onAssignToChip = { [weak self, weak item] chipId in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item, currentRow < self.dataList.count else { return }
+                _ = self.topVM?.assignModelToChip(model: self.dataList[currentRow], chipId: chipId)
             }
             item.onCreateChip = { [weak self] model in
                 self?.onCreateChip?(model)
             }
-            item.onSetAlias = { [weak self] in
-                guard let self, row < dataList.count else { return }
-                PasteAliasEditor.present(for: dataList[row])
+            item.onSetAlias = { [weak self, weak item] in
+                guard let self, let item, let currentRow = self.collectionView.indexPath(for: item)?.item, currentRow < self.dataList.count else { return }
+                PasteAliasEditor.present(for: self.dataList[currentRow])
             }
             return item
         }

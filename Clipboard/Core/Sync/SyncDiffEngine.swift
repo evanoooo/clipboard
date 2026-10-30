@@ -57,13 +57,12 @@ enum SyncDiffEngine: Sendable {
                 }
             } else if let local = localMap[id] {
                 // 双端均存在：比对修改时间戳与内容哈希
+                let localChecksum = local.payloadData.map { SyncCryptoEngine.checksum(for: $0) }
                 if remoteEntry.updatedAt > local.timestamp {
-                    let localChecksum = local.payloadData != nil ? SyncCryptoEngine.checksum(for: local.payloadData!) : nil
                     if localChecksum == nil || localChecksum != remoteEntry.checksum {
                         diff.toDownload.append(id)
                     }
                 } else if local.timestamp > remoteEntry.updatedAt {
-                    let localChecksum = local.payloadData != nil ? SyncCryptoEngine.checksum(for: local.payloadData!) : nil
                     if localChecksum == nil || localChecksum != remoteEntry.checksum {
                         diff.toUpload.append(local)
                     }

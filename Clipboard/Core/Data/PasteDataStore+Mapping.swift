@@ -35,14 +35,12 @@ extension PasteDataStore {
                 let pType = PasteboardType(type)
 
                 if pType.isText(), showData == nil {
-                    let d = data ?? PasteDataPointReader.loadData(id: id, uniqueId: uniqueId) ?? Data()
-                    if let plain = NSAttributedString(
-                        with: d,
-                        type: pType
-                    )?.string ?? String(data: d, encoding: .utf8) {
-                        showData = String(plain.prefix(300)).data(
-                            using: .utf8
-                        )
+                    // 极致性能：优先从已在行记录中的 searchText 提取兜底预览，杜绝在映射流水线中发起同步磁盘 I/O
+                    if let searchText, !searchText.isEmpty {
+                        showData = String(searchText.prefix(300)).data(using: .utf8)
+                    } else if let d = data {
+                        let plain = NSAttributedString(with: d, type: pType)?.string ?? String(data: d, encoding: .utf8)
+                        showData = plain.flatMap { String($0.prefix(300)).data(using: .utf8) }
                     }
                 }
 
@@ -64,10 +62,7 @@ extension PasteDataStore {
                 )
                 pasteModel.id = id
                 pasteModel.sortOrder = sortOrder
-                // 后台预热代码语言嗅探，避免主线程渲染 Cell 时发生同步正则计算
-                if pasteModel.type == .string, pasteModel.length >= 10 {
-                    _ = pasteModel.detectedCodeLanguage
-                }
+                // 性能极致优化：移除映射主流程上的代码语言嗅探，由卡片展示时按需懒加载并缓存，杜绝阻塞列表加载
                 repairTagIfNeeded(pasteModel)
                 return pasteModel
             }

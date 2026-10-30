@@ -187,9 +187,14 @@ final class SyncEngine: ObservableObject {
 
     func addLog(_ message: String, isError: Bool = false) {
         let item = SyncLogItem(message: message, isError: isError)
-        syncLogs.append(item)
-        if syncLogs.count > 100 {
-            syncLogs.removeFirst(syncLogs.count - 100)
+        // 性能极致优化：原子合批更新，避免同一操作触发多次 @Published 与双重数组内存拷贝
+        if syncLogs.count >= 100 {
+            var updated = syncLogs
+            updated.removeFirst(updated.count - 99)
+            updated.append(item)
+            syncLogs = updated
+        } else {
+            syncLogs.append(item)
         }
         if isError {
             Log.sync.error("[Sync] \(message)")
@@ -497,9 +502,9 @@ final class SyncEngine: ObservableObject {
             let maxConcurrency = 3
             var restoredCount = 0
             let total = toDownloadIds.count
-            var batchBuffer: [PasteboardModel] = []
+            var batchBuffer: [SyncItemBlob] = []
 
-            try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
+            try await withThrowingTaskGroup(of: SyncItemBlob?.self) { group in
                 var iterator = toDownloadIds.makeIterator()
 
                 for _ in 0..<maxConcurrency {
@@ -517,18 +522,18 @@ final class SyncEngine: ObservableObject {
                                   let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
                                 return nil
                             }
-                            return await MainActor.run { blob.toPasteboardModel() }
+                            return blob
                         }
                     }
                 }
 
-                while let model = try await group.next() {
-                    if let model {
-                        batchBuffer.append(model)
+                while let blob = try await group.next() {
+                    if let blob {
+                        batchBuffer.append(blob)
                         restoredCount += 1
 
                         if batchBuffer.count >= 50 {
-                            await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                            await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                             batchBuffer.removeAll(keepingCapacity: true)
                         }
 
@@ -552,14 +557,14 @@ final class SyncEngine: ObservableObject {
                                   let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
                                 return nil
                             }
-                            return await MainActor.run { blob.toPasteboardModel() }
+                            return blob
                         }
                     }
                 }
             }
 
             if !batchBuffer.isEmpty {
-                await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                 batchBuffer.removeAll()
             }
 
@@ -769,9 +774,9 @@ final class SyncEngine: ObservableObject {
                 let maxConcurrency = 3
                 var downloadedCount = 0
                 let totalDownloads = diff.toDownload.count
-                var batchBuffer: [PasteboardModel] = []
+                var batchBuffer: [SyncItemBlob] = []
 
-                try await withThrowingTaskGroup(of: PasteboardModel?.self) { group in
+                try await withThrowingTaskGroup(of: SyncItemBlob?.self) { group in
                     var iterator = diff.toDownload.makeIterator()
 
                     for _ in 0..<maxConcurrency {
@@ -790,19 +795,19 @@ final class SyncEngine: ObservableObject {
                                       let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
                                     return nil
                                 }
-                                return await MainActor.run { blob.toPasteboardModel() }
+                                return blob
                             }
                         }
                     }
 
-                    while let model = try await group.next() {
+                    while let blob = try await group.next() {
                         if isCancelled || Task.isCancelled { break }
-                        if let model {
-                            batchBuffer.append(model)
+                        if let blob {
+                            batchBuffer.append(blob)
                             downloadedCount += 1
 
                             if batchBuffer.count >= 50 {
-                                await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                                await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                                 batchBuffer.removeAll(keepingCapacity: true)
                             }
 
@@ -826,14 +831,14 @@ final class SyncEngine: ObservableObject {
                                       let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
                                     return nil
                                 }
-                                return await MainActor.run { blob.toPasteboardModel() }
+                                return blob
                             }
                         }
                     }
                 }
 
                 if !batchBuffer.isEmpty {
-                    await PasteDataStore.main.ingestSyncedBatch(batchBuffer)
+                    await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                     batchBuffer.removeAll()
                 }
             }

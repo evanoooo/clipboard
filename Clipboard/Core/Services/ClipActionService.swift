@@ -23,7 +23,7 @@ final class ClipActionService: ClipboardActionProtocol {
                 isAttribute: isAttribute,
                 showTip: showTip
             )
-            WindowManager.shared.toggleWindow()
+            WindowManager.shared.dismiss()
             return
         }
         let hasPermission = AXIsProcessTrusted()
@@ -32,7 +32,7 @@ final class ClipActionService: ClipboardActionProtocol {
             log.debug(
                 "Accessibility permission not granted, cannot send keyboard events"
             )
-            WindowManager.shared.toggleWindow {
+            WindowManager.shared.dismiss {
                 Task { @MainActor in
                     self.requestAccessibilityPermission(
                         items: [item],
@@ -47,8 +47,11 @@ final class ClipActionService: ClipboardActionProtocol {
             [item],
             isAttribute: isAttribute
         )
-        WindowManager.shared.toggleWindow {
-            KeyboardShortcuts.postCmdVEvent()
+        WindowManager.shared.dismiss {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(30))
+                KeyboardShortcuts.postCmdVEvent()
+            }
         }
     }
 
@@ -63,7 +66,7 @@ final class ClipActionService: ClipboardActionProtocol {
             showTip: showTip,
             copy: true
         )
-        WindowManager.shared.toggleWindow()
+        WindowManager.shared.dismiss()
     }
 
     func copyMultiple(_ items: [PasteboardModel], isAttribute: Bool = true) {
@@ -95,7 +98,7 @@ final class ClipActionService: ClipboardActionProtocol {
 
         guard userDefaults.pasteDirect, checkPermissions else {
             pasteBoard.pasteMultipleData(items, isAttribute: isAttribute)
-            WindowManager.shared.toggleWindow()
+            WindowManager.shared.dismiss()
             return
         }
 
@@ -104,7 +107,7 @@ final class ClipActionService: ClipboardActionProtocol {
             log.debug(
                 "Accessibility permission not granted, cannot send keyboard events"
             )
-            WindowManager.shared.toggleWindow {
+            WindowManager.shared.dismiss {
                 Task { @MainActor in
                     self.requestAccessibilityPermission(
                         items: items,
@@ -117,8 +120,11 @@ final class ClipActionService: ClipboardActionProtocol {
         }
 
         pasteBoard.pasteMultipleData(items, isAttribute: isAttribute)
-        WindowManager.shared.toggleWindow {
-            KeyboardShortcuts.postCmdVEvent()
+        WindowManager.shared.dismiss {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(30))
+                KeyboardShortcuts.postCmdVEvent()
+            }
         }
     }
 

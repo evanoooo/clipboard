@@ -180,7 +180,7 @@ enum PasteUserDefaults {
     /// SQLite 虚拟内存映射上限（MB），默认 0 MB（关闭虚拟映射，依赖 macOS APFS 内核缓存，极致降低常驻内存，检索依然保持亚毫秒级）。可在非隔离或任何 actor 上下文中直接读取。
     nonisolated static var sqliteMmapSizeMB: Int {
         get {
-            guard let obj = UserDefaults.standard.object(forKey: PrefKey.sqliteMmapSizeMB.rawValue) else {
+            guard UserDefaults.standard.object(forKey: PrefKey.sqliteMmapSizeMB.rawValue) != nil else {
                 return 0
             }
             let val = UserDefaults.standard.integer(forKey: PrefKey.sqliteMmapSizeMB.rawValue)

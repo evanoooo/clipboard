@@ -173,37 +173,45 @@ final class RichTextEditorView: NSView {
     }
 
     private func applyBold(to storage: NSTextStorage, range: NSRange) {
+        var allBold = true
+        storage.enumerateAttribute(.font, in: range, options: []) { value, _, stop in
+            let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            if !NSFontManager.shared.traits(of: font).contains(.boldFontMask) {
+                allBold = false
+                stop.pointee = true
+            }
+        }
+
+        let shouldAdd = !allBold
+        let fontManager = NSFontManager.shared
+
         storage.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
-            let currentFont =
-                (value as? NSFont)
-                    ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            let fontManager = NSFontManager.shared
-
-            let newFont: NSFont =
-                if fontManager.traits(of: currentFont).contains(.boldFontMask) {
-                    fontManager.convert(currentFont, toNotHaveTrait: .boldFontMask)
-                } else {
-                    fontManager.convert(currentFont, toHaveTrait: .boldFontMask)
-                }
-
+            let currentFont = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            let newFont = shouldAdd
+                ? fontManager.convert(currentFont, toHaveTrait: .boldFontMask)
+                : fontManager.convert(currentFont, toNotHaveTrait: .boldFontMask)
             storage.addAttribute(.font, value: newFont, range: subRange)
         }
     }
 
     private func applyItalic(to storage: NSTextStorage, range: NSRange) {
+        var allItalic = true
+        storage.enumerateAttribute(.font, in: range, options: []) { value, _, stop in
+            let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            if !NSFontManager.shared.traits(of: font).contains(.italicFontMask) {
+                allItalic = false
+                stop.pointee = true
+            }
+        }
+
+        let shouldAdd = !allItalic
+        let fontManager = NSFontManager.shared
+
         storage.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
-            let currentFont =
-                (value as? NSFont)
-                    ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            let fontManager = NSFontManager.shared
-
-            let newFont: NSFont =
-                if fontManager.traits(of: currentFont).contains(.italicFontMask) {
-                    fontManager.convert(currentFont, toNotHaveTrait: .italicFontMask)
-                } else {
-                    fontManager.convert(currentFont, toHaveTrait: .italicFontMask)
-                }
-
+            let currentFont = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            let newFont = shouldAdd
+                ? fontManager.convert(currentFont, toHaveTrait: .italicFontMask)
+                : fontManager.convert(currentFont, toNotHaveTrait: .italicFontMask)
             storage.addAttribute(.font, value: newFont, range: subRange)
         }
     }

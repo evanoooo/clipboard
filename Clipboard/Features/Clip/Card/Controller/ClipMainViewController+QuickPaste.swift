@@ -59,7 +59,7 @@ extension ClipMainViewController {
             return
         }
 
-        collectionView.deselectItems(at: [selectIndexPath])
+        collectionView.deselectAll(nil)
         selectIndexPath = indexPath
         collectionView.selectItems(
             at: [selectIndexPath],

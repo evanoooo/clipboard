@@ -7,6 +7,7 @@
 
 import AppKit
 import Combine
+import Darwin
 
 final class ClipFloatingWindowController: NSWindowController {
     static let shared = ClipFloatingWindowController()
@@ -277,6 +278,7 @@ final class ClipFloatingWindowController: NSWindowController {
                 win.setIsVisible(false)
                 win.alphaValue = 1
                 win.orderOut(nil)
+                malloc_zone_pressure_relief(malloc_default_zone(), 0)
             }
         }
     }

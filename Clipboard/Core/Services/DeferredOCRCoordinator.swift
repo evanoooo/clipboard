@@ -8,10 +8,17 @@
 import AppKit
 import Combine
 import Foundation
+import SQLite
 
 @MainActor
 final class DeferredOCRCoordinator {
     static let shared = DeferredOCRCoordinator()
+
+    /// 单项处理结果状态
+    private enum SingleProcessResult {
+        case textRecognized
+        case emptyOrSkipped
+    }
 
     /// 待识别图片的 ID 集合
     private var pendingIDs = Set<Int64>()
@@ -21,8 +28,16 @@ final class DeferredOCRCoordinator {
     /// 静默批处理长缓冲防抖任务
     private var debounceTimer: Task<Void, Never>?
 
-    /// 默认长缓冲时间（2 分钟平峰填谷）
-    private let idleBufferDuration: Duration = .seconds(120)
+    /// 基于 uniqueId 的 OCR 识别结果内存轻量缓存（内容级去重，秒级复用，上限 100）
+    private var ocrTextCache = [String: String]()
+
+    /// 动态平峰填谷缓冲时间（能耗/温度高时 120 秒，正常供电时 45 秒）
+    private var currentIdleBufferDuration: Duration {
+        if SystemEnergyMonitor.shared.isLowPowerMode || SystemEnergyMonitor.shared.isThermalThrottled {
+            return .seconds(120)
+        }
+        return .seconds(45)
+    }
 
     private init() {}
 
@@ -56,10 +71,40 @@ final class DeferredOCRCoordinator {
         debounceTimer = nil
         pendingIDs.removeAll()
         inFlightIDs.removeAll()
+        ocrTextCache.removeAll(keepingCapacity: true)
     }
 
     var hasPendingItems: Bool {
         !pendingIDs.isEmpty
+    }
+
+    // MARK: - 冷启动兜底补漏
+
+    /// 在应用启动后闲置期低优先级扫描近期待识别图片，防止前次异常退出导致漏跑
+    func bootstrapPendingTasks() {
+        Task(priority: .utility) { [weak self] in
+            // 等待应用就绪，推迟 10 秒后执行冷启动补漏扫描
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled, let self else { return }
+
+            let rows = await PasteReadStore.shared.search(
+                filter: ((Col.tag ?? "") == "image" || Col.type == "public.png" || Col.type == "public.tiff") && Col.searchText == "",
+                select: [Col.id],
+                order: [Col.id.desc],
+                limit: 20
+            )
+            guard !rows.isEmpty else { return }
+
+            let ids = rows.compactMap { try? $0.get(Col.id) }
+            await MainActor.run {
+                for id in ids {
+                    self.pendingIDs.insert(id)
+                }
+                if !self.pendingIDs.isEmpty {
+                    self.scheduleIdleProcessing()
+                }
+            }
+        }
     }
 
     // MARK: - 模式 A：平峰填谷长缓冲静默批处理
@@ -67,7 +112,7 @@ final class DeferredOCRCoordinator {
     private func scheduleIdleProcessing() {
         debounceTimer?.cancel()
         debounceTimer = Task { [weak self] in
-            try? await Task.sleep(for: self?.idleBufferDuration ?? .seconds(120))
+            try? await Task.sleep(for: self?.currentIdleBufferDuration ?? .seconds(45))
             guard !Task.isCancelled, let self else { return }
             await self.performIdleBatchOCR()
         }
@@ -80,13 +125,13 @@ final class DeferredOCRCoordinator {
             return
         }
 
-        // 2. 若系统处于低电量模式，推迟执行
+        // 2. 若系统处于低电量模式，执行超轻量批次（2 张）以最低优先级后台消化，避免无限推迟空转
         if SystemEnergyMonitor.shared.isLowPowerMode {
-            schedulePostponed(duration: .seconds(60))
+            await processQueue(maxBatchCount: 2, priority: .background)
             return
         }
 
-        await processQueue(maxBatchCount: 10, priority: .utility)
+        await processQueue(maxBatchCount: 4, priority: .utility)
     }
 
     private func schedulePostponed(duration: Duration) {
@@ -107,30 +152,38 @@ final class DeferredOCRCoordinator {
         guard !trimmed.isEmpty else { return false }
 
         let batchLimit = min(pendingIDs.count, 5)
-        let successCount = await processQueue(maxBatchCount: batchLimit, priority: .userInitiated)
-        return successCount > 0
+        let (_, validTextCount) = await processQueue(maxBatchCount: batchLimit, priority: .userInitiated)
+        return validTextCount > 0
     }
 
     // MARK: - 批处理调度核心
 
     @discardableResult
-    private func processQueue(maxBatchCount: Int, priority: TaskPriority) async -> Int {
+    private func processQueue(maxBatchCount: Int, priority: TaskPriority) async -> (processedCount: Int, validTextCount: Int) {
         let candidates = Array(pendingIDs.subtracting(inFlightIDs).prefix(maxBatchCount))
-        guard !candidates.isEmpty else { return 0 }
+        guard !candidates.isEmpty else { return (0, 0) }
 
         for id in candidates {
             inFlightIDs.insert(id)
         }
+        defer {
+            // 确保任务取消中断或异常退出时，未触达的 candidate ID 得到安全释放，杜绝状态滞留
+            for id in candidates {
+                inFlightIDs.remove(id)
+            }
+        }
 
         var processedCount = 0
+        var validTextCount = 0
 
         for id in candidates {
             guard !Task.isCancelled else { break }
-            let success = await processSingleItem(id: id, priority: priority)
+            let result = await processSingleItem(id: id, priority: priority)
             inFlightIDs.remove(id)
-            if success {
-                pendingIDs.remove(id)
-                processedCount += 1
+            pendingIDs.remove(id)
+            processedCount += 1
+            if result == .textRecognized {
+                validTextCount += 1
             }
             await Task.yield()
         }
@@ -139,32 +192,65 @@ final class DeferredOCRCoordinator {
             scheduleIdleProcessing()
         }
 
-        return processedCount
+        return (processedCount, validTextCount)
     }
 
-    private func processSingleItem(id: Int64, priority: TaskPriority) async -> Bool {
-        // 从磁盘独立只读点查图片的原始 Data，绝不在主线程/内存大列表持有大图
-        guard let data = await Task.detached(priority: priority, operation: {
-            PasteDataPointReader.loadData(id: id, uniqueId: "")
-        }).value, !data.isEmpty else {
-            return true // 无效数据移出队列
+    private func processSingleItem(id: Int64, priority: TaskPriority) async -> SingleProcessResult {
+        // 1. 前置内存检查：若内存展示大列表中该卡片已有文本（非空），立即出队跳过
+        if let memoryModel = await MainActor.run(body: {
+            PasteDataStore.main.dataList.value.first(where: { $0.id == id })
+        }), !memoryModel.searchText.isEmpty {
+            return .emptyOrSkipped
         }
 
-        let rawText = await OCRViewService.shared.recognizeText(from: data)
-        guard !rawText.isEmpty else {
-            // 图片无文字，移出待办队列避免无意义重试
-            return true
+        // 2. 独立只读原子单点点查（一次性获取 searchText, uniqueId，若未识别再取 data）
+        guard let target = await Task.detached(priority: priority, operation: {
+            PasteDataPointReader.loadOCRTarget(id: id)
+        }).value else {
+            return .emptyOrSkipped // 记录已被删除或不存在
         }
 
-        let searchText = PasteboardModel.normalizeSearchText(rawText)
+        // 3. 数据库已有识别结果（真实文字或无字哨兵标记），直接出队跳过
+        if !target.searchText.isEmpty {
+            return .emptyOrSkipped
+        }
+
+        // 4. 检查基于 uniqueId 的内存轻量 OCR 缓存（内容级去重）
+        let rawText: String
+        if let cached = ocrTextCache[target.uniqueId] {
+            rawText = cached
+        } else {
+            guard let data = target.data, !data.isEmpty else {
+                let marker = PasteboardModel.emptyOCRMarker
+                _ = await PasteSQLManager.manager.updateSearchText(id: id, searchText: marker)
+                if let model = PasteDataStore.main.dataList.value.first(where: { $0.id == id }) {
+                    model.updateSearchText(val: marker)
+                }
+                return .emptyOrSkipped
+            }
+            rawText = await OCRViewService.shared.recognizeText(from: data)
+            if ocrTextCache.count >= 100 {
+                ocrTextCache.removeAll(keepingCapacity: true)
+            }
+            ocrTextCache[target.uniqueId] = rawText
+        }
+
+        // 5. 若识别结果为空，写入无文字哨兵占位符 emptyOCRMarker，杜绝重复二次识别
+        let isTextFound = !rawText.isEmpty
+        let searchText = isTextFound
+            ? PasteboardModel.normalizeSearchText(rawText)
+            : PasteboardModel.emptyOCRMarker
+
         let updated = await PasteSQLManager.manager.updateSearchText(id: id, searchText: searchText)
         if updated {
-            // 同步更新内存中的模型搜索文本（如果该卡片正在展示列表中）
             if let model = PasteDataStore.main.dataList.value.first(where: { $0.id == id }) {
                 model.updateSearchText(val: searchText)
             }
-            SyncEngine.shared.markDirtyAndSchedule()
+            // 仅在真实识别出有效文字时才触发同步与索引脏标记
+            if isTextFound {
+                SyncEngine.shared.markDirtyAndSchedule()
+            }
         }
-        return true
+        return isTextFound ? .textRecognized : .emptyOrSkipped
     }
 }

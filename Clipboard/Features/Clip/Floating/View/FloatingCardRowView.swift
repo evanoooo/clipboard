@@ -129,6 +129,8 @@ final class FloatingCardRowView: NSView {
         if let cancellable = contentSubview as? CancellableLoadable {
             cancellable.cancelLoad()
         }
+        quickPasteIndex = nil
+        showPlainTextIndicator = false
         currentModel = nil
         currentKeyword = ""
     }
@@ -206,7 +208,7 @@ final class FloatingCardRowView: NSView {
 
         let content: String
         if model.type == .image {
-            content = model.searchText.isEmpty ? model.type.string : model.searchText
+            content = model.hasValidSearchText ? model.searchText : model.type.string
         } else {
             content = model.searchText.isEmpty ? model.plainText : model.searchText
         }

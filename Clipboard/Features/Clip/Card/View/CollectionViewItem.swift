@@ -23,7 +23,7 @@ protocol CollectionViewItemDelegate: NSObjectProtocol {
     func assignToChip(_ item: PasteboardModel, chipId: Int)
     func createChip(pinning item: PasteboardModel)
     func setAlias(_ item: PasteboardModel, to alias: String)
-    func aliasEditingDidChange(_ isEditing: Bool)
+    func aliasEditingDidChange(_ isEditing: Bool, from item: CollectionViewItem)
     func preview(_ item: PasteboardModel)
 }
 
@@ -223,7 +223,7 @@ final class CollectionViewItem: NSCollectionViewItem {
 
         let content: String
         if model.type == .image {
-            content = model.searchText.isEmpty ? model.type.string : model.searchText
+            content = model.hasValidSearchText ? model.searchText : model.type.string
         } else {
             content = model.searchText.isEmpty ? model.plainText : model.searchText
         }
@@ -267,11 +267,12 @@ extension CollectionViewItem {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        headView.reset()
         item = nil
         iconLoadTask?.cancel()
         iconLoadTask = nil
         quickPasteIndex = nil
-        headView.reset()
+        showPlainTextIndicator = false
         cardContentView.resetContent()
         cardBottomView.reset()
     }
@@ -337,7 +338,15 @@ extension CollectionViewItem {
             delegate?.setAlias(item, to: alias)
         }
         headView.onAliasEditingChanged = { [weak self] isEditing in
-            self?.delegate?.aliasEditingDidChange(isEditing)
+            guard let self else { return }
+            self.delegate?.aliasEditingDidChange(isEditing, from: self)
+        }
+        headView.canBeginEditing = { [weak self] in
+            self?.isSelected == true
+        }
+        headView.onRequestSelect = { [weak self] in
+            guard let self else { return }
+            self.delegate?.itemDidRequestSelect(self)
         }
 
         selectionBorderView.snp.makeConstraints { make in
