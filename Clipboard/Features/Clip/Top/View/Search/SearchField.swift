@@ -45,15 +45,25 @@ final class SearchField: NSView {
         window?.firstResponder === tokenTextView
     }
 
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
     override func becomeFirstResponder() -> Bool {
-        window?.makeFirstResponder(tokenTextView)
-        return true
+        guard let window else { return false }
+        return window.makeFirstResponder(tokenTextView)
     }
 
     func focusAndSelectAll() {
-        _ = becomeFirstResponder()
-        let length = tokenTextView.textStorage?.length ?? 0
-        tokenTextView.setSelectedRange(NSRange(location: 0, length: length))
+        guard let window else { return }
+        _ = window.makeFirstResponder(tokenTextView)
+        let totalLength = tokenTextView.textStorage?.length ?? 0
+        let tokenEnd = tokenTextView.findTokenEndIndex()
+        if totalLength > tokenEnd {
+            tokenTextView.setSelectedRange(NSRange(location: tokenEnd, length: totalLength - tokenEnd))
+        } else {
+            tokenTextView.setSelectedRange(NSRange(location: totalLength, length: 0))
+        }
     }
 
     override func layout() {

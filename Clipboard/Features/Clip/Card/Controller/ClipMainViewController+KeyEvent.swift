@@ -63,7 +63,7 @@ extension ClipMainViewController {
                 topBarView.activateSearch(with: characters)
             }
             setFocusRegion(.search)
-            view.window?.makeFirstResponder(topBarView.searchField)
+            view.window?.makeFirstResponder(topBarView.searchField.tokenTextView)
             return nil
         }
 

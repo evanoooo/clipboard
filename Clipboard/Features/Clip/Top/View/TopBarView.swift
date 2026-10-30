@@ -170,15 +170,17 @@ final class TopBarView: NSView {
         }
 
         searchField.onResignFirstResponder = { [weak self] in
-            guard let self, let topVM else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let topVM else { return }
 
-            if filterPopover?.isShown == true {
-                return
-            }
+                if filterPopover?.isShown == true {
+                    return
+                }
 
-            if isSearching, !topVM.hasInput {
-                deactivateSearch()
-                onFocusRegionChange?(.collection)
+                if isSearching, !topVM.hasInput, !searchField.isFirstResponder {
+                    deactivateSearch()
+                    onFocusRegionChange?(.collection)
+                }
             }
         }
 
@@ -292,7 +294,7 @@ final class TopBarView: NSView {
         isSearching = true
         applyMode(animated: true)
         filterPopover?.prepare()
-        window?.makeFirstResponder(searchField)
+        _ = window?.makeFirstResponder(searchField.tokenTextView)
         onFocusRegionChange?(.search)
     }
 
@@ -305,10 +307,11 @@ final class TopBarView: NSView {
         if !isSearching {
             activateSearch()
         }
-        window?.makeFirstResponder(searchField)
         onFocusRegionChange?(.search)
         if selectAll {
             searchField.focusAndSelectAll()
+        } else {
+            _ = window?.makeFirstResponder(searchField.tokenTextView)
         }
     }
 
