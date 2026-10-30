@@ -87,13 +87,15 @@ extension PasteDataStore {
     private func repairTagIfNeeded(_ model: PasteboardModel) {
         guard let storedType = PasteModelType(rawValue: model.tag),
               storedType == .link || storedType == .color,
-              model.type != storedType,
               let id = model.id
         else {
             return
         }
 
-        let correctedTag = model.type.tagValue
+        let isStillValid = (storedType == .link && model.isLink) || (storedType == .color && model.isCSS)
+        guard !isStillValid else { return }
+
+        let correctedTag = (model.pasteboardType == .string ? PasteModelType.string : PasteModelType.rich).tagValue
         guard !correctedTag.isEmpty,
               repairingTagIds.insert(id).inserted
         else {

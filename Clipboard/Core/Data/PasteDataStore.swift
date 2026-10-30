@@ -32,6 +32,7 @@ final class PasteDataStore {
             model.cachedPlainTextAttributedString = nil
             model.clearLoadedPayload()
         }
+        ClipUndoStore.shared.removeAll()
     }
     /// 截断扫描查询行数上限（达到 501 即可提前终止）
     static let countScanLimit = filteredCountCap + 1

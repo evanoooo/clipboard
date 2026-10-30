@@ -39,6 +39,13 @@ actor PasteReadStore {
         return false
     }
 
+    /// 在写连接执行 VACUUM 重整数据库后重置只读连接句柄与 mmap 映射
+    @discardableResult
+    func reopen() -> Bool {
+        connection = nil
+        return setup()
+    }
+
     private func open(readonly: Bool) -> Connection? {
         do {
             let database = try Connection(Self.databasePath, readonly: readonly)

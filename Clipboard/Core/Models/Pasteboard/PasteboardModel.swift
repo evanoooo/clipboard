@@ -88,7 +88,7 @@ final class PasteboardModel: Identifiable, Codable {
     }
 
     /// 轻量文本预览：纯文本直接从 showData 读取 UTF-8 字符串，杜绝无谓构建重量级 NSAttributedString
-    private var previewPlainText: String {
+    var previewPlainText: String {
         if let cached = runtimeCache.plainText { return cached }
         if pasteboardType == .string, let showData, let str = String(data: showData, encoding: .utf8) {
             return str

@@ -310,6 +310,7 @@ nonisolated final class SyncPendingDeletionsStore: @unchecked Sendable {
     nonisolated static let shared = SyncPendingDeletionsStore()
 
     private let storageKey = "sync_pending_deleted_unique_ids"
+    private let maxPendingDeletions = 2000
     private let state: OSAllocatedUnfairLock<Set<String>>
 
     private init() {
@@ -326,6 +327,12 @@ nonisolated final class SyncPendingDeletionsStore: @unchecked Sendable {
         guard !uniqueIds.isEmpty else { return }
         let current = state.withLock { ids -> [String] in
             ids.formUnion(uniqueIds)
+            if ids.count > maxPendingDeletions {
+                let excess = ids.count - maxPendingDeletions
+                for _ in 0..<excess {
+                    _ = ids.popFirst()
+                }
+            }
             return Array(ids)
         }
         UserDefaults.standard.set(current, forKey: storageKey)

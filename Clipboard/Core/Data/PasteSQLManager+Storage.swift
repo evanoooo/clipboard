@@ -214,7 +214,12 @@ extension PasteSQLManager {
             if !uids.isEmpty {
                 SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uids)
                 Task { @MainActor in
+                    DeferredOCRCoordinator.shared.remove(ids: ids)
                     SyncEngine.shared.markDirtyAndSchedule()
+                }
+            } else {
+                Task { @MainActor in
+                    DeferredOCRCoordinator.shared.remove(ids: ids)
                 }
             }
 

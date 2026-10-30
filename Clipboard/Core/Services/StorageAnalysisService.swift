@@ -63,6 +63,7 @@ final class StorageAnalysisService: ObservableObject {
     }
 
     func deleteItems(ids: [Int64]) async throws -> Int64 {
+        DeferredOCRCoordinator.shared.remove(ids: ids)
         let freed = await sqlManager.deleteStorageItems(ids: ids)
         // 刷新存储统计与主界面列表
         await refreshDiskUsage()
@@ -76,6 +77,7 @@ final class StorageAnalysisService: ObservableObject {
         isVacuuming = true
         defer { isVacuuming = false }
         let result = try await sqlManager.vacuumDatabase()
+        await PasteReadStore.shared.reopen()
         await refreshDiskUsage()
         await PasteDataStore.main.resetDefaultList()
         let count = await sqlManager.getTotalCount()

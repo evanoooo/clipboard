@@ -33,6 +33,7 @@ extension PasteDataStore {
                 sourceBundleID: bundleID
             )
             await insertModel(model)
+            SyncEngine.shared.markDirtyAndSchedule()
             await MainActor.run {
                 model.evictRawData()
             }
