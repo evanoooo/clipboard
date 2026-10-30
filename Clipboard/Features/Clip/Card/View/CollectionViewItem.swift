@@ -221,7 +221,12 @@ final class CollectionViewItem: NSCollectionViewItem {
         }
         view.setAccessibilityLabel(labels.joined(separator: "，"))
 
-        let content = model.searchText.isEmpty ? model.plainText : model.searchText
+        let content: String
+        if model.type == .image {
+            content = model.searchText.isEmpty ? model.type.string : model.searchText
+        } else {
+            content = model.searchText.isEmpty ? model.plainText : model.searchText
+        }
         view.setAccessibilityValue(content)
         view.setAccessibilityHelp("连按两次粘贴，按空格键预览，按 Delete 键删除")
     }
@@ -265,6 +270,7 @@ extension CollectionViewItem {
         item = nil
         iconLoadTask?.cancel()
         iconLoadTask = nil
+        quickPasteIndex = nil
         headView.reset()
         cardContentView.resetContent()
         cardBottomView.reset()

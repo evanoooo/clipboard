@@ -621,13 +621,12 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
     /// 多张图片写入剪贴板：先写为临时文件，再以文件 URL 方式写入（确保目标应用能接收全部图片）
     private func writeMultipleImages(_ items: [PasteboardModel]) -> Bool {
-        let tempDir = FileManager.default.temporaryDirectory
+        let sessionDir = FileManager.default.temporaryDirectory
             .appending(path: "ClipboardPaste")
+            .appending(path: UUID().uuidString)
 
-        // 清理旧的临时目录
-        try? FileManager.default.removeItem(at: tempDir)
         try? FileManager.default.createDirectory(
-            at: tempDir,
+            at: sessionDir,
             withIntermediateDirectories: true
         )
 
@@ -635,7 +634,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         for (index, item) in items.enumerated() {
             let ext = item.pasteboardType == .png ? "png" : "tiff"
             let fileName = "image_\(index + 1).\(ext)"
-            let fileURL = tempDir.appending(path: fileName)
+            let fileURL = sessionDir.appending(path: fileName)
             do {
                 try item.data.write(to: fileURL)
                 fileURLs.append(fileURL)
@@ -647,10 +646,10 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         guard !fileURLs.isEmpty else { return false }
         pasteboard.writeObjects(fileURLs as [NSPasteboardWriting])
 
-        // 粘贴完成后延迟清理临时文件，给目标应用足够时间读取
-        let cleanupDir = tempDir
+        // 粘贴完成后延迟清理本次会话临时文件，给目标应用足够时间读取，互不干扰
+        let cleanupDir = sessionDir
         Task.detached {
-            try? await Task.sleep(for: .seconds(10))
+            try? await Task.sleep(for: .seconds(15))
             try? FileManager.default.removeItem(at: cleanupDir)
         }
 

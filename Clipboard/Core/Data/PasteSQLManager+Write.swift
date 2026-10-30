@@ -464,6 +464,20 @@ extension PasteSQLManager {
             return false
         }
     }
+    /// 仅更新单条记录的搜索文本（供 OCR 异步回填），不覆写大图 BLOB、不重新聚合 App 缓存，触发 FTS5 触发器自动同步倒排索引
+    func updateSearchText(id: Int64, searchText: String) async -> Bool {
+        guard let connection else { return false }
+        do {
+            let query = table.filter(Col.id == id)
+            let count = try connection.run(query.update(Col.searchText <- searchText))
+            log.debug("更新搜索文本成功：id=\(id), 影响行数：\(count)")
+            return count > 0
+        } catch {
+            log.error("更新搜索文本失败：\(error)")
+            return false
+        }
+    }
+
     private func contentSetters(
         _ content: PasteContent,
         searchText: String,

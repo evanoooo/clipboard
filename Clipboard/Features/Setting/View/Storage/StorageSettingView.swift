@@ -336,7 +336,7 @@ struct StorageSettingView: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 170)
+                        .frame(width: 180)
                         .onChange(of: selectedMmapSizeMB) { _, newValue in
                             PasteUserDefaults.sqliteMmapSizeMB = newValue
                             Task {

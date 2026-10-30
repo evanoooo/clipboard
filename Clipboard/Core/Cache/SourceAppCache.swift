@@ -36,6 +36,23 @@ final class SourceAppCache {
         changes.send()
     }
 
+    /// 增量提升应用排序：将该应用置于有序列表首位（纯内存极速操作，杜绝全表 GROUP BY 聚合扫描）
+    func promote(appID: Int64?) {
+        guard let appID else { return }
+        guard let index = orderedIDs.firstIndex(of: appID) else {
+            if apps[appID] != nil {
+                orderedIDs.insert(appID, at: 0)
+                changes.send()
+            }
+            return
+        }
+        if index > 0 {
+            orderedIDs.remove(at: index)
+            orderedIDs.insert(appID, at: 0)
+            changes.send()
+        }
+    }
+
     func update(_ app: SourceApp) {
         guard apps[app.id] != app else { return }
         if let previous = apps[app.id], previous.path != app.path { AppIconCache.shared.clearCache() }

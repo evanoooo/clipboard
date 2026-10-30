@@ -33,6 +33,9 @@ extension PasteDataStore {
                 sourceBundleID: bundleID
             )
             await insertModel(model)
+            await MainActor.run {
+                model.evictRawData()
+            }
         }
     }
 }

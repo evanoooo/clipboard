@@ -16,6 +16,18 @@ enum PasteModelType: String, CaseIterable, Sendable {
     case link
     case color
 
+    init?(tagValue: String) {
+        switch tagValue {
+        case "image": self = .image
+        case "string": self = .string
+        case "rich": self = .rich
+        case "file": self = .file
+        case "link": self = .link
+        case "color": self = .color
+        default: return nil
+        }
+    }
+
     var string: String {
         switch self {
         case .image: String(localized: "Image")

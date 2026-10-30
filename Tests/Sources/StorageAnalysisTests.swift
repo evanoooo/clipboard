@@ -20,7 +20,17 @@ enum StorageAnalysisTests {
         testTypeBreakdownAndTopConsumersInMemory(runner: runner)
         testBulkDeleteAndReclaimSimulation(runner: runner)
         testSoftQuotaAndAgingPolicy(runner: runner)
+        testMmapThresholds(runner: runner)
         print("✓ Storage Analysis tests passed!")
+    }
+
+    private static func testMmapThresholds(runner: TestRunner.Type) {
+        runner.assertEqual(SQLiteMmapThreshold.disabled.rawValue, 0, "Disabled should be 0")
+        runner.assertEqual(SQLiteMmapThreshold.disabled.bytes, 0, "Disabled bytes should be 0")
+        runner.assertEqual(SQLiteMmapThreshold.mb128.rawValue, 128, "Recommended should be 128")
+        runner.assertEqual(SQLiteMmapThreshold.mb128.bytes, 128 * 1024 * 1024, "128MB bytes check")
+        runner.assertTrue(SQLiteMmapThreshold.allCases.contains(.disabled), "Should contain disabled")
+        runner.assertTrue(SQLiteMmapThreshold.allCases.contains(.mb128), "Should contain 128MB")
     }
 
     private static func testProtectionRule(runner: TestRunner.Type) {

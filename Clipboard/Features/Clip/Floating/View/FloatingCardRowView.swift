@@ -204,7 +204,12 @@ final class FloatingCardRowView: NSView {
         }
         setAccessibilityLabel(labels.joined(separator: "，"))
 
-        let content = model.searchText.isEmpty ? model.plainText : model.searchText
+        let content: String
+        if model.type == .image {
+            content = model.searchText.isEmpty ? model.type.string : model.searchText
+        } else {
+            content = model.searchText.isEmpty ? model.plainText : model.searchText
+        }
         setAccessibilityValue(content)
         setAccessibilityHelp("连按两次粘贴，按空格键预览，按 Delete 键删除")
     }

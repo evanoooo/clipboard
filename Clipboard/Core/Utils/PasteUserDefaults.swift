@@ -177,11 +177,18 @@ enum PasteUserDefaults {
     /// 日志记录级别
     @UserDefaultsWrapper(.appLogLevel, defaultValue: "INFO")
     static var appLogLevel: String
-    /// SQLite 虚拟内存映射上限（MB），默认 666 MB。可在非隔离或任何 actor 上下文中直接读取。
+    /// SQLite 虚拟内存映射上限（MB），默认 0 MB（关闭虚拟映射，依赖 macOS APFS 内核缓存，极致降低常驻内存，检索依然保持亚毫秒级）。可在非隔离或任何 actor 上下文中直接读取。
     nonisolated static var sqliteMmapSizeMB: Int {
         get {
+            guard let obj = UserDefaults.standard.object(forKey: PrefKey.sqliteMmapSizeMB.rawValue) else {
+                return 0
+            }
             let val = UserDefaults.standard.integer(forKey: PrefKey.sqliteMmapSizeMB.rawValue)
-            return val > 0 ? val : 666
+            // 兼容升级：若旧配置为历史遗留的 666 MB 或超出当前最高档位，自动平滑收敛至推荐档 0 MB
+            if val == 666 || val > 512 {
+                return 0
+            }
+            return max(0, val)
         }
         set {
             UserDefaults.standard.set(newValue, forKey: PrefKey.sqliteMmapSizeMB.rawValue)

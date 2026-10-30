@@ -187,6 +187,9 @@ extension PasteDataStore {
         deficit: Int,
         currentCount: Int
     ) {
+        for id in deletedIds {
+            DeferredOCRCoordinator.shared.remove(id: id)
+        }
         let inFilter = isInFilterMode
         let activeFilter = currentFilter
 
@@ -240,6 +243,9 @@ extension PasteDataStore {
     }
 
     private func deleteStoredItems(_ deletedIds: Set<Int64>) {
+        for id in deletedIds {
+            DeferredOCRCoordinator.shared.remove(id: id)
+        }
         let inFilter = isInFilterMode
         let activeFilter = currentFilter
 
@@ -268,6 +274,18 @@ extension PasteDataStore {
     }
 
     func deleteItems(filter: Expression<Bool>) {
+        if DeferredOCRCoordinator.shared.hasPendingItems {
+            let pending = DeferredOCRCoordinator.shared.pendingSnapshot
+            Task { @MainActor in
+                let rows = await PasteReadStore.shared.search(
+                    filter: filter && pending.contains(Col.id),
+                    limit: pending.count
+                )
+                let matching = rows.compactMap { try? $0.get(Col.id) }
+                DeferredOCRCoordinator.shared.remove(ids: matching)
+            }
+        }
+
         let inFilter = isInFilterMode
         let activeFilter = currentFilter
 
@@ -345,9 +363,10 @@ extension PasteDataStore {
     func clearData(for timeUnit: HistoryTimeUnit) {
         guard let cutoff = timeUnit.cutoffTimestamp() else { return }
         log.info("清理过期数据，截止时间戳：\(cutoff)")
-        let list = dataList.value.filter { $0.group != -1 || $0.timestamp >= cutoff }
-        updateData(with: list)
         deleteItems(filter: Col.timestamp < cutoff && Col.group == -1)
+        Task { @MainActor in
+            await reloadHistory()
+        }
     }
 
     /// 确认并清理超出新期限的记录；设置仅由调用方在成功后保存
@@ -448,6 +467,7 @@ extension PasteDataStore {
             do {
                 let reclaimed = try await sqlManager.clearHistory(includePinnedAndGrouped: includePinned)
                 ClipUndoStore.shared.removeAll()
+                DeferredOCRCoordinator.shared.clear()
                 if includePinned {
                     SourceAppCache.shared.replace([])
                     AppColorService.shared.clearColors()

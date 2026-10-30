@@ -49,17 +49,28 @@ final class PasteboardModel: Identifiable, Codable {
     var appName: String { appID.flatMap { SourceAppCache.shared.apps[$0]?.name } ?? sourceName }
     private(set) var searchText: String
     let length: Int
-    /// 截取后的富文本
-    private(set) lazy var attributeString: NSAttributedString =
-        .init(with: showData, type: pasteboardType) ?? NSAttributedString()
+    private var _attributeString: NSAttributedString?
+    /// 截取后的富文本预览（支持闲置释放）
+    var attributeString: NSAttributedString {
+        if let cached = _attributeString { return cached }
+        let generated = NSAttributedString(with: showData, type: pasteboardType) ?? NSAttributedString()
+        _attributeString = generated
+        return generated
+    }
 
-    private(set) lazy var writeItem = PasteboardWritingItem(
-        type: pasteboardType,
-        plainText: plainText,
-        appName: appName,
-        timestamp: timestamp,
-        model: self
-    )
+    private var _writeItem: PasteboardWritingItem?
+    var writeItem: PasteboardWritingItem {
+        if let cached = _writeItem { return cached }
+        let item = PasteboardWritingItem(
+            type: pasteboardType,
+            plainText: pasteboardType.isText() ? plainText : "",
+            appName: appName,
+            timestamp: timestamp,
+            model: self
+        )
+        _writeItem = item
+        return item
+    }
     private(set) lazy var type = PasteModelType(
         with: pasteboardType,
         model: self
@@ -76,18 +87,27 @@ final class PasteboardModel: Identifiable, Codable {
         cachedHasBackgroundColor
     }
 
-    /// 是否为纯链接文本；基于 `attributeString` 计算后缓存，避免每次调用重复扫描
+    /// 轻量文本预览：纯文本直接从 showData 读取 UTF-8 字符串，杜绝无谓构建重量级 NSAttributedString
+    private var previewPlainText: String {
+        if let cached = runtimeCache.plainText { return cached }
+        if pasteboardType == .string, let showData, let str = String(data: showData, encoding: .utf8) {
+            return str
+        }
+        return attributeString.string
+    }
+
+    /// 是否为纯链接文本；优先基于轻量字符串计算并缓存，避免每次调用重复扫描或提前实例化富文本
     var isLink: Bool {
         if let cached = runtimeCache.isLink { return cached }
-        let result = attributeString.string.isLink()
+        let result = previewPlainText.isLink()
         runtimeCache.isLink = result
         return result
     }
 
-    /// 是否为 CSS 十六进制颜色值；基于 `attributeString` 计算后缓存
+    /// 是否为 CSS 十六进制颜色值；优先基于轻量字符串计算并缓存
     var isCSS: Bool {
         if let cached = runtimeCache.isCSS { return cached }
-        let result = attributeString.string.isCSSHexColor
+        let result = previewPlainText.isCSSHexColor
         runtimeCache.isCSS = result
         return result
     }
@@ -158,7 +178,15 @@ final class PasteboardModel: Identifiable, Codable {
             return cached
         }
         let text: String
-        if pasteboardType.isText() {
+        if pasteboardType == .string {
+            if let showData, length <= showData.count,
+               let str = String(data: showData, encoding: .utf8) {
+                runtimeCache.plainText = str
+                return str
+            }
+            let att = NSAttributedString(with: data, type: pasteboardType)
+            text = att?.string ?? (String(data: data, encoding: .utf8) ?? "")
+        } else if pasteboardType.isText() {
             let att = NSAttributedString(with: data, type: pasteboardType)
             text = att?.string ?? (String(data: data, encoding: .utf8) ?? "")
         } else {
@@ -216,6 +244,8 @@ final class PasteboardModel: Identifiable, Codable {
     /// 深度闲置清理：释放内存中常驻的重量级二进制与解码位图（原始大图随时可通过 getter 自动重载）
     func clearLoadedPayload() {
         _data = nil
+        _attributeString = nil
+        _writeItem = nil
         cachedThumbnail = nil
         cachedLinkMetadata = nil
         thumbnailLoadTask?.cancel()
@@ -223,9 +253,14 @@ final class PasteboardModel: Identifiable, Codable {
         runtimeCache.plainText = nil
         runtimeCache.richForegrounds.removeAll()
         runtimeCache.previewForegrounds = nil
-        runtimeCache.filePaths = nil
         runtimeCache.highlightedCode = nil
         runtimeCache.plainTextAttributedString = nil
+    }
+
+    /// 轻量入库后清理：在数据持久化落盘与 OCR 识别完成后，释放内存中常驻的原始大二进制，保留缩略图与渲染元数据供首屏即时展示
+    func evictRawData() {
+        _data = nil
+        runtimeCache.plainText = nil
     }
 
     func loadThumbnail() async -> NSImage? {
@@ -400,6 +435,12 @@ extension PasteboardModel: Hashable {
 
 extension PasteModelType {
     init(with type: PasteboardType, model: PasteboardModel) {
+        // 极致性能：优先从已持久化的 tag 解析，0 毫秒解析、0 内存分配、不触碰任何富文本
+        if let fromTag = PasteModelType(tagValue: model.tag) {
+            self = fromTag
+            return
+        }
+
         switch type {
         case .rtf, .rtfd:
             if model.isCSS {

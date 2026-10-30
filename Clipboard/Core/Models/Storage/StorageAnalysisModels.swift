@@ -228,21 +228,23 @@ nonisolated struct StorageQuotaStatus: Sendable, Equatable {
 // MARK: - SQLite 内存映射上限模型
 
 nonisolated enum SQLiteMmapThreshold: Int, CaseIterable, Identifiable, Sendable {
+    case disabled = 0
+    case mb32 = 32
+    case mb64 = 64
+    case mb128 = 128
     case mb256 = 256
     case mb512 = 512
-    case mb666 = 666
-    case gb1 = 1024
-    case gb2 = 2048
 
     var id: Int { rawValue }
 
     var displayName: String {
         switch self {
-        case .mb256: return "256 MB"
-        case .mb512: return "512 MB"
-        case .mb666: return "666 MB (推荐)"
-        case .gb1: return "1 GB (1024 MB)"
-        case .gb2: return "2 GB (2048 MB)"
+        case .disabled: return "0 MB (关闭映射 · 推荐)"
+        case .mb32: return "32 MB (轻量)"
+        case .mb64: return "64 MB (平衡)"
+        case .mb128: return "128 MB (极速检索)"
+        case .mb256: return "256 MB (高性能)"
+        case .mb512: return "512 MB (极限)"
         }
     }
 

@@ -45,9 +45,26 @@ extension PasteboardModel {
                 return size
             }
             if pasteboardType == .png || pasteboardType == .tiff {
-                let size = Self.computeImageSize(from: data)
-                runtimeCache.imageSize = size
-                return size
+                if length > 0 {
+                    let w = CGFloat(length >> 32)
+                    let h = CGFloat(length & 0xFFFF_FFFF)
+                    if w > 0 && h > 0 {
+                        let size = CGSize(width: w, height: h)
+                        runtimeCache.imageSize = size
+                        return size
+                    }
+                }
+                // 仅当原始大图已经常驻内存时才从中解析，严禁为读取尺寸触发 loadData
+                if hasLoadedData {
+                    let size = Self.computeImageSize(from: data)
+                    runtimeCache.imageSize = size
+                    return size
+                }
+                // 历史遗留数据兜底：从已在内存中的 showData（缩略图）计算显示宽高
+                if let sData = showData, !sData.isEmpty, let size = Self.computeImageSize(from: sData) {
+                    runtimeCache.imageSize = size
+                    return size
+                }
             }
             return nil
         }

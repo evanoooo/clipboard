@@ -49,6 +49,13 @@ extension PasteboardModel {
             searchText = Self.normalizeSearchText(text.source.string)
         } else if type.isImage(), let content {
             showData = Self.generateImageThumbnailData(from: content, maxPixelSize: 300)
+            if let size = Self.computeImageSize(from: content) {
+                let w = Int(size.width)
+                let h = Int(size.height)
+                if w > 0 && h > 0 {
+                    length = (w << 32) | (h & 0xFFFF_FFFF)
+                }
+            }
         }
 
         let calculatedTag = Self.calculateTag(type: type, content: content ?? Data())

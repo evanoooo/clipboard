@@ -104,6 +104,7 @@ final class PasteDataStore {
     private var focusToken = 0
     private var orderRevision = 0
     private var ingestionTask: Task<Void, Never>?
+    private var onDemandOCRTask: Task<Void, Never>?
     /// 撤销进行中时忽略重复 ⌘Z，避免两次恢复交叉。
     var isUndoing = false
     /// 串行登记尚未落库的写操作（删除/移组/隐藏），撤销前只需等待队尾。
@@ -144,6 +145,7 @@ final class PasteDataStore {
         let previous = mutationTail
         mutationTail = Task {
             await previous?.value
+            guard !Task.isCancelled else { return }
             await operation()
         }
     }
@@ -246,21 +248,8 @@ extension PasteDataStore {
             }
 
             var list = self.dataList.value
-            var existingUniqueIds = Set<String>()
-            var existingDbIds = Set<Int64>()
-            existingUniqueIds.reserveCapacity(list.count)
-            existingDbIds.reserveCapacity(list.count)
-            for item in list {
-                existingUniqueIds.insert(item.uniqueId)
-                if let id = item.id {
-                    existingDbIds.insert(id)
-                }
-            }
-            let deduplicated = newItems.filter { item in
-                if existingUniqueIds.contains(item.uniqueId) { return false }
-                if let id = item.id, existingDbIds.contains(id) { return false }
-                return true
-            }
+            let existingUniqueIds = Set(list.map(\.uniqueId))
+            let deduplicated = newItems.filter { !existingUniqueIds.contains($0.uniqueId) }
 
             if !deduplicated.isEmpty {
                 list.append(contentsOf: deduplicated)
@@ -320,7 +309,8 @@ extension PasteDataStore {
     }
 
     private func refreshOrder() async {
-        while !Task.isCancelled {
+        for _ in 0..<3 {
+            guard !Task.isCancelled else { return }
             let revision = listRevision
             guard let entries = await sqlManager.orderedItemEntries() else { return }
             guard revision == listRevision else { continue }
@@ -342,9 +332,12 @@ extension PasteDataStore {
     }
 
     /// 数据搜索（关键字 + 自定义分组 + 过滤视图）
-    func searchData(_ criteria: SearchCriteria) {
+    func searchData(_ criteria: SearchCriteria, triggerOCR: Bool = true) {
         let filter = filterState.update(criteria: criteria)
         let capturedFilterRev = filterState.revision
+        if triggerOCR, !criteria.keyword.isEmpty {
+            triggerOnDemandOCRFallback(for: criteria)
+        }
         searchTask?.cancel()
         countTask?.cancel()
         loadPageTask?.cancel()
@@ -523,6 +516,21 @@ extension PasteDataStore {
         return kinds.isEmpty ? "-" : kinds.joined()
     }
 
+    /// 搜索时按需触发未完成 OCR 图片的快速优先识别（Fast-path）
+    private func triggerOnDemandOCRFallback(for criteria: SearchCriteria) {
+        guard DeferredOCRCoordinator.shared.hasPendingItems else { return }
+        onDemandOCRTask?.cancel()
+        onDemandOCRTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let hasUpdated = await DeferredOCRCoordinator.shared.processOnDemandIfNeeded(keyword: criteria.keyword)
+            guard !Task.isCancelled, hasUpdated else { return }
+            // 若当前搜索关键字未变且有新图片完成 OCR 写入了 searchText，轻量刷新当前搜索结果（不再重复触发 OCR fallback）
+            if self.isInFilterMode, self.filterState.criteria.keyword == criteria.keyword {
+                self.searchData(self.filterState.criteria, triggerOCR: false)
+            }
+        }
+    }
+
     @discardableResult
     func addNewItem(_ item: NSPasteboard, sourceApp: NSRunningApplication? = nil, chipId: Int = -1) -> Bool {
         if let first = item.pasteboardItems?.first,
@@ -543,7 +551,13 @@ extension PasteDataStore {
             await previous?.value
             await insertModel(model)
             SyncEngine.shared.markDirtyAndSchedule()
-            await runOCRIfNeeded(model)
+            // 极致轻量：入库完成后立即释放原始大图，避免大 BLOB 常驻内存
+            await MainActor.run {
+                model.evictRawData()
+                if model.type == .image, let id = model.id {
+                    DeferredOCRCoordinator.shared.enqueue(id: id)
+                }
+            }
         }
         return true
     }
@@ -559,7 +573,7 @@ extension PasteDataStore {
 
         let searchText = PasteboardModel.normalizeSearchText(rawText)
         model.updateSearchText(val: searchText)
-        await sqlManager.update(id: id, item: model)
+        _ = await sqlManager.updateSearchText(id: id, searchText: searchText)
         await MainActor.run {
             SyncEngine.shared.markDirtyAndSchedule()
         }
@@ -595,6 +609,9 @@ extension PasteDataStore {
         model.id = result.id
         model.appID = result.appID
         model.sortOrder = result.sortOrder
+        await MainActor.run {
+            model.evictRawData()
+        }
     }
 
     /// 批量静默录入由云端同步拉取的条目（单事务提交，解决海量数据恢复时逐条写入的 I/O 阻塞）
@@ -619,6 +636,11 @@ extension PasteDataStore {
             ))
         }
         await sqlManager.ingestSyncedBatch(records)
+        await MainActor.run {
+            for model in models {
+                model.evictRawData()
+            }
+        }
     }
 
     /// 批量静默删除远端已标记墓碑的本地条目（单事务执行，不抢占前台 UI）
@@ -636,7 +658,8 @@ extension PasteDataStore {
         )
         guard result.id >= 0 else { return }
         model.appID = result.appID
-        await sqlManager.refreshAppCache(debounce: true)
+        let insertedAppID = result.appID
+        await MainActor.run { SourceAppCache.shared.promote(appID: insertedAppID) }
         AppColorService.shared.updateColor(for: model)
         totalCount += 1
         let count = totalCount
