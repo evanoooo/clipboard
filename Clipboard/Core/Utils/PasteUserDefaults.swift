@@ -184,10 +184,6 @@ enum PasteUserDefaults {
                 return 0
             }
             let val = UserDefaults.standard.integer(forKey: PrefKey.sqliteMmapSizeMB.rawValue)
-            // 兼容升级：若旧配置为历史遗留的 666 MB 或超出当前最高档位，自动平滑收敛至推荐档 0 MB
-            if val == 666 || val > 512 {
-                return 0
-            }
             return max(0, val)
         }
         set {

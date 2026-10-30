@@ -234,6 +234,9 @@ nonisolated enum SQLiteMmapThreshold: Int, CaseIterable, Identifiable, Sendable 
     case mb128 = 128
     case mb256 = 256
     case mb512 = 512
+    case mb666 = 666
+    case gb1 = 1024
+    case gb2 = 2048
 
     var id: Int { rawValue }
 
@@ -245,6 +248,9 @@ nonisolated enum SQLiteMmapThreshold: Int, CaseIterable, Identifiable, Sendable 
         case .mb128: return "128 MB (极速检索)"
         case .mb256: return "256 MB (高性能)"
         case .mb512: return "512 MB (极限)"
+        case .mb666: return "666 MB"
+        case .gb1: return "1 GB (1024 MB)"
+        case .gb2: return "2 GB (2048 MB)"
         }
     }
 
