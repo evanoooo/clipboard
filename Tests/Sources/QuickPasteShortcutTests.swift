@@ -17,6 +17,7 @@ enum QuickPasteShortcutTests {
         testCommand1to9KeyEvents(runner: runner)
         testConflictModifierRejection(runner: runner)
         testPlainTextModifierAllowance(runner: runner)
+        testCommandFSearchShortcut(runner: runner)
         print("✓ Quick Paste Shortcut tests passed!")
     }
 
@@ -137,5 +138,20 @@ enum QuickPasteShortcutTests {
         // ⌘ + ⇧ + 1 附带了纯文本修饰键（Shift），应当被正常识别并映射为 index 0
         let event = makeKeyEvent(keyCode: UInt16(kVK_ANSI_1), modifiers: [.command, .shift], chars: "1")
         runner.assertEqual(matchQuickPaste(event: event), 0, "⌘+⇧+1 with plain-text modifier should match index 0")
+    }
+
+    private static func testCommandFSearchShortcut(runner: TestRunner.Type) {
+        let fKeyCode = UInt16(kVK_ANSI_F)
+        // ⌘ + F 应当准确匹配搜索快捷键规则（仅 Command，不带 Option/Control/Shift）
+        let validCommandF = makeKeyEvent(keyCode: fKeyCode, modifiers: [.command], chars: "f")
+        let isCommandF = validCommandF.keyCode == fKeyCode &&
+            validCommandF.modifierFlags.contains(.command) &&
+            validCommandF.modifierFlags.isDisjoint(with: [.option, .control, .shift])
+        runner.assertTrue(isCommandF, "⌘+F without conflicting modifiers must be recognized as search trigger")
+
+        // ⌘ + ⌥ + F 或 ⌘ + ⇧ + F 不应误触发普通搜索框聚焦
+        let conflictEvent = makeKeyEvent(keyCode: fKeyCode, modifiers: [.command, .option], chars: "f")
+        let isConflict = conflictEvent.modifierFlags.isDisjoint(with: [.option, .control, .shift])
+        runner.assertFalse(isConflict, "⌘+⌥+F must not be treated as standard ⌘+F search trigger")
     }
 }

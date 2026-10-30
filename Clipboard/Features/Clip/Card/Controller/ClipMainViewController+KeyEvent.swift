@@ -85,6 +85,14 @@ extension ClipMainViewController {
         }
 
         if focusRegion == .popover {
+            if event.modifierFlags.contains(.command),
+               event.modifierFlags.isDisjoint(with: [.option, .control, .shift]),
+               event.keyCode == KeyCode.f {
+                closePreviewPopover()
+                topBarView.focusSearchField(selectAll: true)
+                return nil
+            }
+
             if event.keyCode == KeyCode.escape {
                 let now = CACurrentMediaTime()
                 let isDoubleTap = (now - lastEscapeTime) < 0.35
@@ -245,6 +253,14 @@ extension ClipMainViewController {
     }
 
     private func handleCommandKeyEvent(_ event: NSEvent) -> NSEvent? {
+        // ⌘ + F：快速激活、聚焦并全选搜索框（无论焦点在列表、搜索输入框自身或弹窗）
+        if event.keyCode == KeyCode.f,
+           event.modifierFlags.isDisjoint(with: [.option, .control, .shift]) {
+            closePreviewPopover()
+            topBarView.focusSearchField(selectAll: true)
+            return nil
+        }
+
         guard focusRegion == .collection else { return event }
 
         // 支持 ⌘ + ⇧ + C 一键合并复制多项

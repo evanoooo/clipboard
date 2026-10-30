@@ -26,6 +26,15 @@ extension ClipFloatingViewController {
             return nil
         }
 
+        // ⌘ + F：快速激活、聚焦并全选搜索框
+        if event.modifierFlags.contains(.command),
+           event.modifierFlags.isDisjoint(with: [.option, .control, .shift]),
+           event.keyCode == KeyCode.f {
+            closePreview()
+            floatingContentView.headerView.focusSearchField(selectAll: true)
+            return nil
+        }
+
         if focusRegion == .search {
             return focusedKeyDown(event)
         }
@@ -87,6 +96,14 @@ extension ClipFloatingViewController {
     private func focusedKeyDown(_ event: NSEvent) -> NSEvent? {
         switch focusRegion {
         case .popover:
+            if event.modifierFlags.contains(.command),
+               event.modifierFlags.isDisjoint(with: [.option, .control, .shift]),
+               event.keyCode == KeyCode.f {
+                closePreview()
+                floatingContentView.headerView.focusSearchField(selectAll: true)
+                return nil
+            }
+
             if event.keyCode == KeyCode.escape {
                 let now = CACurrentMediaTime()
                 let isDoubleTap = (now - lastEscapeTime) < 0.35
@@ -254,6 +271,10 @@ extension ClipFloatingViewController {
             return nil
         case KeyCode.e:
             historyView.openEditWindow(at: historyView.selectedIndex)
+            return nil
+        case KeyCode.f:
+            closePreview()
+            floatingContentView.headerView.focusSearchField(selectAll: true)
             return nil
         case KeyCode.r:
             guard let model = historyView.selectedModels.first else { return nil }

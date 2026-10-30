@@ -301,6 +301,17 @@ final class TopBarView: NSView {
         searchField.appendText(character)
     }
 
+    func focusSearchField(selectAll: Bool = true) {
+        if !isSearching {
+            activateSearch()
+        }
+        window?.makeFirstResponder(searchField)
+        onFocusRegionChange?(.search)
+        if selectAll {
+            searchField.focusAndSelectAll()
+        }
+    }
+
     func deactivateSearch(beforeTransition: () -> Void = {}) {
         guard isSearching else { return beforeTransition() }
         isSearching = false

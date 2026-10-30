@@ -50,6 +50,12 @@ final class SearchField: NSView {
         return true
     }
 
+    func focusAndSelectAll() {
+        _ = becomeFirstResponder()
+        let length = tokenTextView.textStorage?.length ?? 0
+        tokenTextView.setSelectedRange(NSRange(location: 0, length: length))
+    }
+
     override func layout() {
         super.layout()
         syncTextViewFrameToScrollView()

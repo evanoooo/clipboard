@@ -281,6 +281,13 @@ final class FloatingHeaderView: NSView {
         }
     }
 
+    func focusSearchField(selectAll: Bool = true) {
+        window?.makeFirstResponder(searchField)
+        if selectAll {
+            searchField.selectText(nil)
+        }
+    }
+
     // MARK: - Setup
 
     private func setup() {
