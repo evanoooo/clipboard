@@ -72,6 +72,11 @@ final class ClipMainWindowController: NSWindowController {
         _ frame: NSRect? = nil,
         _ completionHandler: (@MainActor () -> Void)? = nil
     ) {
+        if targetVisible && !(window?.isVisible ?? false) {
+            targetVisible = false
+            isDismissing = false
+        }
+
         if targetVisible {
             dismiss(completionHandler)
         } else {
@@ -82,7 +87,13 @@ final class ClipMainWindowController: NSWindowController {
 
 extension ClipMainWindowController {
     func dismiss(_ completionHandler: (@MainActor () -> Void)? = nil) {
-        guard targetVisible, let window, window.isVisible, !isDismissing else {
+        guard let window, window.isVisible else {
+            targetVisible = false
+            isDismissing = false
+            completionHandler?()
+            return
+        }
+        guard !isDismissing else {
             completionHandler?()
             return
         }
@@ -177,6 +188,7 @@ extension ClipMainWindowController {
 
 extension ClipMainWindowController: NSWindowDelegate {
     func windowDidResignKey(_: Notification) {
+        HotKeyManager.shared.resetPressedKeys()
         guard !AppEnvironment.shared.suppressResignKey else { return }
         dismiss()
     }

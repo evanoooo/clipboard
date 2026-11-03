@@ -95,6 +95,7 @@ class HotKeyManager {
         let key: String
         let id: UInt32
         let ref: EventHotKeyRef
+        let shortcut: KeyboardShortcut
     }
 
     private var registrationsByID: [UInt32: Registration] = [:]
@@ -106,6 +107,12 @@ class HotKeyManager {
     /// 边沿过滤：macOS 14 上 Carbon 会按 key-repeat 速率派发多次 Pressed，
     /// 只在"从未按下 → 按下"的瞬间触发 handler，直到 Released 才解除。
     private var pressedKeys: Set<String> = []
+
+    /// 记录各快捷键上次触发时间戳，用于兜底过滤 auto-repeat 及丢失 release 事件后的自愈
+    private var lastPressedInstant: [String: ContinuousClock.Instant] = [:]
+
+    /// 物理释放监测任务，处理用户先松开修饰键导致系统丢失 kEventHotKeyReleased 的情况
+    private var releaseWatchdogTasks: [String: Task<Void, Never>] = [:]
 
     private var isInitialized = false
     private var eventHandlerRef: EventHandlerRef?
@@ -119,6 +126,57 @@ class HotKeyManager {
         handlers["app_launch"] = {
             WindowManager.shared.toggleWindow(frame: NSScreen.main?.frame)
         }
+    }
+
+    private func startReleaseWatchdog(for reg: Registration) {
+        releaseWatchdogTasks[reg.key]?.cancel()
+        releaseWatchdogTasks[reg.key] = Task { @MainActor [weak self] in
+            // 最多轮询 10 秒（200 次 * 50ms），确保物理按键松开后及时自愈
+            for _ in 0..<200 {
+                try? await Task.sleep(for: .milliseconds(50))
+                guard !Task.isCancelled, let self else { return }
+                if !self.isShortcutPhysicallyPressed(reg.shortcut) {
+                    self.pressedKeys.remove(reg.key)
+                    self.releaseWatchdogTasks.removeValue(forKey: reg.key)
+                    return
+                }
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.pressedKeys.remove(reg.key)
+            self.releaseWatchdogTasks.removeValue(forKey: reg.key)
+        }
+    }
+
+    func resetPressedKeys() {
+        pressedKeys.removeAll()
+        for (_, task) in releaseWatchdogTasks {
+            task.cancel()
+        }
+        releaseWatchdogTasks.removeAll()
+    }
+
+    private func isShortcutPhysicallyPressed(_ shortcut: KeyboardShortcut) -> Bool {
+        let isKeyDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(shortcut.keyCode))
+        guard isKeyDown else { return false }
+
+        let requiredFlags = shortcut.modifiers
+        if !requiredFlags.isEmpty {
+            let currentFlags = CGEventSource.flagsState(.combinedSessionState)
+            if requiredFlags.contains(.command) && !currentFlags.contains(.maskCommand) {
+                return false
+            }
+            if requiredFlags.contains(.shift) && !currentFlags.contains(.maskShift) {
+                return false
+            }
+            if requiredFlags.contains(.option) && !currentFlags.contains(.maskAlternate) {
+                return false
+            }
+            if requiredFlags.contains(.control) && !currentFlags.contains(.maskControl) {
+                return false
+            }
+        }
+
+        return true
     }
 
     private func installGlobalEventHandler() {
@@ -158,13 +216,32 @@ class HotKeyManager {
                 let kind = GetEventKind(event)
                 if kind == UInt32(kEventHotKeyReleased) {
                     manager.pressedKeys.remove(reg.key)
+                    manager.releaseWatchdogTasks.removeValue(forKey: reg.key)?.cancel()
                     return noErr
                 }
 
-                guard !manager.pressedKeys.contains(reg.key) else {
-                    return noErr
+                let now = ContinuousClock.now
+                let lastTime = manager.lastPressedInstant[reg.key]
+                manager.lastPressedInstant[reg.key] = now
+
+                if manager.pressedKeys.contains(reg.key) {
+                    let isStaleByTime: Bool = if let lastTime {
+                        (now - lastTime) > .milliseconds(400)
+                    } else {
+                        true
+                    }
+
+                    if !isStaleByTime && manager.isShortcutPhysicallyPressed(reg.shortcut) {
+                        // 距上次事件极近且按键依然被物理按住，判定为长按产生的系统 auto-repeat
+                        return noErr
+                    }
+
+                    // 物理按键已松开或距上次事件间隔已远超 repeat 间隔，自愈重置
+                    manager.pressedKeys.remove(reg.key)
                 }
+
                 manager.pressedKeys.insert(reg.key)
+                manager.startReleaseWatchdog(for: reg)
                 manager.handlers[reg.key]?()
                 return noErr
             },
@@ -226,6 +303,7 @@ class HotKeyManager {
     }
 
     func clear() {
+        resetPressedKeys()
         unregisterAllHotKeys()
         if let ref = eventHandlerRef {
             RemoveEventHandler(ref)
@@ -380,7 +458,7 @@ class HotKeyManager {
             return false
         }
 
-        let reg = Registration(key: info.key, id: id, ref: ref)
+        let reg = Registration(key: info.key, id: id, ref: ref, shortcut: info.shortcut)
         registrationsByID[id] = reg
         registrationsByKey[info.key] = reg
         log.info("注册快捷键成功: \(info.key) - \(info.displayText) (id=\(id))")
@@ -390,7 +468,9 @@ class HotKeyManager {
     private func unregisterSystemHotKey(key: String) {
         guard let reg = registrationsByKey.removeValue(forKey: key) else { return }
         registrationsByID.removeValue(forKey: reg.id)
+        releaseWatchdogTasks.removeValue(forKey: key)?.cancel()
         pressedKeys.remove(key)
+        lastPressedInstant.removeValue(forKey: key)
         UnregisterEventHotKey(reg.ref)
         log.info("注销快捷键成功：\(key)")
     }

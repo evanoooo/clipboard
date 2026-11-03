@@ -257,7 +257,12 @@ final class ClipFloatingWindowController: NSWindowController {
     }
 
     func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
-        guard let win = window, win.isVisible, !isDismissing else {
+        guard let win = window, win.isVisible else {
+            isDismissing = false
+            completionHandler?()
+            return
+        }
+        guard !isDismissing else {
             completionHandler?()
             return
         }
@@ -295,6 +300,7 @@ final class ClipFloatingWindowController: NSWindowController {
 
 extension ClipFloatingWindowController: NSWindowDelegate {
     func windowDidResignKey(_: Notification) {
+        HotKeyManager.shared.resetPressedKeys()
         guard let window else { return }
         if NSApplication.shared.modalWindow != nil {
             window.level = .normal
