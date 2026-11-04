@@ -120,55 +120,57 @@ enum JSONTransformer {
     }
 
     private nonisolated static func removeEscapes(_ text: String) throws -> String {
-        let bytes = Array(text.utf8)
-        var output: [UInt8] = []
-        output.reserveCapacity(bytes.count)
-        var index = 0
+        var source = text
+        return try source.withUTF8 { bytes in
+            var output: [UInt8] = []
+            output.reserveCapacity(bytes.count)
+            var index = 0
 
-        while index < bytes.count {
-            if index.isMultiple(of: 16384) {
-                try checkCancellation()
-            }
-            guard bytes[index] == Byte.backslash, index + 1 < bytes.count else {
-                output.append(bytes[index])
-                index += 1
-                continue
-            }
+            while index < bytes.count {
+                if index.isMultiple(of: 16384) {
+                    try checkCancellation()
+                }
+                guard bytes[index] == Byte.backslash, index + 1 < bytes.count else {
+                    output.append(bytes[index])
+                    index += 1
+                    continue
+                }
 
-            switch bytes[index + 1] {
-            case Byte.quote, Byte.backslash, Byte.slash:
-                output.append(bytes[index + 1])
-                index += 2
-            case Byte.lowercaseB:
-                output.append(Byte.backspace)
-                index += 2
-            case Byte.lowercaseF:
-                output.append(Byte.formFeed)
-                index += 2
-            case Byte.lowercaseN:
-                output.append(Byte.newline)
-                index += 2
-            case Byte.lowercaseR:
-                output.append(Byte.carriageReturn)
-                index += 2
-            case Byte.lowercaseT:
-                output.append(Byte.tab)
-                index += 2
-            case Byte.lowercaseU:
-                if let decoded = decodeUnicodeEscape(bytes, at: index) {
-                    appendUTF8(decoded.scalar, to: &output)
-                    index = decoded.nextIndex
-                } else {
+                switch bytes[index + 1] {
+                case Byte.quote, Byte.backslash, Byte.slash:
+                    output.append(bytes[index + 1])
+                    index += 2
+                case Byte.lowercaseB:
+                    output.append(Byte.backspace)
+                    index += 2
+                case Byte.lowercaseF:
+                    output.append(Byte.formFeed)
+                    index += 2
+                case Byte.lowercaseN:
+                    output.append(Byte.newline)
+                    index += 2
+                case Byte.lowercaseR:
+                    output.append(Byte.carriageReturn)
+                    index += 2
+                case Byte.lowercaseT:
+                    output.append(Byte.tab)
+                    index += 2
+                case Byte.lowercaseU:
+                    if let decoded = decodeUnicodeEscape(bytes, at: index) {
+                        appendUTF8(decoded.scalar, to: &output)
+                        index = decoded.nextIndex
+                    } else {
+                        output.append(bytes[index])
+                        index += 1
+                    }
+                default:
                     output.append(bytes[index])
                     index += 1
                 }
-            default:
-                output.append(bytes[index])
-                index += 1
             }
-        }
 
-        return String(decoding: output, as: UTF8.self)
+            return String(decoding: output, as: UTF8.self)
+        }
     }
 
     private nonisolated static func encodeUnicode(_ text: String) throws -> String {
@@ -200,39 +202,41 @@ enum JSONTransformer {
     }
 
     private nonisolated static func decodeUnicode(_ text: String) throws -> String {
-        let bytes = Array(text.utf8)
-        var output: [UInt8] = []
-        output.reserveCapacity(bytes.count)
-        var index = 0
-        var precedingBackslashes = 0
+        var source = text
+        return try source.withUTF8 { bytes in
+            var output: [UInt8] = []
+            output.reserveCapacity(bytes.count)
+            var index = 0
+            var precedingBackslashes = 0
 
-        while index < bytes.count {
-            if index.isMultiple(of: 16384) {
-                try checkCancellation()
-            }
-            let byte = bytes[index]
-            if byte == Byte.backslash {
-                if precedingBackslashes.isMultiple(of: 2),
-                   let decoded = decodeUnicodeEscape(bytes, at: index)
-                {
-                    appendUTF8(decoded.scalar, to: &output)
-                    index = decoded.nextIndex
-                    precedingBackslashes = 0
+            while index < bytes.count {
+                if index.isMultiple(of: 16384) {
+                    try checkCancellation()
+                }
+                let byte = bytes[index]
+                if byte == Byte.backslash {
+                    if precedingBackslashes.isMultiple(of: 2),
+                       let decoded = decodeUnicodeEscape(bytes, at: index)
+                    {
+                        appendUTF8(decoded.scalar, to: &output)
+                        index = decoded.nextIndex
+                        precedingBackslashes = 0
+                        continue
+                    }
+
+                    output.append(byte)
+                    precedingBackslashes += 1
+                    index += 1
                     continue
                 }
 
                 output.append(byte)
-                precedingBackslashes += 1
+                precedingBackslashes = 0
                 index += 1
-                continue
             }
 
-            output.append(byte)
-            precedingBackslashes = 0
-            index += 1
+            return String(decoding: output, as: UTF8.self)
         }
-
-        return String(decoding: output, as: UTF8.self)
     }
 
     // MARK: - Object Rewriting
@@ -243,17 +247,19 @@ enum JSONTransformer {
         ascending: Bool?,
         naming: JSONKeyNaming?
     ) throws -> String {
-        let bytes = Array(text.utf8)
-        var parser = TreeParser(bytes: bytes)
-        let root = try parser.parseDocument()
-        var writer = TreeWriter(
-            source: bytes,
-            indentation: indentation.rawValue,
-            ascending: ascending,
-            naming: naming
-        )
-        try writer.write(root)
-        return String(decoding: writer.output, as: UTF8.self)
+        var source = text
+        return try source.withUTF8 { bytes in
+            var parser = TreeParser(bytes: bytes)
+            let root = try parser.parseDocument()
+            var writer = TreeWriter(
+                source: bytes,
+                indentation: indentation.rawValue,
+                ascending: ascending,
+                naming: naming
+            )
+            try writer.write(root)
+            return String(decoding: writer.output, as: UTF8.self)
+        }
     }
 
     private indirect nonisolated enum Node {
@@ -269,7 +275,7 @@ enum JSONTransformer {
     }
 
     private nonisolated struct TreeParser {
-        let bytes: [UInt8]
+        let bytes: UnsafeBufferPointer<UInt8>
         var index = 0
 
         mutating func parseDocument() throws -> Node {
@@ -292,11 +298,11 @@ enum JSONTransformer {
             case Byte.quote:
                 try .scalar(parseRawString())
             case Byte.lowercaseT:
-                try .scalar(parseLiteral(Array("true".utf8)))
+                try .scalar(parseLiteral("true"))
             case Byte.lowercaseF:
-                try .scalar(parseLiteral(Array("false".utf8)))
+                try .scalar(parseLiteral("false"))
             case Byte.lowercaseN:
-                try .scalar(parseLiteral(Array("null".utf8)))
+                try .scalar(parseLiteral("null"))
             default:
                 try .scalar(parseNumber())
             }
@@ -441,12 +447,13 @@ enum JSONTransformer {
             throw JSONTransformError.invalidJSON
         }
 
-        private mutating func parseLiteral(_ literal: [UInt8]) throws -> Range<Int> {
+        private mutating func parseLiteral(_ literal: StaticString) throws -> Range<Int> {
             let start = index
-            guard bytes[index...].starts(with: literal) else {
+            let matches = literal.withUTF8Buffer { bytes[index...].starts(with: $0) }
+            guard matches else {
                 throw JSONTransformError.invalidJSON
             }
-            index += literal.count
+            index += literal.utf8CodeUnitCount
             return start ..< index
         }
 
@@ -523,14 +530,14 @@ enum JSONTransformer {
     }
 
     private nonisolated struct TreeWriter {
-        let source: [UInt8]
+        let source: UnsafeBufferPointer<UInt8>
         let indentation: Int
         let ascending: Bool?
         let naming: JSONKeyNaming?
         var output: [UInt8] = []
 
         init(
-            source: [UInt8],
+            source: UnsafeBufferPointer<UInt8>,
             indentation: Int,
             ascending: Bool?,
             naming: JSONKeyNaming?

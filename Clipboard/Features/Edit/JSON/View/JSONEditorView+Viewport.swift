@@ -19,7 +19,7 @@ extension JSONEditorView {
     func replaceViewport(
         _ text: String, replacement: JSONViewportReplacement, viewport: JSONViewportEditor?
     ) -> Bool {
-        guard !(replacement.previousText as NSString).isEqual(to: text) else { return false }
+        guard replacement.previousText != text else { return false }
         if !replacement.entireDocument, let viewport {
             viewport.replace(text, in: replacement.range, registeringUndo: replacement.registeringUndo)
             knownValidity = nil

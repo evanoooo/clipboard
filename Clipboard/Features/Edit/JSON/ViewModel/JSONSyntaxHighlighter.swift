@@ -23,92 +23,125 @@ enum JSONSyntaxHighlighter {
         in text: String,
         offset: Int
     ) -> [Span] {
-        let source = text as NSString
-        var result: [Span] = []
-        result.reserveCapacity(max(16, source.length / 12))
-        var index = 0
+        // 直接在 UTF-8 字节上扫描，避免桥接为 NSString（UTF-16）时产生额外内存分配。
+        // JSON 结构字符（引号、冒号、括号等）均为 ASCII，UTF-8 字节偏移与 UTF-16 代码单元偏移
+        // 在纯 ASCII 段完全一致；字符串内容可能含多字节序列，因此同时维护 utf16Offset 计数器。
+        var source = text
+        return source.withUTF8 { bytes in
+            let count = bytes.count
+            var result: [Span] = []
+            result.reserveCapacity(max(16, count / 12))
+            var byteIndex = 0    // UTF-8 字节索引
+            var utf16Offset = 0  // 对应的 UTF-16 代码单元偏移
 
-        while index < source.length {
-            if shouldCancel(at: index) {
-                return []
+            /// 推进 byteIndex / utf16Offset 步进 n 个字节（均为 ASCII）
+            @inline(__always)
+            func advanceASCII(_ n: Int = 1) {
+                byteIndex += n
+                utf16Offset += n
             }
-            let character = source.character(at: index)
 
-            if character == CharacterCode.quote {
-                let start = index
-                index += 1
-                var escaped = false
-                while index < source.length {
-                    if shouldCancel(at: index) {
-                        return []
+            /// 步进一个任意 UTF-8 编码单元，并同步 utf16Offset
+            @inline(__always)
+            func advanceOne() {
+                let b = bytes[byteIndex]
+                byteIndex += 1
+                // UTF-8 多字节序列首字节规则：
+                //   0xxxxxxx (0x00-0x7F) → 1 字节 → 1 个 UTF-16 代码单元
+                //   110xxxxx (0xC0-0xDF) → 2 字节 → 1 个 UTF-16 代码单元
+                //   1110xxxx (0xE0-0xEF) → 3 字节 → 1 个 UTF-16 代码单元
+                //   11110xxx (0xF0-0xF7) → 4 字节 → 2 个 UTF-16 代码单元（代理对）
+                // 续字节 (0x80-0xBF) 不产生新的代码单元，直接跳过
+                if b & 0xC0 == 0x80 {
+                    // 续字节：不增加 utf16Offset
+                } else if b & 0xF8 == 0xF0 {
+                    // 4 字节首字节（代理对）
+                    utf16Offset += 2
+                } else {
+                    utf16Offset += 1
+                }
+            }
+
+            while byteIndex < count {
+                if shouldCancel(at: byteIndex) {
+                    return []
+                }
+                let byte = bytes[byteIndex]
+
+                if byte == 0x22 { // quote
+                    let startUtf16 = utf16Offset
+                    advanceASCII()
+                    var escaped = false
+                    while byteIndex < count {
+                        if shouldCancel(at: byteIndex) {
+                            return []
+                        }
+                        let cur = bytes[byteIndex]
+                        advanceOne()
+                        if escaped {
+                            escaped = false
+                        } else if cur == 0x5C { // backslash
+                            escaped = true
+                        } else if cur == 0x22 { // quote
+                            break
+                        }
                     }
-                    let current = source.character(at: index)
-                    index += 1
-                    if escaped {
-                        escaped = false
-                    } else if current == CharacterCode.backslash {
-                        escaped = true
-                    } else if current == CharacterCode.quote {
-                        break
+
+                    // 向前看是否紧跟冒号（可能中间有空白）
+                    var lookaheadByte = byteIndex
+                    while lookaheadByte < count,
+                          isWhitespaceByte(bytes[lookaheadByte])
+                    {
+                        lookaheadByte += 1
                     }
+                    let kind: Kind = lookaheadByte < count
+                        && bytes[lookaheadByte] == 0x3A // colon
+                        ? .key
+                        : .string
+                    result.append(Span(
+                        range: NSRange(location: offset + startUtf16, length: utf16Offset - startUtf16),
+                        kind: kind
+                    ))
+                    continue
                 }
 
-                var lookahead = index
-                while lookahead < source.length,
-                      isWhitespace(source.character(at: lookahead))
-                {
-                    lookahead += 1
+                if byte == 0x2D || isDigitByte(byte) { // minus or digit
+                    let startUtf16 = utf16Offset
+                    advanceASCII()
+                    while byteIndex < count, isNumberCharByte(bytes[byteIndex]) {
+                        advanceASCII()
+                    }
+                    result.append(Span(
+                        range: NSRange(location: offset + startUtf16, length: utf16Offset - startUtf16),
+                        kind: .number
+                    ))
+                    continue
                 }
-                let kind: Kind = lookahead < source.length
-                    && source.character(at: lookahead) == CharacterCode.colon
-                    ? .key
-                    : .string
-                result.append(Span(
-                    range: NSRange(location: offset + start, length: index - start),
-                    kind: kind
-                ))
-                continue
+
+                if isLiteralStartByte(byte) { // t, f, n
+                    let startUtf16 = utf16Offset
+                    advanceASCII()
+                    while byteIndex < count, isASCIILetterByte(bytes[byteIndex]) {
+                        advanceASCII()
+                    }
+                    result.append(Span(
+                        range: NSRange(location: offset + startUtf16, length: utf16Offset - startUtf16),
+                        kind: .literal
+                    ))
+                    continue
+                }
+
+                if isPunctuationByte(byte) {
+                    result.append(Span(
+                        range: NSRange(location: offset + utf16Offset, length: 1),
+                        kind: .punctuation
+                    ))
+                }
+                advanceOne()
             }
 
-            if character == CharacterCode.minus || isDigit(character) {
-                let start = index
-                index += 1
-                while index < source.length,
-                      isNumberCharacter(source.character(at: index))
-                {
-                    index += 1
-                }
-                result.append(Span(
-                    range: NSRange(location: offset + start, length: index - start),
-                    kind: .number
-                ))
-                continue
-            }
-
-            if isLiteralStart(character) {
-                let start = index
-                while index < source.length,
-                      isASCIILetter(source.character(at: index))
-                {
-                    index += 1
-                }
-                result.append(Span(
-                    range: NSRange(location: offset + start, length: index - start),
-                    kind: .literal
-                ))
-                continue
-            }
-
-            if isPunctuation(character) {
-                result.append(Span(
-                    range: NSRange(location: offset + index, length: 1),
-                    kind: .punctuation
-                ))
-            }
-            index += 1
+            return result
         }
-
-        return result
     }
 
     private nonisolated static func shouldCancel(at index: Int) -> Bool {
@@ -116,72 +149,33 @@ enum JSONSyntaxHighlighter {
             && withUnsafeCurrentTask { $0?.isCancelled ?? false }
     }
 
-    private nonisolated static func isWhitespace(_ value: unichar) -> Bool {
-        value == CharacterCode.space
-            || value == CharacterCode.tab
-            || value == CharacterCode.newline
-            || value == CharacterCode.carriageReturn
+    @inline(__always)
+    private nonisolated static func isWhitespaceByte(_ b: UInt8) -> Bool {
+        b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D
     }
 
-    private nonisolated static func isDigit(_ value: unichar) -> Bool {
-        (CharacterCode.zero ... CharacterCode.nine).contains(value)
+    @inline(__always)
+    private nonisolated static func isDigitByte(_ b: UInt8) -> Bool {
+        b >= 0x30 && b <= 0x39
     }
 
-    private nonisolated static func isNumberCharacter(_ value: unichar) -> Bool {
-        isDigit(value)
-            || value == CharacterCode.minus
-            || value == CharacterCode.plus
-            || value == CharacterCode.period
-            || value == CharacterCode.lowercaseE
-            || value == CharacterCode.uppercaseE
+    @inline(__always)
+    private nonisolated static func isNumberCharByte(_ b: UInt8) -> Bool {
+        isDigitByte(b) || b == 0x2D || b == 0x2B || b == 0x2E || b == 0x65 || b == 0x45
     }
 
-    private nonisolated static func isLiteralStart(_ value: unichar) -> Bool {
-        value == CharacterCode.lowercaseT
-            || value == CharacterCode.lowercaseF
-            || value == CharacterCode.lowercaseN
+    @inline(__always)
+    private nonisolated static func isLiteralStartByte(_ b: UInt8) -> Bool {
+        b == 0x74 || b == 0x66 || b == 0x6E // t, f, n
     }
 
-    private nonisolated static func isASCIILetter(_ value: unichar) -> Bool {
-        (CharacterCode.lowercaseA ... CharacterCode.lowercaseZ).contains(value)
-            || (CharacterCode.uppercaseA ... CharacterCode.uppercaseZ).contains(value)
+    @inline(__always)
+    private nonisolated static func isASCIILetterByte(_ b: UInt8) -> Bool {
+        (b >= 0x61 && b <= 0x7A) || (b >= 0x41 && b <= 0x5A)
     }
 
-    private nonisolated static func isPunctuation(_ value: unichar) -> Bool {
-        value == CharacterCode.leftBrace
-            || value == CharacterCode.rightBrace
-            || value == CharacterCode.leftBracket
-            || value == CharacterCode.rightBracket
-            || value == CharacterCode.colon
-            || value == CharacterCode.comma
-    }
-
-    private nonisolated enum CharacterCode {
-        nonisolated static let tab: unichar = 0x09
-        nonisolated static let newline: unichar = 0x0A
-        nonisolated static let carriageReturn: unichar = 0x0D
-        nonisolated static let space: unichar = 0x20
-        nonisolated static let quote: unichar = 0x22
-        nonisolated static let plus: unichar = 0x2B
-        nonisolated static let comma: unichar = 0x2C
-        nonisolated static let minus: unichar = 0x2D
-        nonisolated static let period: unichar = 0x2E
-        nonisolated static let zero: unichar = 0x30
-        nonisolated static let nine: unichar = 0x39
-        nonisolated static let colon: unichar = 0x3A
-        nonisolated static let uppercaseA: unichar = 0x41
-        nonisolated static let uppercaseE: unichar = 0x45
-        nonisolated static let uppercaseZ: unichar = 0x5A
-        nonisolated static let leftBracket: unichar = 0x5B
-        nonisolated static let backslash: unichar = 0x5C
-        nonisolated static let rightBracket: unichar = 0x5D
-        nonisolated static let lowercaseA: unichar = 0x61
-        nonisolated static let lowercaseE: unichar = 0x65
-        nonisolated static let lowercaseF: unichar = 0x66
-        nonisolated static let lowercaseN: unichar = 0x6E
-        nonisolated static let lowercaseT: unichar = 0x74
-        nonisolated static let lowercaseZ: unichar = 0x7A
-        nonisolated static let leftBrace: unichar = 0x7B
-        nonisolated static let rightBrace: unichar = 0x7D
+    @inline(__always)
+    private nonisolated static func isPunctuationByte(_ b: UInt8) -> Bool {
+        b == 0x7B || b == 0x7D || b == 0x5B || b == 0x5D || b == 0x3A || b == 0x2C
     }
 }

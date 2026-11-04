@@ -41,7 +41,7 @@ nonisolated struct JSONDocument: Sendable {
         try autoreleasepool {
             let text = try JSONTransformer.transform(source, action: action)
             try Task.checkCancellation()
-            let changed = !(source as NSString).isEqual(to: text)
+            let changed = source != text
             let isValid: Bool
             if !changed, let knownValidity {
                 isValid = knownValidity

@@ -17,7 +17,6 @@ enum JSONFoldIndex {
         let character: UInt8
         let location: Int
         let lineStart: Int
-        let node: Int
     }
 
     nonisolated static func build(for text: String) -> [Node] {
@@ -36,7 +35,7 @@ enum JSONFoldIndex {
     private nonisolated static func scan(_ bytes: UnsafeBufferPointer<UInt8>) -> Document {
         var nodes: [Node] = []
         var lineStarts = [0]
-        lineStarts.reserveCapacity(bytes.count / 40)
+        lineStarts.reserveCapacity(min(1024, bytes.count / 40))
         var offset = 0
         var stack: [Opening] = []
         var lineStart = 0
@@ -77,19 +76,17 @@ enum JSONFoldIndex {
                     stack.append(Opening(
                         character: byte,
                         location: offset,
-                        lineStart: lineStart,
-                        node: nodes.count
+                        lineStart: lineStart
                     ))
-                    nodes.append(Node(lineStart: lineStart, body: NSRange(location: offset + 1, length: 0)))
                 case 125, 93:
                     if let opening = stack.popLast(),
                        (opening.character == 123 && byte == 125)
                        || (opening.character == 91 && byte == 93) {
                         if lineStart > opening.lineStart {
-                            nodes[opening.node] = Node(
+                            nodes.append(Node(
                                 lineStart: opening.lineStart,
                                 body: NSRange(location: opening.location + 1, length: offset - opening.location - 1)
-                            )
+                            ))
                         }
                     } else {
                         stack.removeAll(keepingCapacity: true)
@@ -122,8 +119,16 @@ enum JSONFoldIndex {
             previousCarriageReturn = byte == 13
             index += 1
         }
+        if nodes.count > 1 {
+            nodes.sort { lhs, rhs in
+                if lhs.lineStart != rhs.lineStart {
+                    return lhs.lineStart < rhs.lineStart
+                }
+                return lhs.body.location < rhs.body.location
+            }
+        }
         return Document(
-            lineStarts: lineStarts, nodes: nodes.filter { $0.body.length > 0 },
+            lineStarts: lineStarts, nodes: nodes,
             statisticsLineCount: bytes.isEmpty ? 0 : lineStarts.count + extraLineBreaks
         )
     }

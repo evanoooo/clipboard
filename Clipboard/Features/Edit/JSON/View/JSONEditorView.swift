@@ -338,7 +338,7 @@ final class JSONEditorView: NSView {
                 ), viewport: viewport
             )
         }
-        guard preparedPreviousText != nil || !(previousText as NSString).isEqual(to: text),
+        guard preparedPreviousText != nil || previousText != text,
               let textStorage = textView.textStorage
         else { return false }
 
@@ -426,7 +426,7 @@ final class JSONEditorView: NSView {
             guard let self, !Task.isCancelled else { return }
             defer { isBusy = false }
             replaceText(
-                document.text, in: NSRange(location: 0, length: (currentText as NSString).length),
+                document.text, in: NSRange(location: 0, length: currentText.utf16.count),
                 document: document.index, previousText: opposite,
                 preparedText: document.preparedText, knownValidity: document.isValid, registeringUndo: false
             )
