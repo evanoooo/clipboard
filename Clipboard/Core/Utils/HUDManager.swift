@@ -17,6 +17,8 @@ final class HUDManager {
 
     private var hudWindow: HUDWindow?
     private var dismissTask: Task<Void, Never>?
+    private var currentText: String?
+    private var lastPresentInstant: ContinuousClock.Instant = .now - .seconds(10)
 
     private var contentTarget: NSView? {
         hudWindow?.contentTarget
@@ -39,6 +41,7 @@ final class HUDManager {
 
 private extension HUDManager {
     func presentHUD(icon: NSImage?, text: String, duration: TimeInterval) {
+        let now = ContinuousClock.now
         let window: HUDWindow
         if let existing = hudWindow {
             window = existing
@@ -48,20 +51,49 @@ private extension HUDManager {
         }
 
         guard let targetView = contentTarget else { return }
-        buildContent(in: targetView, icon: icon, text: text)
+
+        let isSameContent = (currentText == text) && (hudWindow?.isVisible == true)
+        let isAlreadyVisible = window.isVisible && window.alphaValue > 0.05
+        let elapsed = now - lastPresentInstant
+
+        // 连续复制防抖节流：若同一内容在 300ms 内重复触发，仅顺延倒计时，不重新构建视图与布局
+        if isSameContent, isAlreadyVisible, elapsed < .milliseconds(300) {
+            dismissTask?.cancel()
+            dismissTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(duration))
+                guard !Task.isCancelled else { return }
+                self?.fadeOutAndClose()
+            }
+            return
+        }
+
+        lastPresentInstant = now
+        currentText = text
+
+        if !isSameContent {
+            buildContent(in: targetView, icon: icon, text: text)
+        }
 
         centerWindow(window)
 
         dismissTask?.cancel()
         dismissTask = nil
 
-        window.alphaValue = 0
         window.orderFrontRegardless()
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.25
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = 1
+        if !isAlreadyVisible {
+            window.alphaValue = 0
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.25
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                window.animator().alphaValue = 1
+            }
+        } else {
+            // 已在显示状态（如快速连按 ⌘+C 复制）：平滑保持可见并重置倒计时，绝不将 alpha 置 0 导致频闪
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.1
+                window.animator().alphaValue = 1
+            }
         }
 
         dismissTask = Task { [weak self] in
@@ -83,8 +115,10 @@ private extension HUDManager {
             window.animator().alphaValue = 0
         } completionHandler: { [weak self] in
             Task { @MainActor in
+                guard let self else { return }
                 window.orderOut(nil)
-                self?.hudWindow = nil
+                self.hudWindow = nil
+                self.currentText = nil
             }
         }
     }
