@@ -13,6 +13,9 @@ struct GeneralPreferencesCard: View {
     @AppStorage(PrefKey.soundEnabled.rawValue)
     private var soundEnabled = true
 
+    @AppStorage(PrefKey.showCopyHUD.rawValue)
+    private var showCopyHUD = false
+
     @State private var launchAtLoginTimer: Timer?
 
     var body: some View {
@@ -40,6 +43,13 @@ struct GeneralPreferencesCard: View {
             SettingToggleRow(
                 title: .generalSound,
                 isOn: $soundEnabled
+            )
+
+            Divider()
+
+            SettingToggleRow(
+                title: .generalShowCopyHUD,
+                isOn: $showCopyHUD
             )
         }
         .padding(.horizontal, Const.space16)

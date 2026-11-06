@@ -17,6 +17,8 @@ enum PrefKey: String, CaseIterable {
     case pasteOnlyText
     /// 音效开关
     case soundEnabled
+    /// 复制内容时显示 HUD 提示
+    case showCopyHUD
     /// 历史容量时间
     case historyTime
     /// 本地APP颜色表

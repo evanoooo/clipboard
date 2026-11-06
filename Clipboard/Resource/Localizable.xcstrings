@@ -1549,6 +1549,24 @@
         }
       }
     },
+    "generalShowCopyHUD": {
+      "comment": "Toggle label: show notification on copy",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show copied notification"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示已复制提示"
+          }
+        }
+      }
+    },
     "generalSound": {
       "comment": "Toggle label: enable sound effects",
       "extractionState": "manual",

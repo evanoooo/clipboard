@@ -418,6 +418,9 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
         StatusBarController.shared.triggerPulseAnimation()
         SoundManager.shared.play(.copy)
+        if PasteUserDefaults.showCopyHUD {
+            HUDManager.shared.showCopySucceeded()
+        }
     }
 
     /// 检查敏感内容和瞬时内容

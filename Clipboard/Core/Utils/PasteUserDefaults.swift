@@ -77,6 +77,9 @@ enum PasteUserDefaults {
     /// 音效开关
     @UserDefaultsWrapper(.soundEnabled, defaultValue: true)
     static var soundEnabled
+    /// 复制内容时显示 HUD 提示
+    @UserDefaultsWrapper(.showCopyHUD, defaultValue: false)
+    static var showCopyHUD
     /// 历史保留时间
     @UserDefaultsWrapper(.historyTime, defaultValue: 7)
     static var historyTime
