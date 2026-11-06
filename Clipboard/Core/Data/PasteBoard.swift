@@ -82,8 +82,10 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
     // MARK: - 暂停 / 恢复
 
-    /// - Parameter duration: 暂停时长（秒），nil 表示无限期暂停
-    func pause(for duration: TimeInterval? = nil) {
+    /// - Parameters:
+    ///   - duration: 暂停时长（秒），nil 表示无限期暂停
+    ///   - showTip: 是否展示 HUD 提示
+    func pause(for duration: TimeInterval? = nil, showTip: Bool = true) {
         if isPaused {
             resumeTimer?.invalidate()
             resumeTimer = nil
@@ -94,6 +96,10 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         isPaused = true
         pausedAt = Date()
         pauseDuration = duration
+
+        if showTip {
+            HUDManager.shared.showPaused(endTime: pauseEndTime)
+        }
 
         if let duration {
             let timer = Timer(timeInterval: duration, repeats: false) { [weak self] _ in
@@ -106,7 +112,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         }
     }
 
-    func resume() {
+    func resume(showTip: Bool = true) {
         guard isPaused else { return }
 
         resumeTimer?.invalidate()
@@ -118,6 +124,10 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         // 暂停期间复制的内容不应在恢复时补记，否则「暂停」就失去了意义
         changeCount = pasteboard.changeCount
         startListening()
+
+        if showTip {
+            HUDManager.shared.showResumed()
+        }
     }
 
     var pauseEndTime: Date? {

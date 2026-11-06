@@ -126,11 +126,15 @@ private extension HUDManager {
     }
 
     func centerWindow(_ window: NSWindow) {
-        guard let screen = NSScreen.main else { return }
+        let mouseLoc = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLoc, $0.frame, false) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let screen else { return }
         let sf = screen.visibleFrame
         let wf = window.frame
         let x = sf.midX - wf.width / 2
-        let y = sf.origin.y + 60
+        let y = sf.midY - wf.height / 2
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 }
@@ -155,10 +159,11 @@ private final class HUDWindow: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        level = .floating
+        level = .statusBar
         ignoresMouseEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovable = false
+        hidesOnDeactivate = false
 
         contentView = makeBackgroundView()
     }
@@ -207,11 +212,30 @@ private final class HUDWindow: NSPanel {
 extension HUDManager {
     func showCopySucceeded() {
         let img = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
-        show(icon: img, text: String(localized: "hudCopySucceeded"))
+        show(icon: img, text: String(localized: .hudCopySucceeded))
     }
 
     func showPasteSucceeded() {
         let img = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
-        show(icon: img, text: String(localized: "hudPasteSucceeded"))
+        show(icon: img, text: String(localized: .hudPasteSucceeded))
+    }
+
+    func showPaused(endTime: Date? = nil) {
+        let img = NSImage(systemSymbolName: "pause.circle", accessibilityDescription: nil)
+        let text: String
+        if let endTime {
+            let timeString = endTime.formatted(
+                .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)
+            )
+            text = String(localized: .pauseUntil(timeString))
+        } else {
+            text = String(localized: .hudPaused)
+        }
+        show(icon: img, text: text)
+    }
+
+    func showResumed() {
+        let img = NSImage(systemSymbolName: "play.circle", accessibilityDescription: nil)
+        show(icon: img, text: String(localized: .hudResumed))
     }
 }

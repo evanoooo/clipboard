@@ -1855,6 +1855,42 @@
         }
       }
     },
+    "hudPaused": {
+      "comment": "HUD: recording paused",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording Paused"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已暂停记录"
+          }
+        }
+      }
+    },
+    "hudResumed": {
+      "comment": "HUD: recording resumed",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording Resumed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已恢复记录"
+          }
+        }
+      }
+    },
     "image": {
       "comment": "Image type label",
       "extractionState": "manual",

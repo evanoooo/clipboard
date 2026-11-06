@@ -22,8 +22,18 @@ protocol PasteboardMonitoringProtocol: AnyObject {
     func stopListening()
 
     /// 暂停监听指定时长（秒），nil 表示无限期暂停
-    func pause(for duration: TimeInterval?)
+    func pause(for duration: TimeInterval?, showTip: Bool)
 
     /// 恢复监听
-    func resume()
+    func resume(showTip: Bool)
+}
+
+extension PasteboardMonitoringProtocol {
+    func pause(for duration: TimeInterval? = nil) {
+        pause(for: duration, showTip: true)
+    }
+
+    func resume() {
+        resume(showTip: true)
+    }
 }
