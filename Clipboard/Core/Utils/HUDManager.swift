@@ -134,7 +134,7 @@ private extension HUDManager {
         let sf = screen.visibleFrame
         let wf = window.frame
         let x = sf.midX - wf.width / 2
-        let y = sf.midY - wf.height / 2
+        let y = sf.origin.y + 60
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 }

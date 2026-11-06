@@ -565,16 +565,22 @@ extension TopBarViewModel {
 
     // MARK: - Actions
 
+    @MainActor
     func resume() {
         PasteBoard.main.resume()
+        WindowManager.shared.dismiss()
     }
 
+    @MainActor
     func pauseIndefinitely() {
         PasteBoard.main.pause()
+        WindowManager.shared.dismiss()
     }
 
+    @MainActor
     func pause(for minutes: Int) {
         PasteBoard.main.pause(for: TimeInterval(minutes * 60))
+        WindowManager.shared.dismiss()
     }
 
     // MARK: - Private
