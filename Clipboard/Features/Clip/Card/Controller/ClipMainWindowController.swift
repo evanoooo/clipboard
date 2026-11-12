@@ -10,6 +10,7 @@ import Combine
 import Darwin
 
 final class ClipMainWindowController: NSWindowController {
+    private(set) static var isInstanceLoaded = false
     static let shared = ClipMainWindowController()
 
     private var targetVisible = false
@@ -38,6 +39,7 @@ final class ClipMainWindowController: NSWindowController {
         )
         panel.contentViewController = ClipMainViewController()
         super.init(window: panel)
+        Self.isInstanceLoaded = true
         setupWindow()
     }
 
@@ -59,6 +61,14 @@ final class ClipMainWindowController: NSWindowController {
 
     func resetState() {
         (contentViewController as? ClipMainViewController)?.resetState()
+    }
+
+    func pauseObserving() {
+        (contentViewController as? ClipMainViewController)?.pauseObserving()
+    }
+
+    func resumeObserving() {
+        (contentViewController as? ClipMainViewController)?.resumeObserving()
     }
 
     func configureWindowSharing() {

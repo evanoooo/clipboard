@@ -245,10 +245,10 @@ final class SyncEngine: ObservableObject {
             ? (Col.group >= 0 && Col.hidden == 0)
             : (Col.hidden == 0)
 
-        // 仅查询轻量元数据，严格排除 Col.data，避免 1.2W+ 全量同步时占用上百 MB 内存
+        // 仅查询轻量元数据，严格排除 Col.data 与 Col.showData，避免 1.2W+ 全量同步时占用上百 MB 内存
         let sel: [Expressible] = [
             Col.id, Col.uniqueId, Col.type, Col.timestamp,
-            Col.showData, Col.group, Col.tag, Col.alias
+            Col.group, Col.tag, Col.alias
         ]
 
         let rows = await PasteReadStore.shared.search(
@@ -264,7 +264,6 @@ final class SyncEngine: ObservableObject {
             }
             let rawType = (try? row.get(Col.type)) ?? ""
             let id = try? row.get(Col.id)
-            let showData = try? row.get(Col.showData)
             let group = (try? row.get(Col.group)) ?? -1
             let tag = (try? row.get(Col.tag)) ?? ""
             let alias = (try? row.get(Col.alias)) ?? ""
@@ -273,7 +272,7 @@ final class SyncEngine: ObservableObject {
                 uniqueId: uniqueId,
                 pasteboardType: rawType,
                 payloadData: nil, // 延迟加载：比对时零 Payload 内存开销
-                showData: showData,
+                showData: nil,    // 延迟加载：比对时零缩略图内存开销
                 timestamp: timestamp,
                 group: group,
                 tag: tag,
@@ -888,9 +887,12 @@ final class SyncEngine: ObservableObject {
                             }
                             group.addTask {
                                 var uploadBlob = blob
-                                // 关键内存优化：延迟点查 Payload，仅上传时读取，随 task 结束即刻释放
+                                // 关键内存优化：延迟点查 Payload 与 showData，仅上传时读取，随 task 结束即刻释放
                                 if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
                                     uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId)
+                                }
+                                if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
+                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId)
                                 }
                                 guard let rawData = try? JSONEncoder().encode(uploadBlob),
                                       let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
@@ -951,6 +953,9 @@ final class SyncEngine: ObservableObject {
                                 var uploadBlob = nextBlob
                                 if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
                                     uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId)
+                                }
+                                if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
+                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId)
                                 }
                                 guard let rawData = try? JSONEncoder().encode(uploadBlob),
                                       let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {

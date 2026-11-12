@@ -13,8 +13,12 @@ import Foundation
 final class WindowManager {
     static let shared = WindowManager()
 
-    private let drawerController = ClipMainWindowController.shared
-    private let floatingController = ClipFloatingWindowController.shared
+    private var drawerController: ClipMainWindowController {
+        ClipMainWindowController.shared
+    }
+    private var floatingController: ClipFloatingWindowController {
+        ClipFloatingWindowController.shared
+    }
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -60,8 +64,10 @@ final class WindowManager {
             floatingController.toggleWindow(completionHandler)
         }
         if wasVisible {
+            TimeManager.shared.stop()
             scheduleIdleMemoryTrim()
         } else {
+            TimeManager.shared.start()
             idleTrimTask?.cancel()
         }
     }
@@ -69,52 +75,84 @@ final class WindowManager {
     /// 幂等隐藏窗口，用于 Esc 退出、点击外部或操作完成关闭场景（避免 toggleWindow 造成竞态反向打开）
     func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
         HotKeyManager.shared.resetPressedKeys()
+        TimeManager.shared.stop()
         scheduleIdleMemoryTrim()
         switch displayMode {
         case .drawer:
-            drawerController.dismiss(completionHandler)
+            if ClipMainWindowController.isInstanceLoaded {
+                drawerController.dismiss(completionHandler)
+            } else {
+                completionHandler?()
+            }
         case .floating:
-            floatingController.dismiss(completionHandler)
+            if ClipFloatingWindowController.isInstanceLoaded {
+                floatingController.dismiss(completionHandler)
+            } else {
+                completionHandler?()
+            }
         }
     }
 
     var isVisible: Bool {
-        drawerController.isVisible || floatingController.isVisible
+        (ClipMainWindowController.isInstanceLoaded && ClipMainWindowController.shared.isVisible)
+            || (ClipFloatingWindowController.isInstanceLoaded && ClipFloatingWindowController.shared.isVisible)
     }
 
     var window: NSWindow? {
         switch displayMode {
-        case .drawer: drawerController.window
-        case .floating: floatingController.window
+        case .drawer:
+            return ClipMainWindowController.isInstanceLoaded ? drawerController.window : nil
+        case .floating:
+            return ClipFloatingWindowController.isInstanceLoaded ? floatingController.window : nil
         }
     }
 
     func configureWindowSharing() {
         switch displayMode {
-        case .drawer: drawerController.configureWindowSharing()
-        case .floating: floatingController.configureWindowSharing()
+        case .drawer:
+            if ClipMainWindowController.isInstanceLoaded {
+                drawerController.configureWindowSharing()
+            }
+        case .floating:
+            if ClipFloatingWindowController.isInstanceLoaded {
+                floatingController.configureWindowSharing()
+            }
         }
     }
 
     private func handleDisplayModeChange(to newRaw: Int) {
         switch DisplayMode(rawValue: newRaw) {
         case .drawer:
-            drawerController.resetState()
+            dismissFloatingIfNeeded()
+            if ClipFloatingWindowController.isInstanceLoaded {
+                ClipFloatingWindowController.shared.pauseObserving()
+            }
+            if ClipMainWindowController.isInstanceLoaded {
+                drawerController.resetState()
+                drawerController.resumeObserving()
+            }
         case .floating:
-            floatingController.resetState()
+            dismissDrawerIfNeeded()
+            if ClipMainWindowController.isInstanceLoaded {
+                ClipMainWindowController.shared.pauseObserving()
+            }
+            if ClipFloatingWindowController.isInstanceLoaded {
+                floatingController.resetState()
+                floatingController.resumeObserving()
+            }
         case nil:
             break
         }
     }
 
     private func dismissFloatingIfNeeded() {
-        if floatingController.isVisible {
+        if ClipFloatingWindowController.isInstanceLoaded, floatingController.isVisible {
             floatingController.dismiss()
         }
     }
 
     private func dismissDrawerIfNeeded() {
-        if drawerController.isVisible {
+        if ClipMainWindowController.isInstanceLoaded, drawerController.isVisible {
             drawerController.dismiss()
         }
     }

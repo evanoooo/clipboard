@@ -106,6 +106,14 @@ final class FloatingHistoryView: NSView {
         presenter.reopenPreview = reopen
     }
 
+    func pauseObserving() {
+        presenter.pauseObserving()
+    }
+
+    func resumeObserving() {
+        presenter.resumeObserving(scrollView: scrollView)
+    }
+
     func configure(topVM: TopBarViewModel) {
         self.topVM = topVM
         dataList = dataStore.dataList.value

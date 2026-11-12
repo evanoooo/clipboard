@@ -10,6 +10,7 @@ import Combine
 import Darwin
 
 final class ClipFloatingWindowController: NSWindowController {
+    private(set) static var isInstanceLoaded = false
     static let shared = ClipFloatingWindowController()
     var isVisible: Bool {
         window?.isVisible ?? false
@@ -42,6 +43,7 @@ final class ClipFloatingWindowController: NSWindowController {
             rawValue: UserDefaults.standard.integer(forKey: PrefKey.floatMode.rawValue)
         ) ?? .standard
         clipVC.floatingContentView.setDisplayMode(displayMode)
+        Self.isInstanceLoaded = true
         setupWindow()
     }
 
@@ -70,6 +72,14 @@ final class ClipFloatingWindowController: NSWindowController {
 
     func resetState() {
         clipVC.floatingContentView.resetState()
+    }
+
+    func pauseObserving() {
+        clipVC.floatingContentView.pauseObserving()
+    }
+
+    func resumeObserving() {
+        clipVC.floatingContentView.resumeObserving()
     }
 
     func configureWindowSharing() {

@@ -57,6 +57,20 @@ final class ClipListPresenter {
 
     // MARK: - Start
 
+    var isObserving: Bool {
+        !cancellables.isEmpty
+    }
+
+    func pauseObserving() {
+        cancellables.removeAll()
+    }
+
+    func resumeObserving(scrollView: NSScrollView) {
+        guard cancellables.isEmpty else { return }
+        startObserving(scrollView: scrollView)
+        handleDataChange(.reset, items: dataStore.dataList.value)
+    }
+
     func startObserving(scrollView: NSScrollView) {
         dataStore.dataList
             .map { [weak self] items in (items, self?.dataStore.lastDataChangeType ?? .reset) }

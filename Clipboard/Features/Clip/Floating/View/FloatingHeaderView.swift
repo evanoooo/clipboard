@@ -521,6 +521,9 @@ final class FloatingSearchField: NSSearchField {
 
     override func textDidChange(_ notification: Notification) {
         super.textDidChange(notification)
+        if (currentEditor() as? NSTextView)?.hasMarkedText() == true {
+            return
+        }
         text = stringValue
     }
 

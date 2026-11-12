@@ -42,11 +42,14 @@ extension PasteboardModel {
         guard content != nil else { return nil }
 
         var showData: Data?
+        var extractedTextString: String?
         if type.isText() {
             guard let text = Self.prepareText(content, type: type) else { return nil }
             length = text.source.length
             showData = text.showData
-            searchText = Self.normalizeSearchText(text.source.string)
+            let rawString = text.source.string
+            extractedTextString = rawString
+            searchText = Self.normalizeSearchText(rawString)
         } else if type.isImage(), let content {
             showData = Self.generateImageThumbnailData(from: content, maxPixelSize: 300)
             if let size = Self.computeImageSize(from: content) {
@@ -58,7 +61,7 @@ extension PasteboardModel {
             }
         }
 
-        let calculatedTag = Self.calculateTag(type: type, content: content ?? Data())
+        let calculatedTag = Self.calculateTag(type: type, content: content ?? Data(), extractedText: extractedTextString)
 
         let app = sourceApp ?? NSWorkspace.shared.frontmostApplication
 
@@ -190,20 +193,22 @@ extension PasteboardModel {
         return "string"
     }
 
-    static func calculateTag(type: PasteboardType, content: Data) -> String {
+    static func calculateTag(type: PasteboardType, content: Data, extractedText: String? = nil) -> String {
         switch type {
         case .rtf, .rtfd:
-            if let attr = NSAttributedString(with: content, type: type) {
-                if attr.string.isCSSHexColor {
+            let str = extractedText ?? NSAttributedString(with: content, type: type)?.string
+            if let str {
+                if str.isCSSHexColor {
                     return "color"
                 }
-                if attr.string.asCompleteURL() != nil {
+                if str.asCompleteURL() != nil {
                     return "link"
                 }
             }
             return "rich"
         case .string:
-            guard let str = String(data: content, encoding: .utf8) else {
+            let str = extractedText ?? String(data: content, encoding: .utf8)
+            guard let str else {
                 return "string"
             }
             return calculateTextTag(str)

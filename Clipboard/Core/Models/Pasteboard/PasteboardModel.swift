@@ -23,21 +23,28 @@ final class PasteboardModel: Identifiable, Codable {
 
     var data: Data {
         get {
-            if let _data {
-                return _data
-            }
-            if let loaded = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId) {
-                _data = loaded
-                if runtimeCache.codeDetectionState == .none, length > 300 {
-                    runtimeCache.codeDetectionState = .uncomputed
-                }
-                return loaded
-            }
-            return Data()
+            loadRawData(cache: true)
         }
         set {
             _data = newValue
         }
+    }
+
+    /// 获取完整原始二进制数据。若指定 `cache: false`，点查出的数据不会长期缓存在 `_data` 中（适用于预览、上传等一次性场景）
+    func loadRawData(cache: Bool = true) -> Data {
+        if let _data {
+            return _data
+        }
+        if let loaded = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId) {
+            if cache {
+                _data = loaded
+                if runtimeCache.codeDetectionState == .none, length > 300 {
+                    runtimeCache.codeDetectionState = .uncomputed
+                }
+            }
+            return loaded
+        }
+        return Data()
     }
     let showData: Data?
     private(set) var timestamp: Int64
@@ -169,14 +176,6 @@ final class PasteboardModel: Identifiable, Codable {
                 cachedImageSize = Self.computeImageSize(from: data)
             }
         }
-
-        let (bg, fg, hasBg) = computeColors()
-        cachedBackgroundColor = bg
-        cachedForegroundColor = fg
-        cachedHasBackgroundColor = hasBg
-        if type == .rich, hasBgColor, safeBgColor == nil {
-            cachedRichForegrounds = Self.richForegrounds(in: attributeString)
-        }
     }
 
     // MARK: - 纯文本（粘贴用）
@@ -255,6 +254,10 @@ final class PasteboardModel: Identifiable, Codable {
         _attributeString = nil
         _writeItem = nil
         runtimeCache.clear()
+        ModelThumbnailCache.shared.remove(for: uniqueId)
+        ModelLinkMetadataCache.shared.remove(for: uniqueId)
+        ModelAttributedTextCache.shared.remove(for: "plain:\(uniqueId)")
+        ModelAttributedTextCache.shared.remove(for: "code:\(uniqueId)")
     }
 
     /// 轻量入库后清理：在数据持久化落盘与 OCR 识别完成后，释放内存中常驻的原始大二进制，保留缩略图与渲染元数据供首屏即时展示

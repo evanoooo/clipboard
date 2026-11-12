@@ -37,6 +37,10 @@ final class PasteDataStore {
         ClipUndoStore.shared.removeAll()
         AppIconCache.shared.trimMemory()
         FileThumbnailService.shared.clearCache()
+        ModelThumbnailCache.shared.removeAll()
+        ModelAttributedTextCache.shared.removeAll()
+        ModelLinkMetadataCache.shared.removeAll()
+        PasteDataPointReader.closeConnection()
         sqlite3_release_memory(Int32.max)
         malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }

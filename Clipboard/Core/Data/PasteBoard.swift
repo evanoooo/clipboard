@@ -151,7 +151,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         pollTimer?.invalidate()
         currentPollInterval = interval
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.performAdaptivePoll()
             }
         }
@@ -212,15 +212,14 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
     private func handleKeyEvent(_ event: NSEvent) {
         guard !isPaused else { return }
+        // 极速快筛：仅对 C (8) 与 X (7) 按键响应，0 额外字符串与修饰键掩码分配
+        guard event.keyCode == 8 || event.keyCode == 7 else { return }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard flags.contains(.command) else { return }
 
-        let key = event.charactersIgnoringModifiers?.lowercased()
-        if key == "c" || key == "x" || event.keyCode == 8 || event.keyCode == 7 {
-            // 捕获到复制/剪切动作：重置空闲计数并在 30ms 后极速主动拉取
-            idleTicks = 0
-            scheduleNextPoll(interval: 0.03)
-        }
+        // 捕获到复制/剪切动作：重置空闲计数并在 30ms 后极速主动拉取
+        idleTicks = 0
+        scheduleNextPoll(interval: 0.03)
     }
 
     // MARK: - 系统休眠与唤醒
@@ -348,12 +347,23 @@ final class PasteBoard: PasteboardMonitoringProtocol {
                 return
             }
 
-            if types.contains(.string),
-               let text = pasteboard.string(forType: .string),
-               let credentialType = PasteboardContentFilter.detectSensitiveCredential(in: text) {
-                Log.pasteboard.info("检测到高危凭证内容(\(credentialType))，跳过记录以保护安全")
-                changeCount = pasteboard.changeCount
-                return
+            if types.contains(.string) {
+                let checkText: String?
+                if let data = pasteboard.data(forType: .string) {
+                    if data.count > 32768 {
+                        checkText = String(data: data.prefix(32768), encoding: .utf8)
+                    } else {
+                        checkText = String(data: data, encoding: .utf8)
+                    }
+                } else {
+                    checkText = nil
+                }
+                if let checkText,
+                   let credentialType = PasteboardContentFilter.detectSensitiveCredential(in: checkText) {
+                    Log.pasteboard.info("检测到高危凭证内容(\(credentialType))，跳过记录以保护安全")
+                    changeCount = pasteboard.changeCount
+                    return
+                }
             }
         }
 

@@ -26,8 +26,10 @@ final class CategoryCustomColorCoordinator: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            if !WindowManager.shared.isVisible {
-                self?.closePanelIfOpen()
+            MainActor.assumeIsolated {
+                if !WindowManager.shared.isVisible {
+                    self?.closePanelIfOpen()
+                }
             }
         }
     }

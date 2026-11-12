@@ -74,6 +74,18 @@ extension PasteboardModel {
         return Array(colors)
     }
 
+    func ensureColorsComputed() {
+        guard !runtimeCache.colorsComputed else { return }
+        runtimeCache.colorsComputed = true
+        let (bg, fg, hasBg) = computeColors()
+        runtimeCache.backgroundColor = bg
+        runtimeCache.foregroundColor = fg
+        runtimeCache.hasBackgroundColor = hasBg
+        if type == .rich, hasBg, safeBgColor == nil {
+            runtimeCache.richForegrounds = Self.richForegrounds(in: attributeString)
+        }
+    }
+
     func colors() -> (NSColor, NSColor) {
         if type == .rich {
             if let background = richBackground(on: .textBackgroundColor) {

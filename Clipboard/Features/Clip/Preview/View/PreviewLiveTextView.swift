@@ -117,11 +117,9 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
     private func loadImage(from data: Data) {
         imageDecodeTask?.cancel()
         imageDecodeTask = Task { @MainActor [weak self] in
-            // 后台异步解压高分辨率位图，避免 20MB+ 截图卡顿主线程
+            // 后台异步降采样位图，避免 20MB+ 原始位图（4K/5K 截图）卡顿主线程与暴涨内存
             let decoded = await Task.detached(priority: .userInitiated) { () -> NSImage? in
-                guard let image = NSImage(data: data) else { return nil }
-                _ = image.representations.first
-                return image
+                Self.downsampledImage(from: data, maxPixelSize: 2048) ?? NSImage(data: data)
             }.value
 
             guard !Task.isCancelled, let self else { return }
@@ -200,5 +198,22 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
             guard !Task.isCancelled else { return }
             log.warn("Live Text analysis failed: \(error)")
         }
+    }
+
+    nonisolated private static func downsampledImage(from data: Data, maxPixelSize: CGFloat) -> NSImage? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
+            return nil
+        }
+        let downsampleOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 }

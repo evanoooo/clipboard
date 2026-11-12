@@ -261,6 +261,14 @@ extension ClipMainViewController {
         setFocusRegion(.collection)
     }
 
+    func pauseObserving() {
+        presenter.pauseObserving()
+    }
+
+    func resumeObserving() {
+        presenter.resumeObserving(scrollView: scrollView)
+    }
+
     override func viewDidDisappear() {
         super.viewDidDisappear()
         lastEscapeTime = 0

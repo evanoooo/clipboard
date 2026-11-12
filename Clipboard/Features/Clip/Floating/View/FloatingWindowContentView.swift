@@ -70,6 +70,14 @@ final class FloatingWindowContentView: NSView {
         window?.makeFirstResponder(historyView.collectionView)
     }
 
+    func pauseObserving() {
+        historyView.pauseObserving()
+    }
+
+    func resumeObserving() {
+        historyView.resumeObserving()
+    }
+
     // MARK: - Setup
 
     private func setup() {

@@ -14,7 +14,6 @@ enum CodeDetectionState: Sendable, Equatable {
 }
 
 final class PasteboardModelRuntimeCache: @unchecked Sendable {
-    var thumbnail: NSImage?
     var imageSize: CGSize?
     var backgroundColor: NSColor?
     var foregroundColor: NSColor?
@@ -22,35 +21,36 @@ final class PasteboardModelRuntimeCache: @unchecked Sendable {
     var previewForegrounds: [NSColor]?
     var filePaths: [String]?
     var hasBackgroundColor = false
+    var colorsComputed = false
     var needsBottomMask: Bool?
     var thumbnailLoadTask: Task<NSImage?, Never>?
-    var linkMetadata: LinkPreviewMetadata?
     var codeDetectionState: CodeDetectionState = .uncomputed
-    var plainTextAttributedString: NSAttributedString?
-    var highlightedCode: NSAttributedString?
     var isLink: Bool?
     var isCSS: Bool?
     var plainText: String?
 
     func clear() {
-        thumbnail = nil
         thumbnailLoadTask?.cancel()
         thumbnailLoadTask = nil
-        linkMetadata = nil
         plainText = nil
         richForegrounds.removeAll()
         previewForegrounds = nil
-        highlightedCode = nil
-        plainTextAttributedString = nil
         isLink = nil
         isCSS = nil
+        colorsComputed = false
     }
 }
 
 extension PasteboardModel {
     var cachedThumbnail: NSImage? {
-        get { runtimeCache.thumbnail }
-        set { runtimeCache.thumbnail = newValue }
+        get { ModelThumbnailCache.shared.thumbnail(for: uniqueId) }
+        set {
+            if let newValue {
+                ModelThumbnailCache.shared.setThumbnail(newValue, for: uniqueId)
+            } else {
+                ModelThumbnailCache.shared.remove(for: uniqueId)
+            }
+        }
     }
 
     var cachedImageSize: CGSize? {
@@ -86,17 +86,26 @@ extension PasteboardModel {
     }
 
     var cachedBackgroundColor: NSColor? {
-        get { runtimeCache.backgroundColor }
+        get {
+            ensureColorsComputed()
+            return runtimeCache.backgroundColor
+        }
         set { runtimeCache.backgroundColor = newValue }
     }
 
     var cachedForegroundColor: NSColor? {
-        get { runtimeCache.foregroundColor }
+        get {
+            ensureColorsComputed()
+            return runtimeCache.foregroundColor
+        }
         set { runtimeCache.foregroundColor = newValue }
     }
 
     var cachedRichForegrounds: [NSColor] {
-        get { runtimeCache.richForegrounds }
+        get {
+            ensureColorsComputed()
+            return runtimeCache.richForegrounds
+        }
         set { runtimeCache.richForegrounds = newValue }
     }
 
@@ -123,7 +132,10 @@ extension PasteboardModel {
     }
 
     var cachedHasBackgroundColor: Bool {
-        get { runtimeCache.hasBackgroundColor }
+        get {
+            ensureColorsComputed()
+            return runtimeCache.hasBackgroundColor
+        }
         set { runtimeCache.hasBackgroundColor = newValue }
     }
 
@@ -138,18 +150,36 @@ extension PasteboardModel {
     }
 
     var cachedLinkMetadata: LinkPreviewMetadata? {
-        get { runtimeCache.linkMetadata }
-        set { runtimeCache.linkMetadata = newValue }
+        get { ModelLinkMetadataCache.shared.metadata(for: uniqueId) }
+        set {
+            if let newValue {
+                ModelLinkMetadataCache.shared.setMetadata(newValue, for: uniqueId)
+            } else {
+                ModelLinkMetadataCache.shared.remove(for: uniqueId)
+            }
+        }
     }
 
     var cachedPlainTextAttributedString: NSAttributedString? {
-        get { runtimeCache.plainTextAttributedString }
-        set { runtimeCache.plainTextAttributedString = newValue }
+        get { ModelAttributedTextCache.shared.text(for: "plain:\(uniqueId)") }
+        set {
+            if let newValue {
+                ModelAttributedTextCache.shared.setText(newValue, for: "plain:\(uniqueId)")
+            } else {
+                ModelAttributedTextCache.shared.remove(for: "plain:\(uniqueId)")
+            }
+        }
     }
 
     var cachedHighlightedCode: NSAttributedString? {
-        get { runtimeCache.highlightedCode }
-        set { runtimeCache.highlightedCode = newValue }
+        get { ModelAttributedTextCache.shared.text(for: "code:\(uniqueId)") }
+        set {
+            if let newValue {
+                ModelAttributedTextCache.shared.setText(newValue, for: "code:\(uniqueId)")
+            } else {
+                ModelAttributedTextCache.shared.remove(for: "code:\(uniqueId)")
+            }
+        }
     }
 
     /// 嗅探并缓存纯文本代码语言（如 Nginx、Swift、JSON 等）

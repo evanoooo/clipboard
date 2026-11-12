@@ -12,7 +12,7 @@ final class PreviewImageView: NSView, PreviewResettable {
     private let liveTextView: PreviewLiveTextView
 
     init(model: PasteboardModel, maxContentH: CGFloat = Const.maxTextheight) {
-        liveTextView = PreviewLiveTextView(imageData: model.data)
+        liveTextView = PreviewLiveTextView(imageData: model.loadRawData(cache: false))
         super.init(frame: .zero)
         wantsLayer = true
 

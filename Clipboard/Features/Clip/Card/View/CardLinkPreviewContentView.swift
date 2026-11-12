@@ -320,21 +320,31 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, Cancella
 
     private static func downscaleIfNeeded(_ image: NSImage?, maxPixelSize: CGFloat) -> NSImage? {
         guard let image else { return nil }
-        guard let tiffData = image.tiffRepresentation,
-              let source = CGImageSourceCreateWithData(tiffData as CFData, nil) else {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             return image
         }
-        let options = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ] as CFDictionary
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let maxDim = max(width, height)
+        guard maxDim > maxPixelSize else { return image }
 
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
-            return image
-        }
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        let scale = maxPixelSize / maxDim
+        let targetWidth = max(Int(width * scale), 1)
+        let targetHeight = max(Int(height * scale), 1)
+        let colorSpace = cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: targetWidth,
+            height: targetHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return image }
+        context.interpolationQuality = .high
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+        guard let scaledCGImage = context.makeImage() else { return image }
+        return NSImage(cgImage: scaledCGImage, size: NSSize(width: targetWidth, height: targetHeight))
     }
 
     private static func loadImage(from provider: NSItemProvider?) async -> NSImage? {
