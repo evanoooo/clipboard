@@ -208,6 +208,18 @@ final class TokenTextView: NSTextView, NSLayoutManagerDelegate {
         super.mouseDown(with: event)
     }
 
+    override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        let range = replacementRange.location == NSNotFound ? self.selectedRange() : replacementRange
+        if isInTokenArea(range.location) {
+            let tokenEnd = findTokenEndIndex()
+            setSelectedRange(NSRange(location: tokenEnd, length: 0))
+            restorePlainTextInputState()
+            super.setMarkedText(string, selectedRange: selectedRange, replacementRange: NSRange(location: tokenEnd, length: 0))
+            return
+        }
+        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+    }
+
     override func insertText(_ string: Any, replacementRange: NSRange) {
         let range = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
 
@@ -215,9 +227,10 @@ final class TokenTextView: NSTextView, NSLayoutManagerDelegate {
             let tokenEnd = findTokenEndIndex()
             setSelectedRange(NSRange(location: tokenEnd, length: 0))
             restorePlainTextInputState()
+            super.insertText(string, replacementRange: NSRange(location: tokenEnd, length: 0))
+        } else {
+            super.insertText(string, replacementRange: replacementRange)
         }
-
-        super.insertText(string, replacementRange: NSRange(location: NSNotFound, length: 0))
         notifyTextChanged()
     }
 

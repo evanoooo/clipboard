@@ -73,6 +73,20 @@ nonisolated struct SearchCriteria: Equatable, Sendable {
     var selectedDateFilter: DateFilterOption?
     var selectedGroupIds: Set<Int>
 
+    init(
+        keyword: String = "",
+        selectedTypes: Set<PasteModelType> = [],
+        selectedAppIDs: Set<Int64> = [],
+        selectedDateFilter: DateFilterOption? = nil,
+        selectedGroupIds: Set<Int> = []
+    ) {
+        self.keyword = keyword
+        self.selectedTypes = selectedTypes
+        self.selectedAppIDs = selectedAppIDs
+        self.selectedDateFilter = selectedDateFilter
+        self.selectedGroupIds = selectedGroupIds
+    }
+
     nonisolated static let empty = SearchCriteria(
         keyword: "",
         selectedTypes: [],

@@ -176,6 +176,31 @@ enum FTSTriggerTests {
             let likeFiltered = try db.prepare(table.filter((Col.searchText.like(shortPattern)) && Col.hidden == 0)).map { $0 }
             runner.assertEqual(likeFiltered.count, 1, "LIKE fallback should also work correctly")
 
+            // 9. Test PasteFilterBuilder with Chinese keywords (<3 chars fallback to LIKE, >=3 chars uses FTS5)
+            if let filter1Char = PasteFilterBuilder.buildFilter(from: SearchCriteria(keyword: "剪")) {
+                let rows = try db.prepare(table.filter(filter1Char)).map { $0 }
+                runner.assertEqual(rows.count, 1, "1-char Chinese '剪' must fallback to LIKE and match")
+                runner.assertEqual(rows.first?[Col.id], 102, "Matched ID must be 102")
+            } else {
+                runner.assertTrue(false, "buildFilter for '剪' should not be nil")
+            }
+
+            if let filter2Chars = PasteFilterBuilder.buildFilter(from: SearchCriteria(keyword: "剪贴")) {
+                let rows = try db.prepare(table.filter(filter2Chars)).map { $0 }
+                runner.assertEqual(rows.count, 1, "2-char Chinese '剪贴' must fallback to LIKE and match")
+                runner.assertEqual(rows.first?[Col.id], 102, "Matched ID must be 102")
+            } else {
+                runner.assertTrue(false, "buildFilter for '剪贴' should not be nil")
+            }
+
+            if let filter3Chars = PasteFilterBuilder.buildFilter(from: SearchCriteria(keyword: "剪贴板")) {
+                let rows = try db.prepare(table.filter(filter3Chars)).map { $0 }
+                runner.assertEqual(rows.count, 1, "3-char Chinese '剪贴板' must use FTS5 and match")
+                runner.assertEqual(rows.first?[Col.id], 102, "Matched ID must be 102")
+            } else {
+                runner.assertTrue(false, "buildFilter for '剪贴板' should not be nil")
+            }
+
             print("✓ FTS5 Virtual Table & Triggers tests passed!")
         } catch {
             print("❌ FTSTriggerTests failed with error: \(error)")

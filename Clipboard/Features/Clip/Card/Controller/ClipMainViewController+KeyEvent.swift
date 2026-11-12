@@ -59,11 +59,9 @@ extension ClipMainViewController {
         if KeyCode.shouldTriggerSearch(for: event),
            !topBarView.searchField.isFirstResponder,
            focusRegion == .collection {
-            if let characters = event.characters, !characters.isEmpty {
-                topBarView.activateSearch(with: characters)
-            }
-            setFocusRegion(.search)
-            view.window?.makeFirstResponder(topBarView.searchField.tokenTextView)
+            topBarView.focusSearchField(selectAll: false)
+            topBarView.searchField.moveCursorToEnd()
+            topBarView.searchField.tokenTextView.keyDown(with: event)
             return nil
         }
 
@@ -161,7 +159,12 @@ extension ClipMainViewController {
         return nil
     }
 
-    private func escapeKeyDown(_: NSEvent) -> NSEvent? {
+    private func escapeKeyDown(_ event: NSEvent) -> NSEvent? {
+        let field = topBarView.searchField
+        if field.isFirstResponder && field.tokenTextView.hasMarkedText() {
+            return event
+        }
+
         let now = CACurrentMediaTime()
         let isDoubleTap = (now - lastEscapeTime) < 0.35
         lastEscapeTime = now
@@ -182,7 +185,6 @@ extension ClipMainViewController {
         if topBarView.dismissFilterPopoverIfVisible() {
             return nil
         }
-        let field = topBarView.searchField
         if field.isFirstResponder {
             if field.suggestionWindow.isVisible {
                 field.suggestionWindow.hide()

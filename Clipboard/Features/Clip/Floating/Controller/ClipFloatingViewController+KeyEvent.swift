@@ -41,7 +41,14 @@ extension ClipFloatingViewController {
 
         if KeyCode.shouldTriggerSearch(for: event),
            !floatingContentView.headerView.isSearchFieldFirstResponder {
-            floatingContentView.historyView.activateSearchField(with: event.characters)
+            floatingContentView.headerView.focusSearchField(selectAll: false)
+            let field = floatingContentView.headerView.searchField
+            if let editor = field.currentEditor() {
+                editor.selectedRange = NSRange(location: (editor.string as NSString).length, length: 0)
+                editor.keyDown(with: event)
+            } else {
+                field.keyDown(with: event)
+            }
             return nil
         }
 
@@ -135,7 +142,7 @@ extension ClipFloatingViewController {
             }
         case .search:
             if event.keyCode == KeyCode.escape {
-                return searchEscapeKeyDown()
+                return searchEscapeKeyDown(event)
             }
         default:
             break
@@ -165,7 +172,11 @@ extension ClipFloatingViewController {
         return nil
     }
 
-    private func searchEscapeKeyDown() -> NSEvent? {
+    private func searchEscapeKeyDown(_ event: NSEvent) -> NSEvent? {
+        let searchField = floatingContentView.headerView.searchField
+        if (searchField.currentEditor() as? NSTextView)?.hasMarkedText() == true {
+            return event
+        }
         let now = CACurrentMediaTime()
         let isDoubleTap = (now - lastEscapeTime) < 0.35
         lastEscapeTime = now
@@ -176,7 +187,6 @@ extension ClipFloatingViewController {
             return nil
         }
 
-        let searchField = floatingContentView.headerView.searchField
         if !searchField.stringValue.isEmpty {
             floatingContentView.headerView.clearSearch()
         } else {

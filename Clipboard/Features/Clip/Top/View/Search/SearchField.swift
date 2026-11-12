@@ -297,22 +297,27 @@ final class SearchField: NSView {
     }
 
     private func handleTextChanged(_ plainText: String) {
+        updateCancelButtonVisibility()
+        guard !tokenTextView.hasMarkedText() else {
+            hideSuggestions()
+            return
+        }
         text = plainText
         onTextChanged?(plainText)
-        updateCancelButtonVisibility()
         scheduleDebouncedSuggestions()
     }
 
     func scheduleDebouncedSuggestions() {
         suggestionsTask?.cancel()
-        if text.isEmpty {
+        if text.isEmpty || tokenTextView.hasMarkedText() {
             hideSuggestions()
             return
         }
         suggestionsTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
-            self?.updateSuggestions()
+            guard let self, !tokenTextView.hasMarkedText() else { return }
+            self.updateSuggestions()
         }
     }
 
@@ -353,6 +358,11 @@ final class SearchField: NSView {
 
 extension SearchField: NSTextViewDelegate {
     func textDidChange(_: Notification) {
+        updateCancelButtonVisibility()
+        guard !tokenTextView.hasMarkedText() else {
+            hideSuggestions()
+            return
+        }
         let plainText = tokenTextView.getPlainText()
         if plainText != text {
             text = plainText
@@ -360,7 +370,6 @@ extension SearchField: NSTextViewDelegate {
         }
         // 原生编辑可能只删除标签，关键词不变时也要同步筛选条件。
         onTokensChanged?(tokenTextView.getAllTokens())
-        updateCancelButtonVisibility()
         scheduleDebouncedSuggestions()
     }
 

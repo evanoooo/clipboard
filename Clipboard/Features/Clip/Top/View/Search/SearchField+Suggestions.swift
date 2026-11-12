@@ -8,7 +8,11 @@ import AppKit
 extension SearchField {
     func setupSuggestionKeyHandling() {
         tokenTextView.onKeyDown = { [weak self] event in
-            self?.handleSuggestionKeyEvent(event) ?? false
+            guard let self else { return false }
+            if tokenTextView.hasMarkedText() {
+                return false
+            }
+            return handleSuggestionKeyEvent(event)
         }
 
         suggestionWindow.suggestionVC.onSelectItem = { [weak self] item in
@@ -17,7 +21,7 @@ extension SearchField {
     }
 
     private func handleSuggestionKeyEvent(_ event: NSEvent) -> Bool {
-        guard suggestionWindow.isVisible else { return false }
+        guard suggestionWindow.isVisible, !tokenTextView.hasMarkedText() else { return false }
 
         switch event.keyCode {
         case 125: // ↓

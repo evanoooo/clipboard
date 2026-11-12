@@ -134,6 +134,7 @@ extension TokenTextView {
     }
 
     func notifyTextChanged() {
+        guard !hasMarkedText() else { return }
         onTextChanged?(getPlainText())
     }
 
