@@ -128,8 +128,15 @@ extension PasteSQLManager {
     }
 
     func insert(item: PasteboardModel, timestamp: Int64, group: Int = -1) async -> PasteInsertResult {
+        let matchFilter: Expression<Bool>
+        if let legacyId = item.legacyUniqueId {
+            matchFilter = (Col.uniqueId == item.uniqueId || Col.uniqueId == legacyId)
+        } else {
+            matchFilter = (Col.uniqueId == item.uniqueId)
+        }
+
         let existing = await search(
-            filter: Col.uniqueId == item.uniqueId,
+            filter: matchFilter,
             select: [Col.id, Col.group, Col.appID],
             order: [],
             limit: 1
@@ -307,6 +314,7 @@ extension PasteSQLManager {
             Task { await self.refreshAppCache() }
         }
         do {
+            PasteDataPointReader.closeConnection()
             try connection.execute("VACUUM")
             let busy = try connection.scalar("PRAGMA wal_checkpoint(TRUNCATE)") as? Int64
             let backup = URL(filePath: Self.databasePath).deletingLastPathComponent()

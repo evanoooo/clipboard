@@ -201,19 +201,6 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
     }
 
     nonisolated private static func downsampledImage(from data: Data, maxPixelSize: CGFloat) -> NSImage? {
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
-            return nil
-        }
-        let downsampleOptions = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ] as CFDictionary
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
-            return nil
-        }
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        ImageDownsampler.downsampleNSImage(from: data, maxPixelSize: maxPixelSize)
     }
 }

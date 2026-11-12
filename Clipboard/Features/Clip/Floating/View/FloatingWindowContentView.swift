@@ -72,10 +72,12 @@ final class FloatingWindowContentView: NSView {
 
     func pauseObserving() {
         historyView.pauseObserving()
+        footerView.pauseObserving()
     }
 
     func resumeObserving() {
         historyView.resumeObserving()
+        footerView.resumeObserving()
     }
 
     // MARK: - Setup

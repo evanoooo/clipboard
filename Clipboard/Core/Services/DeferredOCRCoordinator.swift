@@ -237,8 +237,11 @@ final class DeferredOCRCoordinator {
 
         // 5. 若识别结果为空，写入无文字哨兵占位符 emptyOCRMarker，杜绝重复二次识别
         let isTextFound = !rawText.isEmpty
+        let normalized = isTextFound ? PasteboardModel.normalizeSearchText(rawText) : ""
+        // OCR 文本上限收敛至 20,000 字符，足够全文检索，杜绝万字长图造成 SQLite FTS 与堆内存膨胀
+        let cappedText = normalized.count > 20000 ? String(normalized.prefix(20000)) : normalized
         let searchText = isTextFound
-            ? PasteboardModel.normalizeSearchText(rawText)
+            ? cappedText
             : PasteboardModel.emptyOCRMarker
 
         let updated = await PasteSQLManager.manager.updateSearchText(id: id, searchText: searchText)

@@ -103,6 +103,8 @@ final class SyncEngine: ObservableObject {
     private var cachedClient: WebDAVClient?
     private var cachedClientSignature: String?
     private var hasValidatedDirectoryStructure = false
+    /// 损坏条目黑名单（解密/反序列化失败的坏数据，避免增量同步无限重试循环下载）
+    private var corruptItemIDs = Set<String>()
 
     func invalidateClientAndKeyCache() {
         cachedMasterKey = nil
@@ -110,6 +112,7 @@ final class SyncEngine: ObservableObject {
         cachedClient = nil
         cachedClientSignature = nil
         hasValidatedDirectoryStructure = false
+        corruptItemIDs.removeAll()
     }
 
     private func getCachedClient(serverURL: URL, username: String?, password: String?) -> WebDAVClient {
@@ -502,6 +505,7 @@ final class SyncEngine: ObservableObject {
             var restoredCount = 0
             let total = toDownloadIds.count
             var batchBuffer: [SyncItemBlob] = []
+            var batchBufferBytes = 0
 
             try await withThrowingTaskGroup(of: SyncItemBlob?.self) { group in
                 var iterator = toDownloadIds.makeIterator()
@@ -516,9 +520,10 @@ final class SyncEngine: ObservableObject {
                             } else {
                                 try? await client.download(from: legacy)
                             }
-                            guard let encData,
-                                  let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                            guard let encData else { return nil }
+                            guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                   let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                Log.sync.warn("云端条目 [\(id)] 解密或解码失败，可能已损坏")
                                 return nil
                             }
                             return blob
@@ -529,11 +534,13 @@ final class SyncEngine: ObservableObject {
                 while let blob = try await group.next() {
                     if let blob {
                         batchBuffer.append(blob)
+                        batchBufferBytes += blob.payloadData?.count ?? 0
                         restoredCount += 1
 
-                        if batchBuffer.count >= 50 {
+                        if batchBuffer.count >= 50 || batchBufferBytes >= 16 * 1024 * 1024 {
                             await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                             batchBuffer.removeAll(keepingCapacity: true)
+                            batchBufferBytes = 0
                         }
 
                         syncProgress = "正在还原 (\(restoredCount)/\(total))..."
@@ -551,9 +558,10 @@ final class SyncEngine: ObservableObject {
                             } else {
                                 try? await client.download(from: legacy)
                             }
-                            guard let encData,
-                                  let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                            guard let encData else { return nil }
+                            guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                   let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                Log.sync.warn("云端条目 [\(nextId)] 解密或解码失败，可能已损坏")
                                 return nil
                             }
                             return blob
@@ -565,6 +573,7 @@ final class SyncEngine: ObservableObject {
             if !batchBuffer.isEmpty {
                 await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                 batchBuffer.removeAll()
+                batchBufferBytes = 0
             }
 
             await PasteDataStore.main.reloadHistory()
@@ -760,12 +769,15 @@ final class SyncEngine: ObservableObject {
             addLog("本地 SQLite 扫描完成: 共有 \(localBlobs.count) 条待比对记录 (仅同步收藏: \(onlySyncPinned))")
 
             let pendingDeletions = SyncPendingDeletionsStore.shared.getAllDeletions()
-            let diff = Self.calculateDiff(
+            var diff = Self.calculateDiff(
                 localItems: localBlobs,
                 remoteIndex: remoteIndex,
                 onlySyncPinned: onlySyncPinned,
                 pendingDeletions: pendingDeletions
             )
+            if !corruptItemIDs.isEmpty {
+                diff.toDownload.removeAll { corruptItemIDs.contains($0) }
+            }
             addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理本地 \(diff.toDeleteLocal.count) 条, 待清理远端 \(diff.toDeleteRemote.count) 条")
 
             // 8. 受控滑动窗口并发流水线：下载需拉取条目 (限制并发为 3)
@@ -774,6 +786,7 @@ final class SyncEngine: ObservableObject {
                 var downloadedCount = 0
                 let totalDownloads = diff.toDownload.count
                 var batchBuffer: [SyncItemBlob] = []
+                var batchBufferBytes = 0
 
                 try await withThrowingTaskGroup(of: SyncItemBlob?.self) { group in
                     var iterator = diff.toDownload.makeIterator()
@@ -781,7 +794,7 @@ final class SyncEngine: ObservableObject {
                     for _ in 0..<maxConcurrency {
                         if isCancelled || Task.isCancelled { break }
                         if let id = iterator.next() {
-                            group.addTask {
+                            group.addTask { [weak self] in
                                 let sharded = SyncIndex.shardedItemPath(for: id)
                                 let legacy = SyncIndex.legacyItemPath(for: id)
                                 let encData: Data? = if let d = try? await client.download(from: sharded) {
@@ -789,9 +802,13 @@ final class SyncEngine: ObservableObject {
                                 } else {
                                     try? await client.download(from: legacy)
                                 }
-                                guard let encData,
-                                      let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                                guard let encData else { return nil }
+                                guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                       let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                    Log.sync.warn("云端条目 [\(id)] 解密或解码失败，已记录黑名单跳过循环重试")
+                                    await MainActor.run {
+                                        self?.corruptItemIDs.insert(id)
+                                    }
                                     return nil
                                 }
                                 return blob
@@ -803,11 +820,13 @@ final class SyncEngine: ObservableObject {
                         if isCancelled || Task.isCancelled { break }
                         if let blob {
                             batchBuffer.append(blob)
+                            batchBufferBytes += blob.payloadData?.count ?? 0
                             downloadedCount += 1
 
-                            if batchBuffer.count >= 50 {
+                            if batchBuffer.count >= 50 || batchBufferBytes >= 16 * 1024 * 1024 {
                                 await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                                 batchBuffer.removeAll(keepingCapacity: true)
+                                batchBufferBytes = 0
                             }
 
                             syncProgress = "正在下载云端条目 (\(downloadedCount)/\(totalDownloads))..."
@@ -817,7 +836,7 @@ final class SyncEngine: ObservableObject {
                         }
 
                         if !isCancelled && !Task.isCancelled, let nextId = iterator.next() {
-                            group.addTask {
+                            group.addTask { [weak self] in
                                 let sharded = SyncIndex.shardedItemPath(for: nextId)
                                 let legacy = SyncIndex.legacyItemPath(for: nextId)
                                 let encData: Data? = if let d = try? await client.download(from: sharded) {
@@ -825,9 +844,13 @@ final class SyncEngine: ObservableObject {
                                 } else {
                                     try? await client.download(from: legacy)
                                 }
-                                guard let encData,
-                                      let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
+                                guard let encData else { return nil }
+                                guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                       let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
+                                    Log.sync.warn("云端条目 [\(nextId)] 解密或解码失败，已记录黑名单跳过循环重试")
+                                    await MainActor.run {
+                                        self?.corruptItemIDs.insert(nextId)
+                                    }
                                     return nil
                                 }
                                 return blob
@@ -839,6 +862,7 @@ final class SyncEngine: ObservableObject {
                 if !batchBuffer.isEmpty {
                     await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
                     batchBuffer.removeAll()
+                    batchBufferBytes = 0
                 }
             }
 

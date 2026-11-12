@@ -262,10 +262,12 @@ extension ClipMainViewController {
     }
 
     func pauseObserving() {
+        pauseTimerCancellable = nil
         presenter.pauseObserving()
     }
 
     func resumeObserving() {
+        updatePauseState()
         presenter.resumeObserving(scrollView: scrollView)
     }
 

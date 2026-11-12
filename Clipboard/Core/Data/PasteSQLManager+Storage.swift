@@ -245,6 +245,9 @@ extension PasteSQLManager {
         let beforeBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
             + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
 
+        // 0. 关闭点查只读句柄，解除只读锁，确保 VACUUM 与 WAL 截断无阻碍执行
+        PasteDataPointReader.closeConnection()
+
         // 1. 将 WAL 日志 checkpoint 归档入主库
         try? connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         // 2. 执行全量 VACUUM 释放 Free Pages

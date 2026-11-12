@@ -14,6 +14,8 @@ final class PasteboardModel: Identifiable, Codable {
     /// 仅内存态缓存数据库的 sort_order，用于撤销删除后回到原位；不参与 Codable。
     var sortOrder: Int64 = 0
     let uniqueId: String
+    /// 兼容旧版前 1024 字节哈希的 uniqueId，用于平滑过渡去重比对；不参与 Codable。
+    nonisolated let legacyUniqueId: String?
     let pasteboardType: PasteboardType
     private var _data: Data?
 
@@ -142,7 +144,8 @@ final class PasteboardModel: Identifiable, Codable {
         hidden: Bool = false,
         uniqueId: String? = nil,
         appID: Int64? = nil,
-        sourceBundleID: String? = nil
+        sourceBundleID: String? = nil,
+        legacyUniqueId: String? = nil
     ) {
         self.pasteboardType = pasteboardType
         self._data = data
@@ -158,6 +161,7 @@ final class PasteboardModel: Identifiable, Codable {
         self.tag = tag
         self.alias = alias
         self.hidden = hidden
+        self.legacyUniqueId = legacyUniqueId
 
         self.uniqueId = uniqueId ?? Self.generateUniqueId(
             for: pasteboardType,
@@ -312,23 +316,7 @@ final class PasteboardModel: Identifiable, Codable {
     }
 
     nonisolated private static func downsampledImage(from data: Data, maxPixelSize: CGFloat) -> NSImage? {
-        guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return nil }
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
-            return nil
-        }
-        guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return nil }
-        let downsampleOptions = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ] as CFDictionary
-
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
-            return nil
-        }
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        ImageDownsampler.downsampleNSImage(from: data, maxPixelSize: maxPixelSize)
     }
 
     // MARK: - 状态更新

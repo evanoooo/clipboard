@@ -44,7 +44,7 @@ final class WindowManager {
     private func scheduleIdleMemoryTrim() {
         idleTrimTask?.cancel()
         idleTrimTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(10)) // 窗口关闭闲置 10 秒后自动回收富文本与翻页堆积缓存
+            try? await Task.sleep(for: .seconds(5)) // 窗口关闭闲置 5 秒后自动回收富文本与翻页堆积缓存
             guard !Task.isCancelled, !self.isVisible else { return }
             PasteDataStore.main.trimExcessMemory()
         }

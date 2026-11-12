@@ -46,10 +46,12 @@ final class AppIconCache {
             return loaded.image ?? fallback
         }
         inFlightTasks[key] = task
-        let image = await task.value
-        if inFlightTasks[key] == task {
-            inFlightTasks[key] = nil
+        defer {
+            if inFlightTasks[key] == task {
+                inFlightTasks[key] = nil
+            }
         }
+        let image = await task.value
         if generation == currentGeneration {
             cache.setObject(image, forKey: key as NSString, cost: SourceAppIcon.cacheCost)
         }

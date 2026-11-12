@@ -237,6 +237,14 @@ final class FloatingFooterView: NSView {
         return ve
     }
 
+    func pauseObserving() {
+        timerCancellable = nil
+    }
+
+    func resumeObserving() {
+        updatePauseState()
+    }
+
     private func updatePauseState() {
         guard let topVM else { return }
         let isPaused = PasteBoard.main.isPaused

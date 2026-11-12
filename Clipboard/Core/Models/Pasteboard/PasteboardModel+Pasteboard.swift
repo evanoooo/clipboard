@@ -9,7 +9,11 @@ import AppKit
 import ImageIO
 
 extension PasteboardModel {
-    convenience init?(with pasteboard: NSPasteboard, sourceApp: NSRunningApplication? = nil) {
+    convenience init?(
+        with pasteboard: NSPasteboard,
+        sourceApp: NSRunningApplication? = nil,
+        preloadedData: Data? = nil
+    ) {
         guard let items = pasteboard.pasteboardItems, let item = items.first
         else { return nil }
 
@@ -36,6 +40,8 @@ extension PasteboardModel {
 
             let filePathsString = paths.joined(separator: "\n")
             content = filePathsString.data(using: .utf8) ?? Data()
+        } else if type == .string, let preloadedData {
+            content = preloadedData
         } else {
             content = item.data(forType: type)
         }
@@ -65,6 +71,8 @@ extension PasteboardModel {
 
         let app = sourceApp ?? NSWorkspace.shared.frontmostApplication
 
+        let legacyId: String? = (type.isImage() && content != nil) ? Self.generateLegacyImageUniqueId(data: content!) : nil
+
         self.init(
             pasteboardType: type,
             data: content ?? Data(),
@@ -76,13 +84,23 @@ extension PasteboardModel {
             length: length,
             group: -1,
             tag: calculatedTag,
-            sourceBundleID: app?.bundleIdentifier
+            sourceBundleID: app?.bundleIdentifier,
+            legacyUniqueId: legacyId
         )
     }
 
     private static func prepareText(
         _ content: Data?, type: PasteboardType
     ) -> (source: NSAttributedString, showData: Data?)? {
+        guard let content, !content.isEmpty else { return nil }
+        // 针对过大富文本（>256KB），避免在入库时全量反序列化 RTF 导致主线程卡顿
+        if (type == .rtf || type == .rtfd) && content.count > 262144 {
+            if let str = String(data: content, encoding: .utf8) ?? String(data: content, encoding: .ascii) {
+                let preview = str.prefix(300)
+                let attr = NSAttributedString(string: str)
+                return (attr, Data(preview.utf8))
+            }
+        }
         let text = NSAttributedString(with: content, type: type) ?? NSAttributedString()
         guard !text.string.allSatisfy(\.isWhitespace) else { return nil }
         let preview = text.length > 300
@@ -93,23 +111,7 @@ extension PasteboardModel {
     // MARK: - 缩略图生成
 
     static func generateImageThumbnailData(from data: Data, maxPixelSize: CGFloat = 300) -> Data? {
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
-            return nil
-        }
-        let downsampleOptions = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ] as CFDictionary
-
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
-            return nil
-        }
-        let rep = NSBitmapImageRep(cgImage: cgImage)
-        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
-            ?? rep.representation(using: .png, properties: [:])
+        ImageDownsampler.generateThumbnailData(from: data, maxPixelSize: maxPixelSize)
     }
 
     // MARK: - 从剪贴板提取文件路径

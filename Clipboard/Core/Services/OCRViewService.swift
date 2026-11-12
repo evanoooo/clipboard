@@ -13,18 +13,11 @@ final class OCRViewService {
 
     private init() {}
 
-    nonisolated private static func createCGImage(from data: Data) -> CGImage? {
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
-            return nil
-        }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
-    }
-
     func recognizeText(from data: Data) async -> String {
         await Task.detached(priority: .utility) {
             autoreleasepool {
-                guard let cgImage = Self.createCGImage(from: data) else { return "" }
+                // OCR 下采样至 3000px，保留高精度文字识别细节的同时将 5K 位图面积收敛至 1/3~1/4，杜绝单次 OCR 占用 150MB+ 内存尖峰
+                guard let cgImage = ImageDownsampler.downsampleCGImage(from: data, maxPixelSize: 3000) else { return "" }
 
                 let request = VNRecognizeTextRequest()
                 request.recognitionLevel = .accurate

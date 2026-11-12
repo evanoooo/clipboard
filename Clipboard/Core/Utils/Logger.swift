@@ -120,6 +120,7 @@ nonisolated private final class DiagnosticRingBuffer: Sendable {
 
 nonisolated private final class AsyncFileLogWriter: @unchecked Sendable {
     private let writeQueue = DispatchQueue(label: "com.crown.clipboard.log-writer", qos: .utility)
+    private static let queueSpecificKey = DispatchSpecificKey<Void>()
     private let logsDirectory: URL?
     private var pendingEntries: [String] = []
     private var flushWorkItem: DispatchWorkItem?
@@ -131,6 +132,7 @@ nonisolated private final class AsyncFileLogWriter: @unchecked Sendable {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.logsDirectory = dir
 
+        writeQueue.setSpecific(key: Self.queueSpecificKey, value: ())
         writeQueue.async { [weak self] in
             self?.purgeOldLogs()
         }
@@ -158,10 +160,16 @@ nonisolated private final class AsyncFileLogWriter: @unchecked Sendable {
     }
 
     nonisolated func flushSync() {
-        writeQueue.sync {
-            self.flushWorkItem?.cancel()
-            self.flushWorkItem = nil
-            self.flushPending()
+        if DispatchQueue.getSpecific(key: Self.queueSpecificKey) != nil {
+            flushWorkItem?.cancel()
+            flushWorkItem = nil
+            flushPending()
+        } else {
+            writeQueue.sync {
+                self.flushWorkItem?.cancel()
+                self.flushWorkItem = nil
+                self.flushPending()
+            }
         }
     }
 

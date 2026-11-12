@@ -20,27 +20,45 @@ final class PasteDataStore {
     /// 搜索模式下条目统计截断阈值（展示 500+）
     static let filteredCountCap = 500
 
+    private var memoryPressureSource: (any DispatchSourceMemoryPressure)?
+
+    private init() {
+        setupMemoryPressureHandler()
+    }
+
+    private func setupMemoryPressureHandler() {
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                self?.trimExcessMemory(forceCachesOnly: WindowManager.shared.isVisible)
+            }
+        }
+        source.resume()
+        memoryPressureSource = source
+    }
+
     @MainActor
-    func trimExcessMemory() {
-        guard !WindowManager.shared.isVisible else { return }
-        if dataList.value.count > pageSize {
-            hasMoreData = true
-            lastRequestedPage = 0
-            pageIndex = 0
-            updateData(with: Array(dataList.value.prefix(pageSize)), changeType: .reset)
+    func trimExcessMemory(forceCachesOnly: Bool = false) {
+        if !forceCachesOnly, !WindowManager.shared.isVisible {
+            if dataList.value.count > pageSize {
+                hasMoreData = true
+                lastRequestedPage = 0
+                pageIndex = 0
+                updateData(with: Array(dataList.value.prefix(pageSize)), changeType: .reset)
+            }
+            for model in dataList.value {
+                model.cachedHighlightedCode = nil
+                model.cachedPlainTextAttributedString = nil
+                model.clearLoadedPayload()
+            }
+            ClipUndoStore.shared.removeAll()
+            PasteDataPointReader.closeConnection()
         }
-        for model in dataList.value {
-            model.cachedHighlightedCode = nil
-            model.cachedPlainTextAttributedString = nil
-            model.clearLoadedPayload()
-        }
-        ClipUndoStore.shared.removeAll()
         AppIconCache.shared.trimMemory()
         FileThumbnailService.shared.clearCache()
         ModelThumbnailCache.shared.removeAll()
         ModelAttributedTextCache.shared.removeAll()
         ModelLinkMetadataCache.shared.removeAll()
-        PasteDataPointReader.closeConnection()
         sqlite3_release_memory(Int32.max)
         malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }
@@ -264,6 +282,13 @@ extension PasteDataStore {
 
             if !deduplicated.isEmpty {
                 list.append(contentsOf: deduplicated)
+                // 滑动窗口清理：若已加载条目超过 150 条（3页），对距离当前尾部超过 150 条的前端模型轻量清理运行时渲染产物
+                if list.count > pageSize * 3 {
+                    let trimEndIndex = list.count - (pageSize * 3)
+                    for i in 0..<trimEndIndex {
+                        list[i].clearLoadedPayload()
+                    }
+                }
                 self.updateData(with: list, changeType: .loadMore)
             }
 
@@ -543,15 +568,22 @@ extension PasteDataStore {
     }
 
     @discardableResult
-    func addNewItem(_ item: NSPasteboard, sourceApp: NSRunningApplication? = nil, chipId: Int = -1) -> Bool {
+    func addNewItem(
+        _ item: NSPasteboard,
+        sourceApp: NSRunningApplication? = nil,
+        chipId: Int = -1,
+        preloadedStringData: Data? = nil
+    ) -> Bool {
         if let first = item.pasteboardItems?.first,
            first.availableType(from: PasteboardType.supportTypes) == .string,
-           PasteboardModel.extractFilePaths(from: item, item: first) == nil,
-           let data = first.data(forType: .string), data.count > 1_048_576 {
-            ingestionTask = ingestText(data, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
-            return true
+           PasteboardModel.extractFilePaths(from: item, item: first) == nil {
+            let data = preloadedStringData ?? first.data(forType: .string)
+            if let data, data.count > 1_048_576 {
+                ingestionTask = ingestText(data, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
+                return true
+            }
         }
-        guard let model = PasteboardModel(with: item, sourceApp: sourceApp) else { return false }
+        guard let model = PasteboardModel(with: item, sourceApp: sourceApp, preloadedData: preloadedStringData) else { return false }
 
         if chipId != -1 {
             model.updateGroup(val: chipId)

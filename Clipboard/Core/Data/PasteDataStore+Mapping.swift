@@ -20,11 +20,12 @@ extension PasteDataStore {
             if let type = try? row.get(Col.type),
                let timestamp = try? row.get(Col.timestamp),
                let uniqueId = try? row.get(Col.uniqueId) {
-                let data = try? row.get(Col.data)
                 let id = try? row.get(Col.id)
                 let appID = try? row.get(Col.appID)
                 var showData = try? row.get(Col.showData)
-                let searchText = try? row.get(Col.searchText)
+                let rawSearchText = try? row.get(Col.searchText)
+                // 内存极致优化：限制常驻模型的 search_text 长度至 2000 字符，卡片预览与高亮已完全足够，杜绝海量文本占用常驻堆内存
+                let searchText = rawSearchText.map { $0.count > 2000 ? String($0.prefix(2000)) : $0 }
                 let length = try? row.get(Col.length)
                 let group = try? row.get(Col.group)
                 let tag = try? row.get(Col.tag)
@@ -36,17 +37,14 @@ extension PasteDataStore {
 
                 if pType.isText(), showData == nil {
                     // 极致性能：优先从已在行记录中的 searchText 提取兜底预览，杜绝在映射流水线中发起同步磁盘 I/O
-                    if let searchText, !searchText.isEmpty {
-                        showData = String(searchText.prefix(300)).data(using: .utf8)
-                    } else if let d = data {
-                        let plain = NSAttributedString(with: d, type: pType)?.string ?? String(data: d, encoding: .utf8)
-                        showData = plain.flatMap { String($0.prefix(300)).data(using: .utf8) }
+                    if let rawSearchText, !rawSearchText.isEmpty {
+                        showData = String(rawSearchText.prefix(300)).data(using: .utf8)
                     }
                 }
 
                 let pasteModel = PasteboardModel(
                     pasteboardType: pType,
-                    data: data,
+                    data: nil,
                     showData: showData,
                     timestamp: timestamp,
                     appPath: "",

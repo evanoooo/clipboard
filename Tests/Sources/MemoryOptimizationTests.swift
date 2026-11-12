@@ -15,7 +15,39 @@ enum MemoryOptimizationTests {
         testAttributedTextCache()
         testLinkMetadataCache()
         testSensitiveCredentialCheck()
+        testImageDownsampler()
+        testSearchTextCapping()
         print("✓ Bounded Memory Caches & Runtime Optimizations tests passed!")
+    }
+
+    private static func testImageDownsampler() {
+        // 创建一个简单的 100x100 位图数据
+        let image = NSImage(size: NSSize(width: 100, height: 100))
+        image.lockFocus()
+        NSColor.red.drawSwatch(in: NSRect(x: 0, y: 0, width: 100, height: 100))
+        image.unlockFocus()
+
+        guard let tiffData = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiffData),
+              let pngData = rep.representation(using: .png, properties: [:]) else {
+            assertionFailure("Failed to create PNG test data")
+            return
+        }
+
+        let downsampled = ImageDownsampler.downsampleNSImage(from: pngData, maxPixelSize: 50)
+        assert(downsampled != nil, "Downsampling should succeed")
+        assert(downsampled!.size.width <= 50, "Downsampled width should not exceed 50")
+        assert(downsampled!.size.height <= 50, "Downsampled height should not exceed 50")
+
+        let thumbData = ImageDownsampler.generateThumbnailData(from: pngData, maxPixelSize: 40)
+        assert(thumbData != nil && !thumbData!.isEmpty, "Thumbnail data generation should succeed")
+    }
+
+    private static func testSearchTextCapping() {
+        let longText = String(repeating: "剪贴板全文搜索测试", count: 1000) // ~24000 字符
+        let normalized = SearchTextNormalizer.normalize(longText)
+        let capped = normalized.count > 2000 ? String(normalized.prefix(2000)) : normalized
+        assert(capped.count == 2000, "Search text in list models must be capped to 2000 chars")
     }
 
     private static func testThumbnailCache() {

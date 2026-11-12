@@ -339,6 +339,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         let declared = declaredSource()
         let sourceBundleID = resolveSourceBundleID(declared: declared)
 
+        var preloadedStringData: Data?
         // 机密与安全增强：自动拦截已知密码管理软件与高危敏感凭证（如私钥、Token）
         if checkSensitive {
             if PasteboardContentFilter.isPasswordManager(bundleID: sourceBundleID) {
@@ -350,6 +351,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             if types.contains(.string) {
                 let checkText: String?
                 if let data = pasteboard.data(forType: .string) {
+                    preloadedStringData = data
                     if data.count > 32768 {
                         checkText = String(data: data.prefix(32768), encoding: .utf8)
                     } else {
@@ -423,7 +425,11 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             }
         #endif
 
-        PasteDataStore.main.addNewItem(pasteboard, sourceApp: resolveSourceApp(declared: declared))
+        PasteDataStore.main.addNewItem(
+            pasteboard,
+            sourceApp: resolveSourceApp(declared: declared),
+            preloadedStringData: preloadedStringData
+        )
         changeCount = pasteboard.changeCount
 
         StatusBarController.shared.triggerPulseAnimation()
@@ -734,11 +740,17 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
     /// 写入原始数据（富文本、图片等）
     private func writeRawData(_ data: PasteboardModel) {
+        let payload = data.data
+        guard !payload.isEmpty else {
+            Log.pasteboard.warn("写入剪贴板跳过：二进制数据为空 (id: \(data.id ?? -1), uniqueId: \(data.uniqueId))")
+            return
+        }
+
         // 处理需要去除末尾换行的富文本
         if data.pasteboardType.isText(),
            PasteUserDefaults.removeTailingNewline,
            let attributedString = NSAttributedString(
-               with: data.data,
+               with: payload,
                type: data.pasteboardType
            )
         {
@@ -758,7 +770,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             }
         }
 
-        NSPasteboard.general.setData(data.data, forType: data.pasteboardType)
+        NSPasteboard.general.setData(payload, forType: data.pasteboardType)
     }
 }
 

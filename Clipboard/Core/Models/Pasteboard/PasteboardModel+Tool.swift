@@ -8,14 +8,21 @@
 import AppKit
 
 extension PasteboardModel {
+    static func generateLegacyImageUniqueId(data: Data) -> String {
+        let prefix = data.prefix(1024)
+        return "\(prefix.sha256Hex)-\(data.count)"
+    }
+
     static func generateUniqueId(
         for type: PasteboardType,
         data: Data
     ) -> String {
         switch type {
         case .png, .tiff:
-            let prefix = data.prefix(1024)
-            return "\(prefix.sha256Hex)-\(data.count)"
+            let prefix = data.prefix(2048)
+            let suffix = data.suffix(2048)
+            let sample = prefix + suffix
+            return "\(sample.sha256Hex)-\(data.count)"
         case .rtf, .rtfd:
             if let attributeString = NSAttributedString(with: data, type: type),
                let textData = attributeString.string.data(using: .utf8)

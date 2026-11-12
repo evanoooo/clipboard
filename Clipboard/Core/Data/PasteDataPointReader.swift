@@ -31,6 +31,8 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
         }
         sqlite3_busy_timeout(db, 5000)
         sqlite3_exec(db, "PRAGMA cache_size = -512;", nil, nil, nil)
+        let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
+        sqlite3_exec(db, "PRAGMA mmap_size = \(mmapBytes);", nil, nil, nil)
 
         let sqlById = "SELECT data FROM Clip WHERE id = ? LIMIT 1"
         sqlite3_prepare_v2(db, sqlById, -1, &stmtById, nil)
