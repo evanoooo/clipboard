@@ -13,15 +13,43 @@ import Foundation
 /// 普通特征按权重累计，低于阈值视为噪声，避免把普通文字、URL、
 /// 中英混排的便签误判成代码。
 nonisolated enum CodeLanguageDetector {
-    /// 一条判别信号；初始化时预编译正则表达式，避免每次检测重复编译
+    /// 线程安全惰性正则编译缓存，避免初始化时一次性编译 ~150 条正则
+    private final class RegexCache: @unchecked Sendable {
+        static let shared = RegexCache()
+        private let lock = NSLock()
+        private var cache: [String: NSRegularExpression] = [:]
+
+        func regex(pattern: String, caseSensitive: Bool = false) -> NSRegularExpression? {
+            let key = (caseSensitive ? "s:" : "i:") + pattern
+            lock.lock()
+            if let existing = cache[key] {
+                lock.unlock()
+                return existing
+            }
+            lock.unlock()
+
+            let options: NSRegularExpression.Options = caseSensitive ? [] : [.caseInsensitive]
+            guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else {
+                return nil
+            }
+
+            lock.lock()
+            cache[key] = compiled
+            lock.unlock()
+            return compiled
+        }
+    }
+
+    /// 一条判别信号；仅存储元数据，使用时按需从缓存获取编译后的正则
     private struct Signal: Sendable {
-        let regex: NSRegularExpression?
+        let pattern: String
         let weight: Int
+        let caseSensitive: Bool
 
         init(pattern: String, weight: Int, caseSensitive: Bool = false) {
+            self.pattern = pattern
             self.weight = weight
-            let options: NSRegularExpression.Options = caseSensitive ? [] : [.caseInsensitive]
-            self.regex = try? NSRegularExpression(pattern: pattern, options: options)
+            self.caseSensitive = caseSensitive
         }
     }
 
@@ -44,9 +72,17 @@ nonisolated enum CodeLanguageDetector {
         guard trimmed.count >= 4 else { return nil }
         let sample = String(trimmed.prefix(analysisLimit))
 
+        // 1. 快速前缀通道（shebang, <?php, <!DOCTYPE, <html, JSON）
+        if let fastLanguage = detectFastPrefix(sample) {
+            return fastLanguage
+        }
+
+        // 2. 规则加权匹配（按语言优先级与惰性编译进行）
         var ranked: [(language: CodeLanguage, score: Int, hits: Int)] = []
-        ranked.reserveCapacity(signals.count)
-        for (language, languageSignals) in signals {
+        ranked.reserveCapacity(priorityLanguages.count)
+
+        for language in priorityLanguages {
+            guard let languageSignals = signals[language] else { continue }
             var score = 0
             var hits = 0
             for signal in languageSignals where matches(signal, in: sample) {
@@ -55,6 +91,14 @@ nonisolated enum CodeLanguageDetector {
             }
             if score > 0 {
                 ranked.append((language, score, hits))
+
+                // 强特征组合提前短路退出（得分 >= 8 且至少 2 次命中，且大幅领先已测语言）
+                if score >= 8 && hits >= 2 {
+                    let otherMax = ranked.lazy.filter { $0.language != language }.map(\.score).max() ?? 0
+                    if score - otherMax >= 4 {
+                        return language
+                    }
+                }
             }
         }
 
@@ -71,11 +115,74 @@ nonisolated enum CodeLanguageDetector {
 
     // MARK: - Private
 
+    private static func detectShebang(_ sample: String) -> CodeLanguage? {
+        guard sample.hasPrefix("#!") else { return nil }
+        guard let firstLine = sample.split(separator: "\n", maxSplits: 1).first else { return nil }
+        let line = firstLine.lowercased()
+        if line.contains("python") { return .python }
+        if line.contains("node") { return .javascript }
+        if line.contains("ruby") { return .ruby }
+        if line.contains("php") { return .php }
+        if line.contains("bash") || line.contains("/sh") || line.contains("zsh") || line.contains("fish") || line.contains("/env sh") {
+            return .bash
+        }
+        return nil
+    }
+
+    private static func detectFastPrefix(_ sample: String) -> CodeLanguage? {
+        if let shebangLang = detectShebang(sample) {
+            return shebangLang
+        }
+        if sample.hasPrefix("<?php") || sample.hasPrefix("<?=") {
+            return .php
+        }
+        let lower = sample.prefix(30).lowercased()
+        if lower.hasPrefix("<!doctype html") || lower.hasPrefix("<?xml") || lower.hasPrefix("<html") {
+            return .html
+        }
+        if sample.hasPrefix("{") || sample.hasPrefix("[") {
+            if matches(pattern: ##""[^"\n]{1,64}"\s*:\s*(?:"[^"\n]*"|-?\d|true|false|null|[\[{])"##, in: sample) {
+                return .json
+            }
+        }
+        return nil
+    }
+
     private static func matches(_ signal: Signal, in text: String) -> Bool {
-        guard let regex = signal.regex else { return false }
+        matches(pattern: signal.pattern, caseSensitive: signal.caseSensitive, in: text)
+    }
+
+    private static func matches(pattern: String, caseSensitive: Bool = false, in text: String) -> Bool {
+        guard let regex = RegexCache.shared.regex(pattern: pattern, caseSensitive: caseSensitive) else {
+            return false
+        }
         let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
         return regex.firstMatch(in: text, options: [], range: fullRange) != nil
     }
+
+    /// 评估顺序：高频语言与结构性特征明确的语言靠前
+    private static let priorityLanguages: [CodeLanguage] = [
+        .bash,
+        .python,
+        .swift,
+        .json,
+        .sql,
+        .html,
+        .css,
+        .typescript,
+        .javascript,
+        .go,
+        .rust,
+        .java,
+        .cpp,
+        .c,
+        .csharp,
+        .kotlin,
+        .php,
+        .ruby,
+        .yaml,
+        .nginx,
+    ]
 
     // swiftlint:disable:next cyclomatic_complexity
     private static let signals: [CodeLanguage: [Signal]] = [

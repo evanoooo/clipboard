@@ -87,11 +87,13 @@ final class ClipPreviewContentView: NSView {
 
     static func measuringAttributedString(for model: PasteboardModel) -> NSAttributedString {
         if model.type == .rich {
-            return NSAttributedString(with: model.data, type: model.pasteboardType)
+            let data = model.loadRawData(cache: false)
+            return NSAttributedString(with: data, type: model.pasteboardType)
                 ?? model.attributeString
         }
         if let language = model.detectedCodeLanguage {
-            let source = String(data: model.data, encoding: .utf8) ?? model.attributeString.string
+            let data = model.loadRawData(cache: false)
+            let source = String(data: data, encoding: .utf8) ?? model.attributeString.string
             return CodeHighlighter.highlight(source, language: language, theme: CodeTheme(fontSize: NSFont.systemFontSize), limitLength: CodeHighlighter.fastViewportLength)
         }
         return model.attributeString

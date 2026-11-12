@@ -339,7 +339,14 @@ extension PasteDataStore {
         clearData(for: timeUnit)
     }
 
+    private static var lastDragTempCleanup: ContinuousClock.Instant?
+
     private func clearDragTempDirectory() {
+        if let last = Self.lastDragTempCleanup, ContinuousClock.now - last < .seconds(3600) {
+            return
+        }
+        Self.lastDragTempCleanup = .now
+
         Task.detached(priority: .background) {
             let tempURL = FileManager.default.temporaryDirectory.appending(path: "ClipboardDrag")
             let fileManager = FileManager.default

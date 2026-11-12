@@ -29,6 +29,7 @@ final class AppColorService {
             PasteUserDefaults.appColorData = data
         }
         colorDict = data
+        checkedColors = Set(data.keys)
     }
 
     func updateColor(for model: PasteboardModel) {

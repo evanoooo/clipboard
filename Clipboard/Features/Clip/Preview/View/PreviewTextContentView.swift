@@ -110,7 +110,8 @@ final class PreviewTextContentView: NSView, PreviewResettable {
     }
 
     private func applyRichContent(for model: PasteboardModel) {
-        let base = NSAttributedString(with: model.data, type: model.pasteboardType)
+        let data = model.loadRawData(cache: false)
+        let base = NSAttributedString(with: data, type: model.pasteboardType)
             ?? model.attributeString
 
         if model.hasBgColor {
@@ -130,7 +131,8 @@ final class PreviewTextContentView: NSView, PreviewResettable {
     }
 
     private func applyPlainContent(for model: PasteboardModel) {
-        let source = String(data: model.data, encoding: .utf8)
+        let data = model.loadRawData(cache: false)
+        let source = String(data: data, encoding: .utf8)
             ?? model.attributeString.string
 
         if let language = model.detectedCodeLanguage {

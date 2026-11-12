@@ -51,8 +51,10 @@ final class PasteDataStore {
                 model.cachedPlainTextAttributedString = nil
                 model.clearLoadedPayload()
             }
+            trimmedUpToIndex = 0
             ClipUndoStore.shared.removeAll()
             PasteDataPointReader.closeConnection()
+            WindowManager.shared.releaseHiddenWindowPayloads()
         }
         AppIconCache.shared.trimMemory()
         FileThumbnailService.shared.clearCache()
@@ -75,6 +77,7 @@ final class PasteDataStore {
 
     var totalCount: Int = 0
     private(set) var pageIndex = 0
+    private var trimmedUpToIndex = 0
     private(set) var isLoadingPage = false
     private(set) var hasMoreData = false
     private(set) var listRevision = 0
@@ -160,6 +163,9 @@ final class PasteDataStore {
         with list: [PasteboardModel],
         changeType: DataChangeType = .reset
     ) {
+        if changeType != .loadMore {
+            trimmedUpToIndex = 0
+        }
         listRevision &+= 1
         lastDataChangeType = changeType
         dataList.send(list)
@@ -285,8 +291,11 @@ extension PasteDataStore {
                 // 滑动窗口清理：若已加载条目超过 150 条（3页），对距离当前尾部超过 150 条的前端模型轻量清理运行时渲染产物
                 if list.count > pageSize * 3 {
                     let trimEndIndex = list.count - (pageSize * 3)
-                    for i in 0..<trimEndIndex {
-                        list[i].clearLoadedPayload()
+                    if trimEndIndex > self.trimmedUpToIndex {
+                        for i in self.trimmedUpToIndex..<trimEndIndex {
+                            list[i].clearLoadedPayload()
+                        }
+                        self.trimmedUpToIndex = trimEndIndex
                     }
                 }
                 self.updateData(with: list, changeType: .loadMore)
@@ -575,11 +584,16 @@ extension PasteDataStore {
         preloadedStringData: Data? = nil
     ) -> Bool {
         if let first = item.pasteboardItems?.first,
-           first.availableType(from: PasteboardType.supportTypes) == .string,
-           PasteboardModel.extractFilePaths(from: item, item: first) == nil {
-            let data = preloadedStringData ?? first.data(forType: .string)
-            if let data, data.count > 1_048_576 {
-                ingestionTask = ingestText(data, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
+           PasteboardModel.extractFilePaths(from: item, item: first) == nil,
+           let matchedType = first.availableType(from: PasteboardType.supportTypes) {
+            if matchedType == .string {
+                let data = preloadedStringData ?? first.data(forType: .string)
+                if let data, data.count > 1_048_576 {
+                    ingestionTask = ingestText(data, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
+                    return true
+                }
+            } else if matchedType.isImage(), let imageData = first.data(forType: matchedType), !imageData.isEmpty {
+                ingestionTask = ingestImage(imageData, type: matchedType, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
                 return true
             }
         }
@@ -792,7 +806,6 @@ extension PasteDataStore {
         content: PasteContent,
         searchText: String
     ) async -> Bool {
-        let loadedLimit = max(pageSize, dataList.value.count)
         loadPageTask?.cancel()
         isLoadingPage = false
 
@@ -804,15 +817,21 @@ extension PasteDataStore {
             return false
         }
 
-        let list: [PasteboardModel]
-        if isInFilterMode, let currentFilter {
-            let rows = await PasteReadStore.shared.search(
-                filter: currentFilter,
-                limit: loadedLimit
-            )
-            list = await mapRows(rows)
+        // 增量局部刷新：只单点重查被修改的单行，就地更新内存列表，杜绝全量重载导致模型重建与缓存丢失
+        let singleRow = await PasteReadStore.shared.search(
+            filter: Col.id == id,
+            limit: 1
+        )
+        guard let updatedModel = (await mapRows(singleRow)).first else {
+            return false
+        }
+
+        var list = dataList.value
+        if let idx = list.firstIndex(where: { $0.id == id }) {
+            list.remove(at: idx)
+            list.insert(updatedModel, at: 0)
         } else {
-            list = await getItems(limit: loadedLimit)
+            list.insert(updatedModel, at: 0)
         }
 
         totalCount = await sqlManager.getTotalCount()

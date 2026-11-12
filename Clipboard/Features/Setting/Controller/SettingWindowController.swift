@@ -8,7 +8,7 @@
 import AppKit
 import SwiftUI
 
-class SettingWindowController: NSWindowController {
+class SettingWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingWindowController()
     private let viewModel = SettingViewModel()
 
@@ -38,11 +38,8 @@ class SettingWindowController: NSWindowController {
             window.titlebarAppearsTransparent = true
         }
 
-        let settingView = SettingView()
-            .environment(viewModel)
-        window.contentView = NSHostingView(rootView: settingView)
-
         super.init(window: window)
+        window.delegate = self
 
         window.onCommandW = { [weak self] in
             self?.hideWindow()
@@ -58,9 +55,22 @@ class SettingWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    private func ensureContentView() {
+        guard let window, window.contentView == nil else { return }
+        let settingView = SettingView()
+            .environment(viewModel)
+        window.contentView = NSHostingView(rootView: settingView)
+    }
+
+    private func releaseContentView() {
+        window?.contentView = nil
+        StorageAnalysisService.shared.clearTransientCache()
+    }
+
     func toggleWindow() {
         guard let window else { return }
 
+        ensureContentView()
         NSApp.activate(ignoringOtherApps: true)
 
         if window.isMiniaturized {
@@ -77,6 +87,11 @@ class SettingWindowController: NSWindowController {
 
     func hideWindow() {
         window?.orderOut(nil)
+        releaseContentView()
+    }
+
+    func windowWillClose(_: Notification) {
+        releaseContentView()
     }
 
     func minWindow() {

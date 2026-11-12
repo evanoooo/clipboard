@@ -25,13 +25,15 @@ extension PasteDataStore {
                 var showData = try? row.get(Col.showData)
                 let rawSearchText = try? row.get(Col.searchText)
                 // 内存极致优化：限制常驻模型的 search_text 长度至 2000 字符，卡片预览与高亮已完全足够，杜绝海量文本占用常驻堆内存
-                let searchText = rawSearchText.map { $0.count > 2000 ? String($0.prefix(2000)) : $0 }
+                let searchText = PasteboardModel.listSearchText(rawSearchText)
                 let length = try? row.get(Col.length)
                 let group = try? row.get(Col.group)
                 let tag = try? row.get(Col.tag)
                 let alias = try? row.get(Col.alias)
                 let sortOrder = (try? row.get(Col.sortOrder)) ?? 0
                 let hidden = ((try? row.get(Col.hidden)) ?? 0) != 0
+                // 小数据内联（<= 4KB）：文件路径、颜色、短链接、短文本直接带出，主线程零点查；超过 4KB 为 nil
+                let inlineData = try? row.get(Col.inlineData)
 
                 let pType = PasteboardType(type)
 
@@ -44,12 +46,12 @@ extension PasteDataStore {
 
                 let pasteModel = PasteboardModel(
                     pasteboardType: pType,
-                    data: nil,
+                    data: inlineData,
                     showData: showData,
                     timestamp: timestamp,
                     appPath: "",
                     appName: "",
-                    searchText: searchText ?? "",
+                    searchText: searchText,
                     length: length ?? 0,
                     group: group ?? -1,
                     tag: tag ?? "",

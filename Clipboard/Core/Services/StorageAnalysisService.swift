@@ -62,6 +62,11 @@ final class StorageAnalysisService: ObservableObject {
         self.topItems = items
     }
 
+    /// 释放空间透视器等临时大项列表缓存，避免在关窗后常驻堆内存
+    func clearTransientCache() {
+        topItems = []
+    }
+
     func deleteItems(ids: [Int64]) async throws -> Int64 {
         DeferredOCRCoordinator.shared.remove(ids: ids)
         let freed = await sqlManager.deleteStorageItems(ids: ids)

@@ -7,6 +7,7 @@
 
 import AppKit
 import Foundation
+import SQLite
 
 enum MemoryOptimizationTests {
     static func runAll() {
@@ -17,6 +18,7 @@ enum MemoryOptimizationTests {
         testSensitiveCredentialCheck()
         testImageDownsampler()
         testSearchTextCapping()
+        testInlineSmallDataSQL()
         print("✓ Bounded Memory Caches & Runtime Optimizations tests passed!")
     }
 
@@ -44,10 +46,59 @@ enum MemoryOptimizationTests {
     }
 
     private static func testSearchTextCapping() {
-        let longText = String(repeating: "剪贴板全文搜索测试", count: 1000) // ~24000 字符
+        let longText = String(repeating: "剪贴板全文搜索测试", count: 1000) // ~9000 字符
         let normalized = SearchTextNormalizer.normalize(longText)
-        let capped = normalized.count > 2000 ? String(normalized.prefix(2000)) : normalized
+        let capped = SearchTextNormalizer.capForListModel(normalized)
         assert(capped.count == 2000, "Search text in list models must be capped to 2000 chars")
+        assert(SearchTextNormalizer.capForListModel("short") == "short", "Short text must remain intact")
+        assert(SearchTextNormalizer.capForListModel(nil).isEmpty, "Nil text must return empty string")
+    }
+
+    private static func testInlineSmallDataSQL() {
+        do {
+            let db = try MemoryDatabaseHelper.createInMemoryDatabase()
+            let table = MemoryDatabaseHelper.clipTable
+
+            let smallPayload = Data(repeating: 0x41, count: 1024) // 1KB <= 4096
+            let largePayload = Data(repeating: 0x42, count: 8192) // 8KB > 4096
+
+            try db.run(table.insert(
+                Col.uniqueId <- "small_uid",
+                Col.type <- "public.utf8-plain-text",
+                Col.data <- smallPayload,
+                Col.showData <- smallPayload,
+                Col.timestamp <- 100,
+                Col.appID <- 1,
+                Col.searchText <- "small",
+                Col.length <- 1024,
+                Col.group <- -1,
+                Col.tag <- "string"
+            ))
+
+            try db.run(table.insert(
+                Col.uniqueId <- "large_uid",
+                Col.type <- "public.png",
+                Col.data <- largePayload,
+                Col.showData <- smallPayload,
+                Col.timestamp <- 200,
+                Col.appID <- 1,
+                Col.searchText <- "",
+                Col.length <- 8192,
+                Col.group <- -1,
+                Col.tag <- "image"
+            ))
+
+            let rows = Array(try db.prepare(
+                table.select(Col.uniqueId, Col.inlineData).order(Col.timestamp.asc)
+            ))
+            assert(rows.count == 2, "Should retrieve 2 rows")
+            let smallInline = try rows[0].get(Col.inlineData)
+            let largeInline = try rows[1].get(Col.inlineData)
+            assert(smallInline == smallPayload, "Payload <= 4KB must be returned inline without secondary point read")
+            assert(largeInline == nil, "Payload > 4KB must return nil in list query to avoid memory bloat")
+        } catch {
+            assertionFailure("testInlineSmallDataSQL failed: \(error)")
+        }
     }
 
     private static func testThumbnailCache() {

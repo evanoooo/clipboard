@@ -71,8 +71,6 @@ extension PasteboardModel {
 
         let app = sourceApp ?? NSWorkspace.shared.frontmostApplication
 
-        let legacyId: String? = (type.isImage() && content != nil) ? Self.generateLegacyImageUniqueId(data: content!) : nil
-
         self.init(
             pasteboardType: type,
             data: content ?? Data(),
@@ -84,8 +82,7 @@ extension PasteboardModel {
             length: length,
             group: -1,
             tag: calculatedTag,
-            sourceBundleID: app?.bundleIdentifier,
-            legacyUniqueId: legacyId
+            sourceBundleID: app?.bundleIdentifier
         )
     }
 

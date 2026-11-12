@@ -1,8 +1,8 @@
 import AppKit
 
-/// 80pt 卡片在 Retina 屏上需要至少 160px，使用 256px 覆盖各处显示尺寸。
+/// 80pt 卡片在 Retina 屏上需要 160px，使用 160px 严格匹配显示尺寸并降低位图常驻内存。
 nonisolated enum SourceAppIcon {
-    static let pixelSize = 256
+    static let pixelSize = 160
     static let cacheCost = pixelSize * pixelSize * 4
 
     /// 在后台按需读取；旧图仅在原应用仍可用时更新，不放大低清数据冒充高清图。

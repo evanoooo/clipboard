@@ -133,10 +133,12 @@ final class PreviewFooterBar: NSView {
             firstLineLabel.stringValue = model.introString()
             secondLineLabel.stringValue = ""
             secondLineLabel.isHidden = true
-            let data = model.data
+            let modelId = model.id
+            let uniqueId = model.uniqueId
             let typeRawValue = model.pasteboardType.rawValue
             statisticsTask = Task { @MainActor [weak self] in
                 let worker = Task.detached(priority: .utility) {
+                    let data = PasteDataPointReader.loadData(id: modelId, uniqueId: uniqueId, channel: .bulk) ?? Data()
                     let text = EditTextLoader.load(data: data, typeRawValue: typeRawValue)
                     return TextStatistics(from: text)
                 }

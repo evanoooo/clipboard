@@ -129,6 +129,8 @@ final class FloatingCardRowView: NSView {
         if let cancellable = contentSubview as? CancellableLoadable {
             cancellable.cancelLoad()
         }
+        contentSubview?.removeFromSuperview()
+        contentSubview = nil
         quickPasteIndex = nil
         showPlainTextIndicator = false
         currentModel = nil
@@ -235,12 +237,27 @@ final class FloatingCardRowView: NSView {
         layer.borderWidth = FloatConst.floatSelectionBorderWidth
     }
 
+    override func layout() {
+        super.layout()
+        updateShadow()
+    }
+
     private func updateShadow() {
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.shadowColor.withAlphaComponent(0.12)
         shadow.shadowBlurRadius = 2
         shadow.shadowOffset = CGSize(width: 0, height: -1)
         selectionBorderView.shadow = shadow
+        let bounds = selectionBorderView.bounds
+        if bounds.width > 0, bounds.height > 0 {
+            let radius = displayMode.cardRadius + FloatConst.floatSelectionBorderWidth
+            selectionBorderView.layer?.shadowPath = CGPath(
+                roundedRect: bounds,
+                cornerWidth: radius,
+                cornerHeight: radius,
+                transform: nil
+            )
+        }
     }
 
     private func updateQuickPasteBadge() {

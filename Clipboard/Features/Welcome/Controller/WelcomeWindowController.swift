@@ -9,7 +9,14 @@ import SwiftUI
 
 @MainActor
 final class WelcomeWindowController: NSWindowController {
-    static let shared = WelcomeWindowController()
+    private static var instance: WelcomeWindowController?
+
+    static var shared: WelcomeWindowController {
+        if let instance { return instance }
+        let newInstance = WelcomeWindowController()
+        instance = newInstance
+        return newInstance
+    }
 
     private init() {
         let window = WelcomeWindow(
@@ -65,11 +72,15 @@ final class WelcomeWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func showIfNeeded() {
+    static func showIfNeeded() {
         #if !DEBUG
             guard !PasteUserDefaults.welcomeDone else { return }
         #endif
 
+        shared.show()
+    }
+
+    func show() {
         NSApp.activate(ignoringOtherApps: true)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
@@ -86,6 +97,8 @@ final class WelcomeWindowController: NSWindowController {
     private func completeWelcome(showClipboard: Bool) {
         PasteUserDefaults.welcomeDone = true
         window?.orderOut(nil)
+        window?.contentView = nil
+        Self.instance = nil
 
         if showClipboard {
             WindowManager.shared.toggleWindow(frame: NSScreen.main?.frame)
@@ -97,5 +110,11 @@ extension WelcomeWindowController: NSWindowDelegate {
     func windowShouldClose(_: NSWindow) -> Bool {
         PasteUserDefaults.welcomeDone = true
         return true
+    }
+
+    func windowWillClose(_: Notification) {
+        PasteUserDefaults.welcomeDone = true
+        window?.contentView = nil
+        Self.instance = nil
     }
 }

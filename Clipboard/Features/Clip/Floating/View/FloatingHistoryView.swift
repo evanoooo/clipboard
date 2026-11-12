@@ -108,6 +108,15 @@ final class FloatingHistoryView: NSView {
 
     func pauseObserving() {
         presenter.pauseObserving()
+        var snapshot = NSDiffableDataSourceSnapshot<Int, PasteboardModel>()
+        snapshot.appendSections([0])
+        dataSource?.apply(snapshot, animatingDifferences: false)
+    }
+
+    func releaseVisibleCellPayloads() {
+        for case let item as FloatingCollectionItem in collectionView.visibleItems() {
+            item.cardView.resetContent()
+        }
     }
 
     func resumeObserving() {

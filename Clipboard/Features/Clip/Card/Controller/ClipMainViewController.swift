@@ -29,6 +29,7 @@ final class ClipMainViewController: NSViewController {
     var dragFilterRevision = 0
     var restoringSelection = false
     var lastEscapeTime: TimeInterval = 0
+    private var didReleaseVisiblePayloads = false
 
     // MARK: - Pause Indicator
 
@@ -223,6 +224,12 @@ extension ClipMainViewController {
         super.viewDidAppear()
         lastEscapeTime = 0
 
+        if didReleaseVisiblePayloads {
+            didReleaseVisiblePayloads = false
+            applySnapshot(animating: false)
+            restoreSelection()
+        }
+
         if topBarView.isSearching, !topVM.hasInput {
             topBarView.deactivateSearch()
             setFocusRegion(.collection)
@@ -264,6 +271,18 @@ extension ClipMainViewController {
     func pauseObserving() {
         pauseTimerCancellable = nil
         presenter.pauseObserving()
+        var snapshot = NSDiffableDataSourceSnapshot<ClipSection, PasteboardModel>()
+        snapshot.appendSections([.main])
+        diffableDataSource?.apply(snapshot, animatingDifferences: false)
+    }
+
+    /// 释放闲置隐藏窗口中挂载的 visibleItems 的渲染产物与位图
+    func releaseVisibleCellPayloads() {
+        guard !didReleaseVisiblePayloads else { return }
+        didReleaseVisiblePayloads = true
+        for item in collectionView.visibleItems() {
+            (item as? CollectionViewItem)?.prepareForReuse()
+        }
     }
 
     func resumeObserving() {

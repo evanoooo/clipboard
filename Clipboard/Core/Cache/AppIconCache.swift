@@ -11,8 +11,8 @@ final class AppIconCache {
     ) ?? NSImage()
 
     private init() {
-        cache.countLimit = 60
-        cache.totalCostLimit = 15 * 1024 * 1024
+        cache.countLimit = 24
+        cache.totalCostLimit = 3 * 1024 * 1024
     }
 
     func getCachedIcon(forAppID id: Int64?, path: String = "") -> NSImage? {
@@ -67,6 +67,7 @@ final class AppIconCache {
 
     func trimMemory() {
         inFlightTasks.removeAll()
+        cache.removeAllObjects()
     }
 
     private func key(id: Int64?, path: String) -> String {

@@ -4,7 +4,6 @@
 //
 
 import AppKit
-@preconcurrency import LinkPresentation
 import SnapKit
 
 // MARK: - FloatingLinkContentView
@@ -81,15 +80,15 @@ final class FloatingLinkContentView: NSView, CancellableLoadable {
 
     private func loadMetadata(for model: PasteboardModel, urlString: String) {
         if let cached = model.cachedLinkMetadata {
-            applyMetadata(title: cached.title, icon: cached.iconImage, urlString: urlString)
+            applyMetadata(title: cached.title, icon: cached.iconImage ?? cached.previewImage, urlString: urlString)
         } else {
             applyMetadata(title: nil, icon: nil, urlString: urlString)
             loadTask = Task { @MainActor [weak self] in
                 guard let url = URL(string: urlString) else { return }
-                let metadata = await FloatingLinkContentView.fetchMetadata(for: url)
+                let metadata = await LinkMetadataService.shared.fetchMetadata(for: url)
                 guard !Task.isCancelled, let self else { return }
                 model.cachedLinkMetadata = metadata
-                applyMetadata(title: metadata.title, icon: metadata.iconImage, urlString: urlString)
+                applyMetadata(title: metadata.title, icon: metadata.iconImage ?? metadata.previewImage, urlString: urlString)
             }
         }
     }
@@ -104,37 +103,6 @@ final class FloatingLinkContentView: NSView, CancellableLoadable {
         if let icon {
             iconView.image = icon
             iconView.contentTintColor = nil
-        }
-    }
-
-    @preconcurrency
-    private static func fetchMetadata(for url: URL) async -> LinkPreviewMetadata {
-        guard url.isLikelySimpleWebPage else {
-            return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
-        }
-
-        let provider = LPMetadataProvider()
-        provider.timeout = 5.0
-        nonisolated(unsafe) let unsafeProvider = provider
-        do {
-            let metadata = try await withTaskCancellationHandler {
-                try await provider.startFetchingMetadata(for: url)
-            } onCancel: {
-                unsafeProvider.cancel()
-            }
-            let icon: NSImage? = await withCheckedContinuation { cont in
-                if let source = metadata.iconProvider ?? metadata.imageProvider,
-                   source.canLoadObject(ofClass: NSImage.self) {
-                    source.loadObject(ofClass: NSImage.self) { img, _ in
-                        cont.resume(returning: img as? NSImage)
-                    }
-                } else {
-                    cont.resume(returning: nil)
-                }
-            }
-            return LinkPreviewMetadata(title: metadata.title, previewImage: nil, iconImage: icon)
-        } catch {
-            return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
         }
     }
 }

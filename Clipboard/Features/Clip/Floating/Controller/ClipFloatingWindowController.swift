@@ -78,6 +78,10 @@ final class ClipFloatingWindowController: NSWindowController {
         clipVC.floatingContentView.pauseObserving()
     }
 
+    func releaseVisibleCellPayloads() {
+        clipVC.floatingContentView.releaseVisibleCellPayloads()
+    }
+
     func resumeObserving() {
         clipVC.floatingContentView.resumeObserving()
     }

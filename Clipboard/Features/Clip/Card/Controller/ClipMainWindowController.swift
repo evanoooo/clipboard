@@ -67,6 +67,10 @@ final class ClipMainWindowController: NSWindowController {
         (contentViewController as? ClipMainViewController)?.pauseObserving()
     }
 
+    func releaseVisibleCellPayloads() {
+        (contentViewController as? ClipMainViewController)?.releaseVisibleCellPayloads()
+    }
+
     func resumeObserving() {
         (contentViewController as? ClipMainViewController)?.resumeObserving()
     }

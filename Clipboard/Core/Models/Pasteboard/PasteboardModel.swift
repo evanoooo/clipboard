@@ -10,12 +10,15 @@ import ImageIO
 import UniformTypeIdentifiers
 
 final class PasteboardModel: Identifiable, Codable {
+    /// 截断列表展示用的 search_text，避免超大单行文本撑爆内存，单测可直接覆盖
+    nonisolated static func listSearchText(_ rawText: String?) -> String {
+        SearchTextNormalizer.capForListModel(rawText)
+    }
+
     var id: Int64?
     /// 仅内存态缓存数据库的 sort_order，用于撤销删除后回到原位；不参与 Codable。
     var sortOrder: Int64 = 0
     let uniqueId: String
-    /// 兼容旧版前 1024 字节哈希的 uniqueId，用于平滑过渡去重比对；不参与 Codable。
-    nonisolated let legacyUniqueId: String?
     let pasteboardType: PasteboardType
     private var _data: Data?
 
@@ -144,8 +147,7 @@ final class PasteboardModel: Identifiable, Codable {
         hidden: Bool = false,
         uniqueId: String? = nil,
         appID: Int64? = nil,
-        sourceBundleID: String? = nil,
-        legacyUniqueId: String? = nil
+        sourceBundleID: String? = nil
     ) {
         self.pasteboardType = pasteboardType
         self._data = data
@@ -161,7 +163,6 @@ final class PasteboardModel: Identifiable, Codable {
         self.tag = tag
         self.alias = alias
         self.hidden = hidden
-        self.legacyUniqueId = legacyUniqueId
 
         self.uniqueId = uniqueId ?? Self.generateUniqueId(
             for: pasteboardType,

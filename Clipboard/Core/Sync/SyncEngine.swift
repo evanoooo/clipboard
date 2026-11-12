@@ -502,6 +502,8 @@ final class SyncEngine: ObservableObject {
 
             addLog("待拉取条目: \(toDownloadIds.count) 条，启动并发流水线...")
             let maxConcurrency = 3
+            let budgetLimiter = SyncByteBudgetLimiter(maxBudgetBytes: 24 * 1024 * 1024)
+            let remoteEntriesSnapshot = remoteIndex.entries
             var restoredCount = 0
             let total = toDownloadIds.count
             var batchBuffer: [SyncItemBlob] = []
@@ -512,7 +514,10 @@ final class SyncEngine: ObservableObject {
 
                 for _ in 0..<maxConcurrency {
                     if let id = iterator.next() {
+                        let estBytes = Self.estimatedDownloadBytes(id: id, entry: remoteEntriesSnapshot[id])
                         group.addTask {
+                            let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
+                            defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
                             let sharded = SyncIndex.shardedItemPath(for: id)
                             let legacy = SyncIndex.legacyItemPath(for: id)
                             let encData: Data? = if let d = try? await client.download(from: sharded) {
@@ -550,7 +555,10 @@ final class SyncEngine: ObservableObject {
                     }
 
                     if !Task.isCancelled, let nextId = iterator.next() {
+                        let estBytes = Self.estimatedDownloadBytes(id: nextId, entry: remoteEntriesSnapshot[nextId])
                         group.addTask {
+                            let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
+                            defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
                             let sharded = SyncIndex.shardedItemPath(for: nextId)
                             let legacy = SyncIndex.legacyItemPath(for: nextId)
                             let encData: Data? = if let d = try? await client.download(from: sharded) {
@@ -780,9 +788,11 @@ final class SyncEngine: ObservableObject {
             }
             addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理本地 \(diff.toDeleteLocal.count) 条, 待清理远端 \(diff.toDeleteRemote.count) 条")
 
-            // 8. 受控滑动窗口并发流水线：下载需拉取条目 (限制并发为 3)
+            // 8. 受控滑动窗口并发流水线：下载需拉取条目 (限制并发为 3，在途字节上限 24MB)
             if !diff.toDownload.isEmpty {
                 let maxConcurrency = 3
+                let budgetLimiter = SyncByteBudgetLimiter(maxBudgetBytes: 24 * 1024 * 1024)
+                let remoteEntriesSnapshot = remoteIndex.entries
                 var downloadedCount = 0
                 let totalDownloads = diff.toDownload.count
                 var batchBuffer: [SyncItemBlob] = []
@@ -794,7 +804,10 @@ final class SyncEngine: ObservableObject {
                     for _ in 0..<maxConcurrency {
                         if isCancelled || Task.isCancelled { break }
                         if let id = iterator.next() {
+                            let estBytes = Self.estimatedDownloadBytes(id: id, entry: remoteEntriesSnapshot[id])
                             group.addTask { [weak self] in
+                                let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
+                                defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
                                 let sharded = SyncIndex.shardedItemPath(for: id)
                                 let legacy = SyncIndex.legacyItemPath(for: id)
                                 let encData: Data? = if let d = try? await client.download(from: sharded) {
@@ -836,7 +849,10 @@ final class SyncEngine: ObservableObject {
                         }
 
                         if !isCancelled && !Task.isCancelled, let nextId = iterator.next() {
+                            let estBytes = Self.estimatedDownloadBytes(id: nextId, entry: remoteEntriesSnapshot[nextId])
                             group.addTask { [weak self] in
+                                let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
+                                defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
                                 let sharded = SyncIndex.shardedItemPath(for: nextId)
                                 let legacy = SyncIndex.legacyItemPath(for: nextId)
                                 let encData: Data? = if let d = try? await client.download(from: sharded) {
@@ -889,9 +905,10 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 9. 受控滑动窗口并发流水线：加密上传本地条目 (限制并发为 3，Payload 延迟按需加载，UI 节流刷新与检查点保存)
+            // 9. 受控滑动窗口并发流水线：加密上传本地条目 (限制并发为 3，在途字节上限 24MB，Payload 延迟按需加载)
             if !diff.toUpload.isEmpty {
                 let maxConcurrency = 3
+                let uploadBudgetLimiter = SyncByteBudgetLimiter(maxBudgetBytes: 24 * 1024 * 1024)
                 var uploadedCount = 0
                 let totalUploads = diff.toUpload.count
                 var ensuredDirectories = Set<String>()
@@ -909,11 +926,14 @@ final class SyncEngine: ObservableObject {
                                 try? await client.makeDirectory(path: dir)
                                 ensuredDirectories.insert(dir)
                             }
+                            let estBytes = Self.estimatedUploadBytes(for: blob)
                             group.addTask {
+                                let acquired = await uploadBudgetLimiter.acquire(estimatedBytes: estBytes)
+                                defer { Task { await uploadBudgetLimiter.release(acquiredBytes: acquired) } }
                                 var uploadBlob = blob
-                                // 关键内存优化：延迟点查 Payload 与 showData，仅上传时读取，随 task 结束即刻释放
+                                // 关键内存优化：延迟点查 Payload 与 showData，走 Bulk 通道避免阻塞 UI 点查，随 task 结束即刻释放
                                 if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId)
+                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId, channel: .bulk)
                                 }
                                 if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
                                     uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId)
@@ -973,10 +993,13 @@ final class SyncEngine: ObservableObject {
                                 try? await client.makeDirectory(path: dir)
                                 ensuredDirectories.insert(dir)
                             }
+                            let estBytes = Self.estimatedUploadBytes(for: nextBlob)
                             group.addTask {
+                                let acquired = await uploadBudgetLimiter.acquire(estimatedBytes: estBytes)
+                                defer { Task { await uploadBudgetLimiter.release(acquiredBytes: acquired) } }
                                 var uploadBlob = nextBlob
                                 if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId)
+                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId, channel: .bulk)
                                 }
                                 if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
                                     uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId)
@@ -1098,6 +1121,71 @@ final class SyncEngine: ObservableObject {
             self.currentState = state
             addLog("同步失败: \(error.localizedDescription)", isError: true)
             return state
+        }
+    }
+
+    // MARK: - 在途字节估算
+
+    nonisolated private static func estimatedDownloadBytes(id: String, entry: SyncIndexEntry?) -> Int {
+        if let size = entry?.size, size > 0 {
+            return size
+        }
+        if id.contains("-"), let tail = id.split(separator: "-").last, let exactBytes = Int(tail), exactBytes > 0 {
+            return exactBytes
+        }
+        return 512 * 1024
+    }
+
+    nonisolated private static func estimatedUploadBytes(for blob: SyncItemBlob) -> Int {
+        if let payloadCount = blob.payloadData?.count, payloadCount > 0 {
+            return payloadCount + (blob.showData?.count ?? 0)
+        }
+        if blob.uniqueId.contains("-"), let tail = blob.uniqueId.split(separator: "-").last, let exactBytes = Int(tail), exactBytes > 0 {
+            return exactBytes
+        }
+        return 512 * 1024
+    }
+}
+
+/// 云同步在途字节预算限流器：控制在途并发内存占用上限（默认 24MB），单条超大对象自动退化为独占串行处理
+actor SyncByteBudgetLimiter {
+    private let maxBudgetBytes: Int
+    private var inFlightBytes: Int = 0
+    private var inFlightCount: Int = 0
+    private var waiters: [(requestedBytes: Int, continuation: CheckedContinuation<Int, Never>)] = []
+
+    init(maxBudgetBytes: Int = 24 * 1024 * 1024) {
+        self.maxBudgetBytes = maxBudgetBytes
+    }
+
+    func acquire(estimatedBytes: Int) async -> Int {
+        let cost = max(estimatedBytes, 64 * 1024)
+        if inFlightCount == 0 || (inFlightBytes + cost <= maxBudgetBytes) {
+            inFlightBytes += cost
+            inFlightCount += 1
+            return cost
+        }
+        return await withCheckedContinuation { continuation in
+            waiters.append((cost, continuation))
+        }
+    }
+
+    func release(acquiredBytes: Int) {
+        inFlightBytes = max(0, inFlightBytes - acquiredBytes)
+        inFlightCount = max(0, inFlightCount - 1)
+        drainWaiters()
+    }
+
+    private func drainWaiters() {
+        while let first = waiters.first {
+            if inFlightCount == 0 || (inFlightBytes + first.requestedBytes <= maxBudgetBytes) {
+                waiters.removeFirst()
+                inFlightBytes += first.requestedBytes
+                inFlightCount += 1
+                first.continuation.resume(returning: first.requestedBytes)
+            } else {
+                break
+            }
         }
     }
 }

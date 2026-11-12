@@ -251,6 +251,7 @@ extension CollectionViewItem {
     override func viewDidLayout() {
         super.viewDidLayout()
         updateContentInset()
+        updateShadow()
     }
 
     override var isSelected: Bool {
@@ -300,7 +301,23 @@ extension CollectionViewItem {
     }()
 
     private func updateShadow() {
-        selectionBorderView.shadow = isSelected ? nil : Self.unselectedShadow
+        if isSelected {
+            selectionBorderView.shadow = nil
+            selectionBorderView.layer?.shadowOpacity = 0
+            selectionBorderView.layer?.shadowPath = nil
+        } else {
+            selectionBorderView.shadow = Self.unselectedShadow
+            let bounds = selectionBorderView.bounds
+            if bounds.width > 0, bounds.height > 0 {
+                let cornerRadius = Const.radius + Const.selectionBorderWidth
+                selectionBorderView.layer?.shadowPath = CGPath(
+                    roundedRect: bounds,
+                    cornerWidth: cornerRadius,
+                    cornerHeight: cornerRadius,
+                    transform: nil
+                )
+            }
+        }
     }
 
     private func updateContentInset() {

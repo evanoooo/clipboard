@@ -124,7 +124,7 @@ extension AppDelegate {
 
         HotKeyManager.shared.initialize()
 
-        WelcomeWindowController.shared.showIfNeeded()
+        WelcomeWindowController.showIfNeeded()
 
         syncLaunchAtLoginStatus()
 

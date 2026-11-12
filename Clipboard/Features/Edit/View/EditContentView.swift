@@ -182,13 +182,15 @@ final class EditContentView: NSVisualEffectView {
     // MARK: - Content
 
     private func loadContent(from model: PasteboardModel) {
-        let data = model.data
         let typeRawValue = model.pasteboardType.rawValue
         let width = jsonEditor.preparationWidth
+        let modelId = model.id
+        let uniqueId = model.uniqueId
         contentTask?.cancel()
         contentTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .userInitiated) { [weak self] in
-                await JSONDocument.load(data: data, type: typeRawValue, width: width) { [weak self] isValid in
+                let rawData = PasteDataPointReader.loadData(id: modelId, uniqueId: uniqueId, channel: .bulk) ?? Data()
+                return await JSONDocument.load(data: rawData, type: typeRawValue, width: width) { [weak self] isValid in
                     guard let self, !isClosed, !Task.isCancelled else { return }
                     toolbar.setMode(isValid ? .json : .text)
                     onModeChange?(isValid ? .json : .text, false)

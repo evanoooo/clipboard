@@ -72,6 +72,16 @@ final class WindowManager {
         }
     }
 
+    /// 释放隐藏窗口中挂载的 visibleItems 的渲染产物与位图，降低闲置内存
+    func releaseHiddenWindowPayloads() {
+        if ClipMainWindowController.isInstanceLoaded, !ClipMainWindowController.shared.isVisible {
+            ClipMainWindowController.shared.releaseVisibleCellPayloads()
+        }
+        if ClipFloatingWindowController.isInstanceLoaded, !ClipFloatingWindowController.shared.isVisible {
+            ClipFloatingWindowController.shared.releaseVisibleCellPayloads()
+        }
+    }
+
     /// 幂等隐藏窗口，用于 Esc 退出、点击外部或操作完成关闭场景（避免 toggleWindow 造成竞态反向打开）
     func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
         HotKeyManager.shared.resetPressedKeys()

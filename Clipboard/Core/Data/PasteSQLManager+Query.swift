@@ -46,7 +46,8 @@ extension PasteSQLManager {
                 Col.id, Col.uniqueId, Col.type, Col.timestamp,
                 Col.appID, Col.searchText,
                 Col.showData, Col.length, Col.group,
-                Col.tag, Col.alias, Col.hidden, Col.sortOrder
+                Col.tag, Col.alias, Col.hidden, Col.sortOrder,
+                Col.inlineData
             ]
         let ord = order ?? [Col.sortOrder.desc, Col.id.desc]
 

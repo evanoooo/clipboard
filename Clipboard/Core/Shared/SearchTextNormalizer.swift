@@ -46,4 +46,10 @@ enum SearchTextNormalizer {
         }
         return tokens
     }
+
+    /// 截断列表展示模型持有的 search_text，防止超大单行文本常驻内存
+    nonisolated static func capForListModel(_ rawText: String?) -> String {
+        guard let rawText else { return "" }
+        return rawText.count > 2000 ? String(rawText.prefix(2000)) : rawText
+    }
 }

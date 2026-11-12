@@ -75,6 +75,10 @@ final class FloatingWindowContentView: NSView {
         footerView.pauseObserving()
     }
 
+    func releaseVisibleCellPayloads() {
+        historyView.releaseVisibleCellPayloads()
+    }
+
     func resumeObserving() {
         historyView.resumeObserving()
         footerView.resumeObserving()

@@ -7,8 +7,6 @@
 //
 
 import AppKit
-import ImageIO
-@preconcurrency import LinkPresentation
 import SnapKit
 
 // MARK: - CardLinkPreviewContentView
@@ -126,19 +124,17 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, Cancella
 
         fetchTask?.cancel()
 
-        fetchTask = Task.detached(priority: .userInitiated) { [weak self, weak model] in
+        fetchTask = Task { @MainActor [weak self, weak model] in
             guard let self, let model else { return }
 
-            let meta = await Self.fetchMetadata(for: url)
+            let meta = await LinkMetadataService.shared.fetchMetadata(for: url)
 
-            await MainActor.run {
-                guard !Task.isCancelled else { return }
-                model.cachedLinkMetadata = meta
-                self.titleLabel.stringValue = Self.singleLineTitle(meta.title)
-                    ?? url.host()
-                    ?? url.absoluteString
-                self.applyMetadata(meta)
-            }
+            guard !Task.isCancelled else { return }
+            model.cachedLinkMetadata = meta
+            self.titleLabel.stringValue = Self.singleLineTitle(meta.title)
+                ?? url.host()
+                ?? url.absoluteString
+            self.applyMetadata(meta)
         }
     }
 
@@ -282,77 +278,5 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, Cancella
         }
 
         return mutable
-    }
-
-    private static func fetchMetadata(for url: URL) async -> LinkPreviewMetadata {
-        guard url.isLikelySimpleWebPage else {
-            return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
-        }
-
-        let provider = LPMetadataProvider()
-        provider.timeout = 5.0
-
-        nonisolated(unsafe) let unsafeProvider = provider
-
-        do {
-            let metadata = try await withTaskCancellationHandler {
-                try await provider.startFetchingMetadata(for: url)
-            } onCancel: {
-                unsafeProvider.cancel()
-            }
-
-            let rawPreview: NSImage? = await loadImage(from: metadata.imageProvider)
-            let previewImage = downscaleIfNeeded(rawPreview, maxPixelSize: 600)
-            let rawIcon: NSImage? = previewImage == nil
-                ? await loadImage(from: metadata.iconProvider)
-                : nil
-            let iconImage = downscaleIfNeeded(rawIcon, maxPixelSize: 128)
-
-            return LinkPreviewMetadata(
-                title: metadata.title,
-                previewImage: previewImage,
-                iconImage: iconImage
-            )
-        } catch {
-            return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
-        }
-    }
-
-    private static func downscaleIfNeeded(_ image: NSImage?, maxPixelSize: CGFloat) -> NSImage? {
-        guard let image else { return nil }
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return image
-        }
-        let width = CGFloat(cgImage.width)
-        let height = CGFloat(cgImage.height)
-        let maxDim = max(width, height)
-        guard maxDim > maxPixelSize else { return image }
-
-        let scale = maxPixelSize / maxDim
-        let targetWidth = max(Int(width * scale), 1)
-        let targetHeight = max(Int(height * scale), 1)
-        let colorSpace = cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB()
-        guard let context = CGContext(
-            data: nil,
-            width: targetWidth,
-            height: targetHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return image }
-        context.interpolationQuality = .high
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
-        guard let scaledCGImage = context.makeImage() else { return image }
-        return NSImage(cgImage: scaledCGImage, size: NSSize(width: targetWidth, height: targetHeight))
-    }
-
-    private static func loadImage(from provider: NSItemProvider?) async -> NSImage? {
-        guard let provider, provider.canLoadObject(ofClass: NSImage.self) else { return nil }
-        return await withCheckedContinuation { continuation in
-            provider.loadObject(ofClass: NSImage.self) { image, _ in
-                continuation.resume(returning: image as? NSImage)
-            }
-        }
     }
 }
