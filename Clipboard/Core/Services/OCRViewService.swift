@@ -6,7 +6,6 @@
 //
 
 import AppKit
-import Vision
 
 actor OCRViewService {
     static let shared = OCRViewService()
@@ -49,12 +48,10 @@ actor OCRViewService {
                 return isolatedResult
             }
         } catch {
-            // 临时文件写入失败时降级为本地识别
+            log.error("写入 OCR 临时文件失败：\(error)")
         }
 
-        return await Task.detached(priority: priority) {
-            OCRWorkerProcess.recognizeData(data)
-        }.value
+        return ""
     }
 
     func recognizeText(at fileURL: URL, priority: TaskPriority = .utility) async -> String {
@@ -65,8 +62,6 @@ actor OCRViewService {
             return isolatedResult
         }
 
-        return await Task.detached(priority: priority) {
-            OCRWorkerProcess.recognizeFile(at: fileURL)
-        }.value
+        return ""
     }
 }
