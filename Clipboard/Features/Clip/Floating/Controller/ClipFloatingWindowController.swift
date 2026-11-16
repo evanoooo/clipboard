@@ -45,6 +45,7 @@ final class ClipFloatingWindowController: NSWindowController {
         clipVC.floatingContentView.setDisplayMode(displayMode)
         Self.isInstanceLoaded = true
         setupWindow()
+        pauseObserving()
     }
 
     @available(*, unavailable)
@@ -255,6 +256,7 @@ final class ClipFloatingWindowController: NSWindowController {
         }
 
         clipVC.env.previousApp = NSWorkspace.shared.frontmostApplication
+        resumeObserving()
         positionWindow()
         win.alphaValue = 0
         win.setIsVisible(true)
@@ -297,6 +299,7 @@ final class ClipFloatingWindowController: NSWindowController {
                 win.setIsVisible(false)
                 win.alphaValue = 1
                 win.orderOut(nil)
+                self.pauseObserving()
                 malloc_zone_pressure_relief(malloc_default_zone(), 0)
             }
         }

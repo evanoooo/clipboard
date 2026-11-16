@@ -41,6 +41,7 @@ final class ClipMainWindowController: NSWindowController {
         super.init(window: panel)
         Self.isInstanceLoaded = true
         setupWindow()
+        pauseObserving()
     }
 
     @available(*, unavailable)
@@ -125,6 +126,7 @@ extension ClipMainWindowController {
                 AppEnvironment.shared.previousApp?.activate(options: [])
             }
             self.window?.orderOut(nil)
+            self.pauseObserving()
             malloc_zone_pressure_relief(malloc_default_zone(), 0)
         }
     }
@@ -136,6 +138,7 @@ extension ClipMainWindowController {
         let initiallyHidden = !window.isVisible
 
         if initiallyHidden {
+            resumeObserving()
             let screenFrame = frame ?? NSScreen.main?.frame ?? .zero
             AppEnvironment.shared.previousApp = NSWorkspace.shared.frontmostApplication
             let visibleFrame = NSRect(
