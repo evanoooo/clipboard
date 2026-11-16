@@ -67,6 +67,8 @@ actor PasteReadStore {
             let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
             try? database.execute("PRAGMA mmap_size=\(mmapBytes)")
             try? database.execute("PRAGMA temp_store=MEMORY")
+            // 限制读连接页面缓存为 512KB，兼顾 50 条分页查询 B-Tree 命中与极致低内存
+            try? database.execute("PRAGMA cache_size = -512")
             let mapped = (try? database.scalar("PRAGMA mmap_size")) as? Int64
             log.info("SQLite read connection mmap_size=\(mapped ?? 0)")
             return database

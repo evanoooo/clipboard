@@ -50,6 +50,8 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         try? database.execute("PRAGMA synchronous=NORMAL")
         // 临时表与复杂排序驻留内存，杜绝临时文件写盘 I/O 尖刺
         try? database.execute("PRAGMA temp_store=MEMORY")
+        // 限制写连接页面缓存为 512KB，避免默认 2000 页（约 8MB）常驻占用物理内存
+        try? database.execute("PRAGMA cache_size = -512")
         // 整库虚拟内存映射：零拷贝极速检索，上限按用户配置生效
         let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
         try? database.execute("PRAGMA mmap_size=\(mmapBytes)")
