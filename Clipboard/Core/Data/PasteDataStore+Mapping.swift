@@ -37,10 +37,12 @@ extension PasteDataStore {
 
                 let pType = PasteboardType(type)
 
-                if pType.isText(), showData == nil {
-                    // 极致性能：优先从已在行记录中的 searchText 提取兜底预览，杜绝在映射流水线中发起同步磁盘 I/O
-                    if let rawSearchText, !rawSearchText.isEmpty {
-                        showData = String(rawSearchText.prefix(300)).data(using: .utf8)
+                if pType.isText(), (showData == nil || showData?.isEmpty == true) {
+                    // 优先从内联原文截取（保留原始大小写与排版），超大文本再回退至 searchText
+                    if let inlineData, let inlineText = String(data: inlineData, encoding: .utf8), !inlineText.isEmpty {
+                        showData = Data(inlineText.prefix(300).utf8)
+                    } else if let rawSearchText, !rawSearchText.isEmpty {
+                        showData = Data(rawSearchText.prefix(300).utf8)
                     }
                 }
 

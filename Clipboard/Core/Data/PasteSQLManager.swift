@@ -81,6 +81,7 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         do {
             try conn.run(statement)
             try migrateMediaColumnsIfNeeded(on: conn)
+            try clearRedundantPlainTextShowDataIfNeeded(on: conn)
             try PasteOrder.setup(on: conn)
             try PasteAliasMigration.setup(on: conn)
             try PasteFTSMigration.setup(on: conn)
@@ -98,6 +99,15 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         if !columns.contains("media_size") {
             try conn.run("ALTER TABLE Clip ADD COLUMN media_size INTEGER NOT NULL DEFAULT 0")
         }
+    }
+
+    /// 清理历史纯文本冗余的 `show_data`（列表已统一由原文或 search_text 切片）
+    nonisolated private static func clearRedundantPlainTextShowDataIfNeeded(on conn: Connection) throws {
+        let hasLegacy = try conn.scalar(
+            "SELECT 1 FROM Clip WHERE type = 'public.utf8-plain-text' AND show_data IS NOT NULL LIMIT 1"
+        ) != nil
+        guard hasLegacy else { return }
+        try conn.run("UPDATE Clip SET show_data = NULL WHERE type = 'public.utf8-plain-text' AND show_data IS NOT NULL")
     }
 
     nonisolated static func createIndexes(on conn: Connection) {

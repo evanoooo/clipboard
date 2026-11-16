@@ -9,6 +9,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
+import UniformTypeIdentifiers
 
 nonisolated enum ImageDownsampler {
     /// 针对二进制数据执行只读元数据解析与下采样解码，产出受控分辨率的 CGImage
@@ -71,14 +72,29 @@ nonisolated enum ImageDownsampler {
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
-    /// 针对大图二进制下采样生成轻量 JPEG / PNG 缩略图 Data
+    /// 针对大图二进制下采样生成轻量 HEIC（体积比 JPEG 小 40%–50%）或兜底 JPEG/PNG 缩略图 Data
     static func generateThumbnailData(
         from data: Data,
         maxPixelSize: CGFloat = 300,
-        compressionFactor: Double = 0.8
+        compressionFactor: Double = 0.65
     ) -> Data? {
         guard let cgImage = downsampleCGImage(from: data, maxPixelSize: maxPixelSize) else {
             return nil
+        }
+        let mutableData = NSMutableData()
+        if let dest = CGImageDestinationCreateWithData(
+            mutableData,
+            UTType.heic.identifier as CFString,
+            1,
+            nil
+        ) {
+            let options = [
+                kCGImageDestinationLossyCompressionQuality: compressionFactor
+            ] as CFDictionary
+            CGImageDestinationAddImage(dest, cgImage, options)
+            if CGImageDestinationFinalize(dest), mutableData.length > 0 {
+                return mutableData as Data
+            }
         }
         let rep = NSBitmapImageRep(cgImage: cgImage)
         return rep.representation(using: .jpeg, properties: [.compressionFactor: compressionFactor])

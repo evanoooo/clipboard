@@ -60,3 +60,12 @@
 - [x] **D3. SyncWorker Actor 化**：已将本地元数据扫描与 3-Way Diff 计算迁入独立 `SyncWorker` Actor 彻底脱离 `@MainActor`（云端索引分片可按需迭代）
 - [x] **D4. Gap-based `O(1)` 排序**：`PasteOrder` 采用步长 `65536` 的间隙排序，单次拖拽仅更新 1 行
 - [x] **D5. 轻量值模型与懒加载**：已实现 `showData` 4MB 有界 LRU 缓存（`ModelShowDataCache`）、可见区图标懒加载与只读连接存储统计（不可变 `ClipRowItem` 可作为后续增量演进）
+
+---
+
+## 五、Phase E：存储体积极致瘦身
+
+- [x] **E1. 消除纯文本冗余 `show_data`**：纯文本不再落盘 `show_data`，列表加载由 `inlineData` / `search_text` 切片，并在建表迁移时清理历史纯文本冗余 `show_data`（立省 ~14.4 MB）
+- [x] **E2. FTS5 External Content 核验**：已核验 `clip_fts` 已采用 `content='Clip', content_rowid='id'` 外部内容表
+- [x] **E3. 缩略图 HEIC 编码**：`ImageDownsampler.generateThumbnailData` 优先采用 `UTType.heic`（quality `0.65`）编码，体积比 JPEG 缩减 ~40%–50%
+- [x] **E4. 冷热数据分层归档**：超过 180 天未收藏历史冷记录自动归档至只读冷库 `ClipArchive.sqlite3`，支持联合检索、冷分页接力、点查回退与重复制回温

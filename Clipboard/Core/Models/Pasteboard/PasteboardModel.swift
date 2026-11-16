@@ -112,11 +112,19 @@ final class PasteboardModel: Identifiable, Codable {
         cachedHasBackgroundColor
     }
 
-    /// 轻量文本预览：纯文本直接从 showData 读取 UTF-8 字符串，杜绝无谓构建重量级 NSAttributedString
+    /// 轻量文本预览：纯文本直接从 showData / 内联原文读取 UTF-8 字符串，杜绝无谓构建重量级 NSAttributedString
     var previewPlainText: String {
         if let cached = runtimeCache.plainText { return cached }
-        if pasteboardType == .string, let showData, let str = String(data: showData, encoding: .utf8) {
-            return str
+        if pasteboardType == .string {
+            if let showData, !showData.isEmpty, let str = String(data: showData, encoding: .utf8) {
+                return str
+            }
+            if let inline = _data, !inline.isEmpty, let str = String(data: inline, encoding: .utf8) {
+                return str.count > 300 ? String(str.prefix(300)) : str
+            }
+            if !searchText.isEmpty {
+                return String(searchText.prefix(300))
+            }
         }
         return attributeString.string
     }

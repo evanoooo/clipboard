@@ -15,6 +15,7 @@ actor PasteReadStore {
 
     private let table = Table("Clip")
     private var connection: Connection?
+    private var archiveConnection: Connection?
 
     private init() {}
 
@@ -22,15 +23,17 @@ actor PasteReadStore {
     func setup() -> Bool {
         guard connection == nil else { return true }
 
-        if let database = open(readonly: true) {
+        if let database = open(path: Self.databasePath, readonly: true) {
             connection = database
+            reopenArchive()
             log.info("只读连接已就绪")
             return true
         }
 
         // 只读连接打不开时回退到独立读写连接：仍与写入侧隔离，不阻断启动。
-        if let database = open(readonly: false) {
+        if let database = open(path: Self.databasePath, readonly: false) {
             connection = database
+            reopenArchive()
             log.warn("只读连接不可用，已回退为独立读写连接")
             return true
         }
@@ -43,12 +46,22 @@ actor PasteReadStore {
     @discardableResult
     func reopen() -> Bool {
         connection = nil
+        archiveConnection = nil
         return setup()
     }
 
-    private func open(readonly: Bool) -> Connection? {
+    /// 刷新冷库只读连接（冷归档完成后按需挂载）
+    func reopenArchive() {
+        guard ColdArchiveManager.archiveExists() else {
+            archiveConnection = nil
+            return
+        }
+        archiveConnection = open(path: ColdArchiveManager.archiveDatabasePath, readonly: true)
+    }
+
+    private func open(path: String, readonly: Bool) -> Connection? {
         do {
-            let database = try Connection(Self.databasePath, readonly: readonly)
+            let database = try Connection(path, readonly: readonly)
             database.busyTimeout = 5.0
             try database.execute("PRAGMA query_only=1")
             let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
@@ -106,7 +119,31 @@ actor PasteReadStore {
             guard let result = try connection?.prepare(query) else {
                 return []
             }
-            let rows = Array(result)
+            var rows = Array(result)
+
+            // 联合检索/冷分页：仅当指定分页且热库结果不足一页时，无缝从只读冷库补齐
+            if let limit, rows.count < limit, let archiveConnection {
+                let remaining = limit - rows.count
+                let archiveOffset: Int
+                if !rows.isEmpty {
+                    archiveOffset = 0
+                } else if let offset, offset > 0 {
+                    let hotTotal = countOn(connection, filter: filter, limit: nil)
+                    archiveOffset = max(0, offset - hotTotal)
+                } else {
+                    archiveOffset = 0
+                }
+
+                var archiveQuery = table.select(sel).order(ord)
+                if let filter {
+                    archiveQuery = archiveQuery.filter(filter)
+                }
+                archiveQuery = archiveQuery.limit(remaining, offset: archiveOffset)
+                if let archiveResult = try? archiveConnection.prepare(archiveQuery) {
+                    rows.append(contentsOf: archiveResult)
+                }
+            }
+
             let elapsed = started.duration(to: .now)
             let message = "[search.sql] rows=\(rows.count) limit=\(limit ?? -1) offset=\(offset ?? 0) "
                 + "elapsed=\(elapsed.millisecondsText)"
@@ -126,35 +163,48 @@ actor PasteReadStore {
     func getCount(filter: Expression<Bool>?, limit: Int? = nil) async -> Int {
         guard !Task.isCancelled else { return 0 }
         let started = ContinuousClock.now
+        var total = countOn(connection, filter: filter, limit: limit)
+        if let archiveConnection {
+            if let limit {
+                if total < limit {
+                    total += countOn(archiveConnection, filter: filter, limit: limit - total)
+                }
+            } else {
+                total += countOn(archiveConnection, filter: filter, limit: nil)
+            }
+        }
+        log.debug(
+            "[search.count] total=\(total) filtered=\(filter != nil) limit=\(limit ?? -1) "
+                + "elapsed=\(started.duration(to: .now).millisecondsText)"
+        )
+        return total
+    }
+
+    private func countOn(
+        _ db: Connection?,
+        filter: Expression<Bool>?,
+        limit: Int?
+    ) -> Int {
+        guard let db else { return 0 }
         do {
-            let total: Int
             if let limit {
                 var query = table.select(Col.id)
                 if let filter {
                     query = query.filter(filter)
                 }
                 query = query.limit(limit)
-                if let result = try connection?.prepare(query) {
-                    var count = 0
-                    for _ in result {
-                        count += 1
-                    }
-                    total = count
-                } else {
-                    total = 0
+                guard let result = try? db.prepare(query) else { return 0 }
+                var count = 0
+                for _ in result {
+                    count += 1
+                    if Task.isCancelled { return count }
                 }
+                return count
+            } else if let filter {
+                return try db.scalar(table.filter(filter).count)
             } else {
-                if let filter {
-                    total = try connection?.scalar(table.filter(filter).count) ?? 0
-                } else {
-                    total = try connection?.scalar(table.count) ?? 0
-                }
+                return try db.scalar(table.count)
             }
-            log.debug(
-                "[search.count] total=\(total) filtered=\(filter != nil) limit=\(limit ?? -1) "
-                    + "elapsed=\(started.duration(to: .now).millisecondsText)"
-            )
-            return total
         } catch {
             log.error("获取筛选数量失败：\(error)")
             return 0

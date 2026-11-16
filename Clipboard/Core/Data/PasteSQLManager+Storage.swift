@@ -349,7 +349,7 @@ extension PasteSQLManager {
         guard let connection else { return 0 }
         do {
             let stmt = try connection.prepare("SELECT DISTINCT media_rel_path FROM Clip WHERE media_rel_path IS NOT NULL")
-            var referenced = Set<String>()
+            var referenced = ColdArchiveManager.allReferencedMediaPaths()
             for row in stmt {
                 if let path = row[0] as? String, !path.isEmpty {
                     referenced.insert(path)

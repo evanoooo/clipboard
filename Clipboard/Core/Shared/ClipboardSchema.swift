@@ -57,6 +57,11 @@ enum ClipboardPaths {
         appSupportDir.appending(path: "Clip.sqlite3").path
     }
 
+    /// ~/Library/Application Support/com.crown.clipboard/ClipArchive.sqlite3
+    static var archiveDatabase: String {
+        appSupportDir.appending(path: "ClipArchive.sqlite3").path
+    }
+
     /// Presence of this file = MCP enabled. App toggle creates/removes it.
     static var mcpEnableFlag: String {
         appSupportDir.appending(path: "mcp_enabled").path

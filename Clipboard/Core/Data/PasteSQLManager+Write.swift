@@ -188,6 +188,9 @@ extension PasteSQLManager {
         do {
             let rowId = try connection?.run(insert)
             let id = rowId ?? -1
+            if id >= 0 {
+                ColdArchiveManager.removeFromArchiveIfPresent(uniqueId: item.uniqueId)
+            }
             Log.database.info("新增条目入库成功：id=\(id), type=\(item.pasteboardType.rawValue)")
             return PasteInsertResult(
                 id: id,

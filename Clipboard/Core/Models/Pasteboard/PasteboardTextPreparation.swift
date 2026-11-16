@@ -7,7 +7,7 @@ enum PasteboardTextPreparation {
         return PasteContent(
             type: .string,
             data: data,
-            showData: Data(text.prefix(250).utf8),
+            showData: nil,
             searchText: text,
             length: text.utf16.count,
             tag: PasteboardModel.calculateTextTag(text)
@@ -25,9 +25,8 @@ enum PasteboardTextPreparation {
     nonisolated static func prepare(_ data: Data) -> Content? {
         guard let text = String(data: data, encoding: .utf8),
               !text.allSatisfy(\.isWhitespace) else { return nil }
-        let prefixText = String(text.prefix(300))
         return Content(
-            showData: Data(prefixText.utf8),
+            showData: Data(),
             searchText: PasteboardModel.normalizeSearchText(text),
             length: text.utf16.count,
             uniqueId: data.sha256Hex,

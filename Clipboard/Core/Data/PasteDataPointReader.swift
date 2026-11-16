@@ -47,10 +47,10 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
             let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
             sqlite3_exec(db, "PRAGMA mmap_size = \(mmapBytes);", nil, nil, nil)
 
-            let sqlById = "SELECT data, media_rel_path FROM Clip WHERE id = ? LIMIT 1"
+            let sqlById = "SELECT data, media_rel_path, unique_id FROM Clip WHERE id = ? LIMIT 1"
             sqlite3_prepare_v2(db, sqlById, -1, &stmtById, nil)
 
-            let sqlByUniqueId = "SELECT data, media_rel_path FROM Clip WHERE unique_id = ? LIMIT 1"
+            let sqlByUniqueId = "SELECT data, media_rel_path, unique_id FROM Clip WHERE unique_id = ? LIMIT 1"
             sqlite3_prepare_v2(db, sqlByUniqueId, -1, &stmtByUniqueId, nil)
 
             let sqlOCR = "SELECT search_text, unique_id, data, media_rel_path FROM Clip WHERE id = ? LIMIT 1"
@@ -95,6 +95,11 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
                 }
 
                 if sqlite3_step(stmt) == SQLITE_ROW {
+                    if !uniqueId.isEmpty,
+                       let uidPtr = sqlite3_column_text(stmt, 2),
+                       String(cString: uidPtr) != uniqueId {
+                        return nil
+                    }
                     if let relPtr = sqlite3_column_text(stmt, 1) {
                         let relPath = String(cString: relPtr)
                         if !relPath.isEmpty, let external = MediaBlobStore.shared.readBlob(relPath: relPath) {
@@ -263,13 +268,17 @@ nonisolated enum PasteDataPointReader {
         PasteSQLManager.databasePath
     }
 
-    /// 根据 id（主键 B-Tree）或 uniqueId 点查单条记录的完整二进制数据（默认 UI 通道 50ms 超时）
+    /// 根据 id（主键 B-Tree）或 uniqueId 点查单条记录的完整二进制数据（默认 UI 通道 50ms 超时）；
+    /// 热库未命中时无缝回退至冷库 `ClipArchive.sqlite3`。
     nonisolated static func loadData(
         id: Int64?,
         uniqueId: String,
         channel: PointReaderChannel = .ui
     ) -> Data? {
-        PersistentPointReader.shared.loadData(id: id, uniqueId: uniqueId, channel: channel)
+        if let hot = PersistentPointReader.shared.loadData(id: id, uniqueId: uniqueId, channel: channel) {
+            return hot
+        }
+        return ColdArchiveManager.loadData(uniqueId: uniqueId)
     }
 
     /// 若该条目已外置至 `.media/` CAS 存储，则返回可用于零拷贝流式解码的本地文件 URL
@@ -277,7 +286,10 @@ nonisolated enum PasteDataPointReader {
         id: Int64?,
         uniqueId: String
     ) -> URL? {
-        PersistentPointReader.shared.loadMediaURL(id: id, uniqueId: uniqueId)
+        if let hot = PersistentPointReader.shared.loadMediaURL(id: id, uniqueId: uniqueId) {
+            return hot
+        }
+        return ColdArchiveManager.loadMediaURL(uniqueId: uniqueId)
     }
 
     /// 点查单条记录的轻量 showData 缩略数据（命中 4MB 有界 LRU 缓存时零磁盘 I/O）

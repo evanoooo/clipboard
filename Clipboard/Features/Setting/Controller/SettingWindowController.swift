@@ -11,6 +11,7 @@ import SwiftUI
 class SettingWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingWindowController()
     private let viewModel = SettingViewModel()
+    private var isContentAttached = false
 
     private init() {
         let window = SettingWindow(
@@ -40,6 +41,7 @@ class SettingWindowController: NSWindowController, NSWindowDelegate {
         }
 
         super.init(window: window)
+        window.contentView = nil
         window.delegate = self
 
         window.onCommandW = { [weak self] in
@@ -57,14 +59,16 @@ class SettingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func ensureContentView() {
-        guard let window, window.contentView == nil else { return }
+        guard let window, !isContentAttached else { return }
         let settingView = SettingView()
             .environment(viewModel)
         window.contentView = NSHostingView(rootView: settingView)
+        isContentAttached = true
     }
 
     private func releaseContentView() {
         window?.contentView = nil
+        isContentAttached = false
         StorageAnalysisService.shared.clearTransientCache()
     }
 
