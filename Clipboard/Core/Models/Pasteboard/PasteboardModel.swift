@@ -58,6 +58,15 @@ final class PasteboardModel: Identifiable, Codable {
     }
     private var _showData: Data?
 
+    var hasLoadedShowData: Bool {
+        _showData != nil
+    }
+
+    /// 仅返回已在内存中常驻的 showData，未加载时直接返回 nil，绝对不触发数据库点查与额外内存缓存
+    var loadedShowDataIfPresent: Data? {
+        _showData
+    }
+
     var showData: Data? {
         get {
             loadShowData(cache: true)
