@@ -56,7 +56,31 @@ final class PasteboardModel: Identifiable, Codable {
     var mediaFileURL: URL? {
         PasteDataPointReader.loadMediaURL(id: id, uniqueId: uniqueId)
     }
-    let showData: Data?
+    private var _showData: Data?
+
+    var showData: Data? {
+        get {
+            loadShowData(cache: true)
+        }
+        set {
+            _showData = newValue
+        }
+    }
+
+    /// 获取轻量缩略数据（文本截断 / 图像缩略图）。若指定 `cache: false`，点查出的数据不会长期缓存在 `_showData` 中
+    func loadShowData(cache: Bool = true) -> Data? {
+        if let _showData {
+            return _showData
+        }
+        guard let id else { return nil }
+        if let loaded = PasteDataPointReader.loadShowData(id: id) {
+            if cache {
+                _showData = loaded
+            }
+            return loaded
+        }
+        return nil
+    }
     private(set) var timestamp: Int64
     var appID: Int64?
     let sourceBundleID: String?
@@ -164,7 +188,7 @@ final class PasteboardModel: Identifiable, Codable {
     ) {
         self.pasteboardType = pasteboardType
         self._data = data
-        self.showData = showData
+        self._showData = showData
         self.timestamp = timestamp
         self.sourcePath = appPath
         self.sourceName = appName
@@ -268,6 +292,7 @@ final class PasteboardModel: Identifiable, Codable {
     /// 深度闲置清理：释放内存中常驻的重量级二进制与解码位图（原始大图随时可通过 getter 自动重载）
     func clearLoadedPayload() {
         _data = nil
+        _showData = nil
         _attributeString = nil
         _writeItem = nil
         runtimeCache.clear()
