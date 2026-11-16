@@ -12,8 +12,8 @@ final class ModelThumbnailCache: @unchecked Sendable {
     private let cache = NSCache<NSString, NSImage>()
 
     private init() {
-        cache.countLimit = 120
-        cache.totalCostLimit = 24 * 1024 * 1024 // 24 MB
+        cache.countLimit = 60
+        cache.totalCostLimit = 8 * 1024 * 1024 // 8 MB（精简常驻，满足平滑滚动同时控制内存）
     }
 
     func thumbnail(for uniqueId: String) -> NSImage? {
@@ -46,8 +46,8 @@ final class ModelAttributedTextCache: @unchecked Sendable {
     private let cache = NSCache<NSString, NSAttributedString>()
 
     private init() {
-        cache.countLimit = 120
-        cache.totalCostLimit = 12 * 1024 * 1024 // 12 MB
+        cache.countLimit = 60
+        cache.totalCostLimit = 4 * 1024 * 1024 // 4 MB
     }
 
     func text(for key: String) -> NSAttributedString? {
@@ -93,8 +93,8 @@ final class ModelLinkMetadataCache: @unchecked Sendable {
     private let cache = NSCache<NSString, LinkMetadataWrapper>()
 
     private init() {
-        cache.countLimit = 60
-        cache.totalCostLimit = 16 * 1024 * 1024 // 16 MB
+        cache.countLimit = 30
+        cache.totalCostLimit = 6 * 1024 * 1024 // 6 MB
     }
 
     func metadata(for uniqueId: String) -> LinkPreviewMetadata? {
@@ -121,8 +121,8 @@ nonisolated final class ModelShowDataCache: @unchecked Sendable {
     private let cache = NSCache<NSNumber, NSData>()
 
     private init() {
-        cache.countLimit = 200
-        cache.totalCostLimit = 4 * 1024 * 1024
+        cache.countLimit = 100
+        cache.totalCostLimit = 2 * 1024 * 1024 // 2 MB
     }
 
     func data(for id: Int64) -> Data? {

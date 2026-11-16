@@ -19,9 +19,9 @@ final class FileThumbnailService {
     private var inFlightTasks: [String: Task<NSImage, Never>] = [:]
 
     private init() {
-        memoryCache.countLimit = 100
-        memoryCache.totalCostLimit = 20 * 1024 * 1024
-        systemIconCache.countLimit = 60
+        memoryCache.countLimit = 50
+        memoryCache.totalCostLimit = 6 * 1024 * 1024 // 6 MB
+        systemIconCache.countLimit = 30
     }
 
     func clearCache() {

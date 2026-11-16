@@ -26,6 +26,10 @@ enum ClipContentRenderer {
         return cache
     }()
 
+    static func clearCache() {
+        keywordHighlightCache.removeAllObjects()
+    }
+
     /// Resolves high-level semantic content kind from model properties and preferences.
     static func resolveKind(for model: PasteboardModel) -> ClipContentKind {
         switch model.type {

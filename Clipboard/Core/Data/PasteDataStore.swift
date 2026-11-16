@@ -60,6 +60,7 @@ final class PasteDataStore {
         ModelAttributedTextCache.shared.removeAll()
         ModelShowDataCache.shared.removeAll()
         ModelLinkMetadataCache.shared.removeAll()
+        ClipContentRenderer.clearCache()
         sqlite3_release_memory(Int32.max)
         malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }
