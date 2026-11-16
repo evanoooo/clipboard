@@ -87,21 +87,20 @@ enum JSONSyntaxHighlighter {
                         }
                     }
 
-                    // 向前看是否紧跟冒号（可能中间有空白）
+                    // 键沿用正文色，无需为大量键名分配 Span
                     var lookaheadByte = byteIndex
                     while lookaheadByte < count,
                           isWhitespaceByte(bytes[lookaheadByte])
                     {
                         lookaheadByte += 1
                     }
-                    let kind: Kind = lookaheadByte < count
-                        && bytes[lookaheadByte] == 0x3A // colon
-                        ? .key
-                        : .string
-                    result.append(Span(
-                        range: NSRange(location: offset + startUtf16, length: utf16Offset - startUtf16),
-                        kind: kind
-                    ))
+                    let isKey = lookaheadByte < count && bytes[lookaheadByte] == 0x3A // colon
+                    if !isKey {
+                        result.append(Span(
+                            range: NSRange(location: offset + startUtf16, length: utf16Offset - startUtf16),
+                            kind: .string
+                        ))
+                    }
                     continue
                 }
 
@@ -131,12 +130,6 @@ enum JSONSyntaxHighlighter {
                     continue
                 }
 
-                if isPunctuationByte(byte) {
-                    result.append(Span(
-                        range: NSRange(location: offset + utf16Offset, length: 1),
-                        kind: .punctuation
-                    ))
-                }
                 advanceOne()
             }
 

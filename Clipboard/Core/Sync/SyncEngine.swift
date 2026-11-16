@@ -244,46 +244,7 @@ final class SyncEngine: ObservableObject {
     // MARK: - 从 SQLite 全量加载待同步数据（彻底脱离 UI 分页 50 条限制）
 
     private func fetchLocalBlobsForSync(onlySyncPinned: Bool) async -> [SyncItemBlob] {
-        let filter: Expression<Bool> = onlySyncPinned
-            ? (Col.group >= 0 && Col.hidden == 0)
-            : (Col.hidden == 0)
-
-        // 仅查询轻量元数据，严格排除 Col.data 与 Col.showData，避免 1.2W+ 全量同步时占用上百 MB 内存
-        let sel: [Expressible] = [
-            Col.id, Col.uniqueId, Col.type, Col.timestamp,
-            Col.group, Col.tag, Col.alias
-        ]
-
-        let rows = await PasteReadStore.shared.search(
-            filter: filter,
-            select: sel,
-            limit: nil
-        )
-
-        return rows.compactMap { row in
-            guard let uniqueId = try? row.get(Col.uniqueId),
-                  let timestamp = try? row.get(Col.timestamp) else {
-                return nil
-            }
-            let rawType = (try? row.get(Col.type)) ?? ""
-            let id = try? row.get(Col.id)
-            let group = (try? row.get(Col.group)) ?? -1
-            let tag = (try? row.get(Col.tag)) ?? ""
-            let alias = (try? row.get(Col.alias)) ?? ""
-
-            return SyncItemBlob(
-                uniqueId: uniqueId,
-                pasteboardType: rawType,
-                payloadData: nil, // 延迟加载：比对时零 Payload 内存开销
-                showData: nil,    // 延迟加载：比对时零缩略图内存开销
-                timestamp: timestamp,
-                group: group,
-                tag: tag,
-                alias: alias,
-                sourceAppName: nil,
-                localRowId: id
-            )
-        }
+        await SyncWorker.shared.fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
     }
 
     // MARK: - 增量同步调度与周期调度 (支持关闭、实时防抖与周期轮询)
@@ -763,10 +724,10 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 7. 从 SQLite 数据库全量收集本地数据并执行 Diff
+            // 7. 在后台 SyncWorker Actor 中收集本地元数据并执行 3-Way Diff（彻底脱离 @MainActor）
             syncProgress = "扫描本地数据库并比对差异..."
             let onlySyncPinned = self.isOnlySyncPinned
-            let localBlobs = await fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
+            let localBlobs = await SyncWorker.shared.fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
 
             if isCancelled || Task.isCancelled {
                 currentState = .idle
@@ -777,15 +738,13 @@ final class SyncEngine: ObservableObject {
             addLog("本地 SQLite 扫描完成: 共有 \(localBlobs.count) 条待比对记录 (仅同步收藏: \(onlySyncPinned))")
 
             let pendingDeletions = SyncPendingDeletionsStore.shared.getAllDeletions()
-            var diff = Self.calculateDiff(
+            let diff = await SyncWorker.shared.calculateDiff(
                 localItems: localBlobs,
                 remoteIndex: remoteIndex,
                 onlySyncPinned: onlySyncPinned,
-                pendingDeletions: pendingDeletions
+                pendingDeletions: pendingDeletions,
+                corruptItemIDs: corruptItemIDs
             )
-            if !corruptItemIDs.isEmpty {
-                diff.toDownload.removeAll { corruptItemIDs.contains($0) }
-            }
             addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理本地 \(diff.toDeleteLocal.count) 条, 待清理远端 \(diff.toDeleteRemote.count) 条")
 
             // 8. 受控滑动窗口并发流水线：下载需拉取条目 (限制并发为 3，在途字节上限 24MB)
@@ -830,7 +789,10 @@ final class SyncEngine: ObservableObject {
                     }
 
                     while let blob = try await group.next() {
-                        if isCancelled || Task.isCancelled { break }
+                        if isCancelled || Task.isCancelled {
+                            group.cancelAll()
+                            break
+                        }
                         if let blob {
                             batchBuffer.append(blob)
                             batchBufferBytes += blob.payloadData?.count ?? 0
@@ -962,7 +924,10 @@ final class SyncEngine: ObservableObject {
                     }
 
                     while let result = try await group.next() {
-                        if isCancelled || Task.isCancelled { break }
+                        if isCancelled || Task.isCancelled {
+                            group.cancelAll()
+                            break
+                        }
                         if let (id, entry) = result {
                             remoteIndex.entries[id] = entry
                             uploadedCount += 1
@@ -1042,7 +1007,7 @@ final class SyncEngine: ObservableObject {
                 try? await client.delete(path: SyncIndex.legacyItemPath(for: id))
                 remoteIndex.entries[id] = SyncIndexEntry(
                     uniqueId: id,
-                    updatedAt: Int64(Date().timeIntervalSince1970 * 1000),
+                    updatedAt: Int64(Date().timeIntervalSince1970),
                     checksum: "",
                     isDeleted: true,
                     group: -1,
@@ -1062,17 +1027,14 @@ final class SyncEngine: ObservableObject {
                 addLog("已自动修剪 30 天超期墓碑 \(prunedCount) 条，云端索引保持轻量")
             }
 
-            // 11. 智能元数据回填：补全历史条目的类型与估算大小
+            // 11. 智能元数据回填：补全历史条目的类型（不覆盖刚从云端下载更新的条目）
+            let downloadedSet = Set(diff.toDownload)
             let localBlobMap = Dictionary(localBlobs.map { ($0.uniqueId, $0) }, uniquingKeysWith: { first, _ in first })
-            for (id, var entry) in remoteIndex.entries where !entry.isDeleted {
+            for (id, var entry) in remoteIndex.entries where !entry.isDeleted && !downloadedSet.contains(id) {
                 var modified = false
                 if let local = localBlobMap[id] {
                     if entry.type == nil || entry.type?.isEmpty == true {
                         entry.type = local.pasteboardType
-                        modified = true
-                    }
-                    if entry.size == nil || entry.size == 0 {
-                        entry.size = (local.payloadData?.count ?? 0) + (local.showData?.count ?? 0)
                         modified = true
                     }
                     if entry.group != local.group {

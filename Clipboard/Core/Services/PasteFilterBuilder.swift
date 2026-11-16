@@ -24,9 +24,10 @@ enum PasteFilterBuilder {
                 // 关键词归一化后为空（纯标点/空白）：与任何入库文本都不可能匹配
                 clauses.append(Expression<Bool>(value: false))
             } else {
-                let canUseFTS = tokens.allSatisfy { $0.count >= 3 }
-                if canUseFTS {
-                    let matchClauses = tokens.map { token in
+                let ftsTokens = tokens.filter { $0.count >= 3 }
+                let likeTokens = tokens.filter { $0.count < 3 }
+                if !ftsTokens.isEmpty {
+                    let matchClauses = ftsTokens.map { token in
                         let escaped = token.replacing("\"", with: "\"\"")
                         return "\"\(escaped)\""
                     }
@@ -35,15 +36,14 @@ enum PasteFilterBuilder {
                         "id IN (SELECT rowid FROM clip_fts WHERE clip_fts MATCH ?)",
                         [matchString]
                     ))
-                } else {
-                    for token in tokens {
-                        // 正文命中或别名命中均可；NULL 别名用空串参与比较，避免三值逻辑产出 NULL。
-                        let pattern = "%\(token)%"
-                        clauses.append(
-                            Col.searchText.like(pattern)
-                                || (Col.aliasSearch ?? "").like(pattern)
-                        )
-                    }
+                }
+                for token in likeTokens {
+                    // 正文命中或别名命中均可；NULL 别名用空串参与比较，避免三值逻辑产出 NULL。
+                    let pattern = "%\(token)%"
+                    clauses.append(
+                        Col.searchText.like(pattern)
+                            || (Col.aliasSearch ?? "").like(pattern)
+                    )
                 }
             }
         }

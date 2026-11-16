@@ -11,10 +11,24 @@ extension NSAttributedString {
     convenience init?(with data: Data?, type: PasteboardType) {
         guard let data else { return nil }
         switch type {
-        case .rtf:
-            self.init(rtf: data, documentAttributes: nil)
         case .rtfd:
-            self.init(rtfd: data, documentAttributes: nil)
+            if let attr = NSAttributedString(rtfd: data, documentAttributes: nil) {
+                self.init(attributedString: attr)
+            } else if let rtfFallback = NSAttributedString(rtf: data, documentAttributes: nil) {
+                self.init(attributedString: rtfFallback)
+            } else if let str = String(data: data, encoding: .utf8) {
+                self.init(string: str)
+            } else {
+                return nil
+            }
+        case .rtf:
+            if let attr = NSAttributedString(rtf: data, documentAttributes: nil) {
+                self.init(attributedString: attr)
+            } else if let str = String(data: data, encoding: .utf8) {
+                self.init(string: str)
+            } else {
+                return nil
+            }
         case .string:
             if let string = String(data: data, encoding: .utf8) {
                 self.init(string: string)

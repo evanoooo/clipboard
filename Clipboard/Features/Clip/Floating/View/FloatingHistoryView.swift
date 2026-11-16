@@ -348,6 +348,23 @@ extension FloatingHistoryView: NSCollectionViewDelegate {
 
     func collectionView(
         _: NSCollectionView,
+        draggingSession session: NSDraggingSession,
+        willBeginAt _: NSPoint,
+        forItemsAt indexPaths: Set<IndexPath>
+    ) {
+        let extraURLs = indexPaths.flatMap { indexPath -> [NSURL] in
+            guard indexPath.item < dataList.count else { return [] }
+            let paths = dataList[indexPath.item].filePathsForDragging
+            guard paths.count > 1 else { return [] }
+            return paths.dropFirst().map { URL(fileURLWithPath: $0) as NSURL }
+        }
+        if !extraURLs.isEmpty {
+            session.draggingPasteboard.writeObjects(extraURLs)
+        }
+    }
+
+    func collectionView(
+        _: NSCollectionView,
         validateDrop draggingInfo: any NSDraggingInfo,
         proposedIndexPath _: AutoreleasingUnsafeMutablePointer<NSIndexPath>,
         dropOperation _: UnsafeMutablePointer<NSCollectionView.DropOperation>

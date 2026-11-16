@@ -193,21 +193,33 @@ extension JSONViewportEditor {
         updateCursor()
     }
 
+    private static let lightHighlightColors: [JSONSyntaxHighlighter.Kind: NSColor] = [
+        .string: NSColor(hex: "#008000"),
+        .number: NSColor(hex: "#3322FF"),
+        .literal: NSColor(hex: "#B333B3")
+    ]
+    private static let darkHighlightColors: [JSONSyntaxHighlighter.Kind: NSColor] = [
+        .string: NSColor(hex: "#7ECF87"),
+        .number: NSColor(hex: "#8FA8FF"),
+        .literal: NSColor(hex: "#D99BE5")
+    ]
+
     func scheduleHighlight() {
+        highlightTask?.cancel()
         let text = textView.string
         let revision = revision
+        let textLength = text.utf16.count
         highlightTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .utility) { JSONSyntaxHighlighter.spans(in: text, offset: 0) }
             let spans = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
             guard let self, !Task.isCancelled, revision == self.revision,
                   let layout = textView.layoutManager else { return }
+            if textLength > 0 {
+                layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: NSRange(location: 0, length: textLength))
+            }
             let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            let colors: [JSONSyntaxHighlighter.Kind: NSColor] = [
-                .string: NSColor(hex: dark ? "#7ECF87" : "#008000"),
-                .number: NSColor(hex: dark ? "#8FA8FF" : "#3322FF"),
-                .literal: NSColor(hex: dark ? "#D99BE5" : "#B333B3")
-            ]
-            for span in spans {
+            let colors = dark ? Self.darkHighlightColors : Self.lightHighlightColors
+            for span in spans where NSMaxRange(span.range) <= textLength {
                 if let color = colors[span.kind] {
                     layout.addTemporaryAttribute(.foregroundColor, value: color, forCharacterRange: span.range)
                 }

@@ -320,11 +320,19 @@ class HotKeyManager {
         }
     }
 
+    private var cachedHotKeys: [HotKeyInfo]?
+
     func getAllHotKeys() -> [HotKeyInfo] {
-        PasteUserDefaults.globalHotKeys
+        if let cachedHotKeys {
+            return cachedHotKeys
+        }
+        let decoded = PasteUserDefaults.globalHotKeys
+        cachedHotKeys = decoded
+        return decoded
     }
 
     private func saveHotKeys(_ hotKeys: [HotKeyInfo]) {
+        cachedHotKeys = hotKeys
         PasteUserDefaults.globalHotKeys = hotKeys
     }
 

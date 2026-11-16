@@ -30,6 +30,7 @@ class SettingWindowController: NSWindowController, NSWindowDelegate {
         window.level = .normal
         window.center()
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.titlebarSeparatorStyle = .none
 
         if #available(macOS 27, *) {
@@ -71,6 +72,7 @@ class SettingWindowController: NSWindowController, NSWindowDelegate {
         guard let window else { return }
 
         ensureContentView()
+        window.layoutIfNeeded()
         NSApp.activate(ignoringOtherApps: true)
 
         if window.isMiniaturized {

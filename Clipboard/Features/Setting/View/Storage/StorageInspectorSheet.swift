@@ -33,7 +33,7 @@ struct StorageInspectorSheet: View {
     }
 
     private var selectedBytesFormatted: String {
-        ByteCountFormatter.string(fromByteCount: selectedBytes, countStyle: .file)
+        selectedBytes.formatted(.byteCount(style: .file))
     }
 
     var body: some View {
@@ -195,7 +195,7 @@ struct StorageInspectorSheet: View {
                         HStack(spacing: Const.space6) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
-                            Text("已释放 \(ByteCountFormatter.string(fromByteCount: lastFreedBytes, countStyle: .file))")
+                            Text("已释放 \(lastFreedBytes.formatted(.byteCount(style: .file)))")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
 
@@ -603,8 +603,10 @@ struct StorageItemPreviewView: View {
         let uniqueId = item.uniqueId
         let itemType = item.type
 
-        let result = await Task.detached(priority: .userInitiated) { () -> PreviewResult? in
-            guard let data = PasteDataPointReader.loadData(id: currentId, uniqueId: uniqueId) else {
+        let worker = Task.detached(priority: .userInitiated) { () -> PreviewResult? in
+            guard !Task.isCancelled,
+                  let data = PasteDataPointReader.loadData(id: currentId, uniqueId: uniqueId),
+                  !Task.isCancelled else {
                 return nil
             }
 
@@ -658,7 +660,13 @@ struct StorageItemPreviewView: View {
                 let preview = truncated ? String(fullText.prefix(maxChars)) : fullText
                 return PreviewResult(image: nil, imageDimensions: nil, textContent: preview, totalCharCount: total, isTruncated: truncated)
             }
-        }.value
+        }
+
+        let result = await withTaskCancellationHandler {
+            await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
 
         if Task.isCancelled { return }
 

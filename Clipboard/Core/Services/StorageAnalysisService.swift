@@ -34,7 +34,7 @@ final class StorageAnalysisService: ObservableObject {
         await refreshQuotaStatus()
     }
 
-    func refreshQuotaStatus() async {
+    func refreshQuotaStatus(recomputeCandidates: Bool = true) async {
         let usage = if let diskUsage {
             diskUsage
         } else {
@@ -45,7 +45,13 @@ final class StorageAnalysisService: ObservableObject {
         let policyRaw = PasteUserDefaults.softQuotaAgingPolicy
         let policy = SoftQuotaAgingPolicy(rawValue: policyRaw) ?? .threeMonths
 
-        let (candidateCount, candidateBytes) = await sqlManager.getEvictionCandidates(policy: policy)
+        let (candidateCount, candidateBytes): (Int, Int64)
+        if !recomputeCandidates, let existing = quotaStatus {
+            candidateCount = existing.candidateItemCount
+            candidateBytes = existing.candidateFreedBytes
+        } else {
+            (candidateCount, candidateBytes) = await sqlManager.getEvictionCandidates(policy: policy)
+        }
 
         self.quotaStatus = StorageQuotaStatus(
             currentBytes: usage.totalDiskBytes,

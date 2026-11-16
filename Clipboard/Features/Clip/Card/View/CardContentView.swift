@@ -7,26 +7,10 @@ import AppKit
 import Combine
 import SnapKit
 
-// MARK: - NSTextView factory
+// MARK: - Lightweight Card Text View
 
-private func makeCardTextView() -> PassthroughTextView {
-    let view = PassthroughTextView(usingTextLayoutManager: false)
-    view.isEditable = false
-    view.isSelectable = false
-    view.drawsBackground = false
-    view.isHorizontallyResizable = false
-    view.isVerticallyResizable = true
-    view.textContainer?.widthTracksTextView = false
-    view.textContainer?.heightTracksTextView = false
-    view.textContainer?.lineFragmentPadding = 0
-    view.textContainer?.lineBreakMode = .byWordWrapping
-    view.textContainer?.containerSize = CGSize(
-        width: Const.cardSize - Const.space10 * 2,
-        height: .greatestFiniteMagnitude
-    )
-    view.textContainerInset = NSSize(width: Const.space10, height: Const.space8)
-    view.layoutManager?.allowsNonContiguousLayout = false
-    return view
+private func makeCardTextView() -> CardAttributedTextView {
+    CardAttributedTextView()
 }
 
 // MARK: - CardContentView
@@ -200,7 +184,7 @@ final class CardContentView: NSView, PassthroughMouseEvents {
 // MARK: - CardStringContentView
 
 final class CardStringContentView: NSView, PassthroughMouseEvents {
-    private lazy var textView: PassthroughTextView = makeCardTextView()
+    private lazy var textView: CardAttributedTextView = makeCardTextView()
 
     init(model: PasteboardModel, keyword: String) {
         super.init(frame: .zero)
@@ -217,37 +201,64 @@ final class CardStringContentView: NSView, PassthroughMouseEvents {
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
         let attributed = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false, isCardSnippet: true)
-        textView.textStorage?.setAttributedString(attributed)
         if model.pasteboardType == .string {
-            if model.detectedCodeLanguage != nil {
-                textView.font = CodeTheme().monospacedFont
-            } else {
-                textView.font = .preferredFont(forTextStyle: .body)
+            let font: NSFont = model.detectedCodeLanguage != nil
+                ? CodeTheme().monospacedFont
+                : .preferredFont(forTextStyle: .body)
+            let mutable = NSMutableAttributedString(attributedString: attributed)
+            mutable.enumerateAttribute(.font, in: NSRange(location: 0, length: mutable.length)) { value, range, _ in
+                if value == nil {
+                    mutable.addAttribute(.font, value: font, range: range)
+                }
             }
+            textView.attributedText = mutable
+        } else {
+            textView.attributedText = attributed
         }
     }
 
     func reset() {
-        textView.textStorage?.setAttributedString(NSAttributedString())
+        textView.attributedText = NSAttributedString()
     }
 }
 
-// MARK: - PassthroughTextView
+// MARK: - CardAttributedTextView (Zero-NSTextView lightweight renderer)
 
-private final class PassthroughTextView: NSTextView {
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        isSelectable ? super.hitTest(point) : nil
+private final class CardAttributedTextView: NSView {
+    var attributedText = NSAttributedString() {
+        didSet { needsDisplay = true }
+    }
+
+    var backgroundColor: NSColor? {
+        didSet { needsDisplay = true }
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_: NSPoint) -> NSView? {
+        nil
     }
 
     override func rightMouseDown(with event: NSEvent) {
         nextResponder?.rightMouseDown(with: event)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if let backgroundColor {
+            backgroundColor.setFill()
+            dirtyRect.fill()
+        }
+        guard attributedText.length > 0 else { return }
+        let textRect = bounds.insetBy(dx: Const.space10, dy: Const.space8)
+        guard textRect.width > 0, textRect.height > 0 else { return }
+        attributedText.draw(with: textRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 }
 
 // MARK: - CardRichContentView
 
 final class CardRichContentView: NSView, PassthroughMouseEvents {
-    private lazy var textView: PassthroughTextView = makeCardTextView()
+    private lazy var textView: CardAttributedTextView = makeCardTextView()
     private var model: PasteboardModel
 
     init(model: PasteboardModel, keyword: String) {
@@ -256,7 +267,7 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
 
         addSubview(textView)
         textView.snp.makeConstraints { $0.edges.equalToSuperview() }
-        textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
+        textView.attributedText = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true)
         updateBackground()
     }
 
@@ -266,17 +277,17 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
     }
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
-        textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
+        textView.attributedText = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true)
     }
 
     func update(with model: PasteboardModel, keyword: String) {
         self.model = model
-        textView.textStorage?.setAttributedString(ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true))
+        textView.attributedText = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true)
         updateBackground()
     }
 
     func reset() {
-        textView.textStorage?.setAttributedString(NSAttributedString())
+        textView.attributedText = NSAttributedString()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -287,8 +298,7 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
     private func updateBackground() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let background = model.richBackground(on: .textBackgroundColor)
-            textView.drawsBackground = background != nil
-            textView.backgroundColor = background ?? .textBackgroundColor
+            textView.backgroundColor = background
         }
     }
 }

@@ -66,6 +66,8 @@ final class AppIconCache {
     }
 
     func trimMemory() {
+        generation &+= 1
+        inFlightTasks.values.forEach { $0.cancel() }
         inFlightTasks.removeAll()
         cache.removeAllObjects()
     }

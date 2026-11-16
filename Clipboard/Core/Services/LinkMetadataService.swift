@@ -17,6 +17,10 @@ final class LinkMetadataService {
     /// 内存负缓存：失败 URL 记录时间戳，30 分钟内不重复向外发起网络请求
     private var negativeCache: [String: ContinuousClock.Instant] = [:]
     private static let negativeCacheTTL: Duration = .seconds(1800) // 30 分钟
+    private static let maxNegativeCacheEntries = 200
+
+    /// 在途请求去重，防止滚动/并发请求同一 URL 时重复拉取
+    private var inFlightTasks: [String: Task<LinkPreviewMetadata, Never>] = [:]
 
     /// 最大并发抓取数
     private static let maxConcurrentFetches = 2
@@ -50,48 +54,97 @@ final class LinkMetadataService {
             }
         }
 
-        // 2. 检查磁盘缓存
-        if let diskCached = await loadDiskCache(for: url) {
-            return diskCached
+        // 2. 复用内存缓存
+        if let memCached = ModelLinkMetadataCache.shared.metadata(for: urlKey) {
+            return memCached
         }
 
-        // 3. 并发限流等待
-        await acquireSlot()
-        defer { releaseSlot() }
+        // 3. 在途请求去重
+        if let existingTask = inFlightTasks[urlKey] {
+            return await existingTask.value
+        }
 
-        // 4. 发起实际网络抓取
-        let provider = LPMetadataProvider()
-        provider.timeout = 5.0
-        nonisolated(unsafe) let unsafeProvider = provider
-
-        do {
-            let metadata = try await withTaskCancellationHandler {
-                try await provider.startFetchingMetadata(for: url)
-            } onCancel: {
-                unsafeProvider.cancel()
+        let task = Task { @MainActor [weak self] () -> LinkPreviewMetadata in
+            guard let self else {
+                return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+            }
+            defer {
+                if self.inFlightTasks[urlKey] != nil {
+                    self.inFlightTasks.removeValue(forKey: urlKey)
+                }
             }
 
-            let rawPreview: NSImage? = await Self.loadImage(from: metadata.imageProvider)
-            let previewImage = Self.downscaleIfNeeded(rawPreview, maxPixelSize: 600)
-            let rawIcon: NSImage? = previewImage == nil
-                ? await Self.loadImage(from: metadata.iconProvider)
-                : nil
-            let iconImage = Self.downscaleIfNeeded(rawIcon, maxPixelSize: 128)
+            // 4. 检查磁盘缓存
+            if let diskCached = await self.loadDiskCache(for: url) {
+                ModelLinkMetadataCache.shared.setMetadata(diskCached, for: urlKey)
+                return diskCached
+            }
 
-            let result = LinkPreviewMetadata(
-                title: metadata.title,
-                previewImage: previewImage,
-                iconImage: iconImage
-            )
+            guard !Task.isCancelled else {
+                return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+            }
 
-            // 写入磁盘缓存
-            saveDiskCache(result, for: url)
-            return result
-        } catch {
-            // 写入负缓存
-            negativeCache[urlKey] = ContinuousClock.now
-            return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+            // 5. 并发限流等待
+            await self.acquireSlot()
+            defer { self.releaseSlot() }
+
+            guard !Task.isCancelled else {
+                return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+            }
+
+            // 6. 发起实际网络抓取
+            let provider = LPMetadataProvider()
+            provider.timeout = 5.0
+            nonisolated(unsafe) let unsafeProvider = provider
+
+            do {
+                let metadata = try await withTaskCancellationHandler {
+                    try await provider.startFetchingMetadata(for: url)
+                } onCancel: {
+                    unsafeProvider.cancel()
+                }
+
+                let rawPreview: NSImage? = await Self.loadImage(from: metadata.imageProvider)
+                let previewImage = Self.downscaleIfNeeded(rawPreview, maxPixelSize: 600)
+                let rawIcon: NSImage? = previewImage == nil
+                    ? await Self.loadImage(from: metadata.iconProvider)
+                    : nil
+                let iconImage = Self.downscaleIfNeeded(rawIcon, maxPixelSize: 128)
+
+                let result = LinkPreviewMetadata(
+                    title: metadata.title,
+                    previewImage: previewImage,
+                    iconImage: iconImage
+                )
+
+                ModelLinkMetadataCache.shared.setMetadata(result, for: urlKey)
+                self.saveDiskCache(result, for: url)
+                return result
+            } catch is CancellationError {
+                return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+            } catch {
+                // 取消导致的错误不污染负缓存
+                if Task.isCancelled {
+                    return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+                }
+                self.recordNegativeCache(for: urlKey)
+                return LinkPreviewMetadata(title: nil, previewImage: nil, iconImage: nil)
+            }
         }
+
+        inFlightTasks[urlKey] = task
+        return await task.value
+    }
+
+    private func recordNegativeCache(for urlKey: String) {
+        let now = ContinuousClock.now
+        if negativeCache.count >= Self.maxNegativeCacheEntries {
+            negativeCache = negativeCache.filter { now - $0.value < Self.negativeCacheTTL }
+            if negativeCache.count >= Self.maxNegativeCacheEntries {
+                negativeCache.removeAll(keepingCapacity: true)
+            }
+        }
+        negativeCache[urlKey] = now
     }
 
     // MARK: - 并发控制
@@ -158,11 +211,9 @@ final class LinkMetadataService {
 
         let title = metadata.title
         let timestamp = Date().timeIntervalSince1970
-        let previewJpeg: Data? = metadata.previewImage
-            .flatMap { $0.representations.first as? NSBitmapImageRep }
+        let previewJpeg: Data? = Self.bitmapRep(from: metadata.previewImage)
             .flatMap { $0.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) }
-        let iconPng: Data? = metadata.iconImage
-            .flatMap { $0.representations.first as? NSBitmapImageRep }
+        let iconPng: Data? = Self.bitmapRep(from: metadata.iconImage)
             .flatMap { $0.representation(using: .png, properties: [:]) }
 
         Task.detached(priority: .utility) {
@@ -183,6 +234,17 @@ final class LinkMetadataService {
     }
 
     // MARK: - 图片解析与下采样
+
+    private static func bitmapRep(from image: NSImage?) -> NSBitmapImageRep? {
+        guard let image else { return nil }
+        if let existing = image.representations.first as? NSBitmapImageRep {
+            return existing
+        }
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        return NSBitmapImageRep(cgImage: cgImage)
+    }
 
     private static func loadImage(from provider: NSItemProvider?) async -> NSImage? {
         guard let provider, provider.canLoadObject(ofClass: NSImage.self) else {

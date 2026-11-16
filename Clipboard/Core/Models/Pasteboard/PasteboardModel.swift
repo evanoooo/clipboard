@@ -51,6 +51,11 @@ final class PasteboardModel: Identifiable, Codable {
         }
         return Data()
     }
+
+    /// 若该条目已外置至 `.media/` CAS 存储，则返回可用于零拷贝流式预览的本地文件 URL
+    var mediaFileURL: URL? {
+        PasteDataPointReader.loadMediaURL(id: id, uniqueId: uniqueId)
+    }
     let showData: Data?
     private(set) var timestamp: Int64
     var appID: Int64?

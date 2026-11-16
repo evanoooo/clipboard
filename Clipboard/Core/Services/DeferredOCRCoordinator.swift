@@ -7,6 +7,7 @@
 
 import AppKit
 import Combine
+import Darwin
 import Foundation
 import SQLite
 
@@ -100,9 +101,7 @@ final class DeferredOCRCoordinator {
                 for id in ids {
                     self.pendingIDs.insert(id)
                 }
-                if !self.pendingIDs.isEmpty {
-                    self.scheduleIdleProcessing()
-                }
+                // 冷启动仅登记待识别队列，不在闲置时主动拉起 Vision 模型，待用户搜索或新图入库时再按需识别
             }
         }
     }
@@ -191,6 +190,7 @@ final class DeferredOCRCoordinator {
         if !pendingIDs.isEmpty {
             scheduleIdleProcessing()
         }
+        malloc_zone_pressure_relief(malloc_default_zone(), 0)
 
         return (processedCount, validTextCount)
     }
@@ -219,6 +219,12 @@ final class DeferredOCRCoordinator {
         let rawText: String
         if let cached = ocrTextCache[target.uniqueId] {
             rawText = cached
+        } else if let mediaURL = PasteDataPointReader.loadMediaURL(id: id, uniqueId: target.uniqueId) {
+            rawText = await OCRViewService.shared.recognizeText(at: mediaURL, priority: priority)
+            if ocrTextCache.count >= 100 {
+                ocrTextCache.removeAll(keepingCapacity: true)
+            }
+            ocrTextCache[target.uniqueId] = rawText
         } else {
             guard let data = target.data, !data.isEmpty else {
                 let marker = PasteboardModel.emptyOCRMarker
@@ -228,7 +234,7 @@ final class DeferredOCRCoordinator {
                 }
                 return .emptyOrSkipped
             }
-            rawText = await OCRViewService.shared.recognizeText(from: data)
+            rawText = await OCRViewService.shared.recognizeText(from: data, priority: priority)
             if ocrTextCache.count >= 100 {
                 ocrTextCache.removeAll(keepingCapacity: true)
             }

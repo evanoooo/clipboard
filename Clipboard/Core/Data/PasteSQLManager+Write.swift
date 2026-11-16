@@ -130,7 +130,7 @@ extension PasteSQLManager {
     func insert(item: PasteboardModel, timestamp: Int64, group: Int = -1) async -> PasteInsertResult {
         let existing = await search(
             filter: Col.uniqueId == item.uniqueId,
-            select: [Col.id, Col.group, Col.appID],
+            select: [Col.id, Col.group, Col.appID, Col.hidden],
             order: [],
             limit: 1
         ).first
@@ -138,6 +138,7 @@ extension PasteSQLManager {
         if let row = existing,
            let existingId = try? row.get(Col.id) {
             let existingGroup = (try? row.get(Col.group)) ?? -1
+            let wasHidden = ((try? row.get(Col.hidden)) ?? 0) != 0
             let query = table.filter(Col.id == existingId)
             do {
                 var updates: [Setter] = [
@@ -156,16 +157,21 @@ extension PasteSQLManager {
                 id: existingId,
                 group: effectiveGroup,
                 appID: try? row.get(Col.appID),
-                sortOrder: sortOrder(of: existingId)
+                sortOrder: sortOrder(of: existingId),
+                didIncreaseTotalCount: wasHidden
             )
         }
 
         guard let appID = try? await resolvedAppID(for: item) else { return .failed }
+        let isItemHidden = await item.hidden
+        let rawType = item.pasteboardType.rawValue
+        let rawData = await item.data
+        let externalized = Self.externalizeIfImage(typeRawValue: rawType, data: rawData)
         let insert = await table.insert(
             [
                 Col.uniqueId <- item.uniqueId,
-                Col.type <- item.pasteboardType.rawValue,
-                Col.data <- item.data,
+                Col.type <- rawType,
+                Col.data <- externalized.data,
                 Col.showData <- item.showData,
                 Col.timestamp <- timestamp,
                 Col.sortOrder <- Col.nextSortOrder,
@@ -174,7 +180,9 @@ extension PasteSQLManager {
                 Col.length <- item.length,
                 Col.group <- item.group,
                 Col.tag <- item.tag,
-                Col.hidden <- item.hidden ? 1 : 0,
+                Col.hidden <- isItemHidden ? 1 : 0,
+                Col.mediaRelPath <- externalized.relPath,
+                Col.mediaSize <- externalized.size,
             ] + Self.aliasSetters(item.alias)
         )
         do {
@@ -185,7 +193,8 @@ extension PasteSQLManager {
                 id: id,
                 group: nil,
                 appID: appID,
-                sortOrder: sortOrder(of: id)
+                sortOrder: sortOrder(of: id),
+                didIncreaseTotalCount: id >= 0 && !isItemHidden
             )
         } catch {
             log.error("插入失败：\(error)")
@@ -251,10 +260,11 @@ extension PasteSQLManager {
                         continue
                     }
 
+                    let externalized = Self.externalizeIfImage(typeRawValue: snapshot.type, data: snapshot.data)
                     var setters: [Setter] = [
                         Col.uniqueId <- snapshot.uniqueId,
                         Col.type <- snapshot.type,
-                        Col.data <- snapshot.data,
+                        Col.data <- externalized.data,
                         Col.showData <- snapshot.showData,
                         Col.timestamp <- snapshot.timestamp,
                         Col.sortOrder <- snapshot.sortOrder,
@@ -264,6 +274,8 @@ extension PasteSQLManager {
                         Col.group <- snapshot.group,
                         Col.tag <- snapshot.tag,
                         Col.hidden <- snapshot.hidden ? 1 : 0,
+                        Col.mediaRelPath <- externalized.relPath,
+                        Col.mediaSize <- externalized.size,
                     ] + Self.aliasSetters(snapshot.alias)
 
                     // 原 id 已被其他记录占用时不指定 id，交给 SQLite 重新分配。
@@ -366,12 +378,26 @@ extension PasteSQLManager {
 
     @discardableResult
     func updateItemGroup(id: Int64, groupId: Int) async -> Bool {
+        guard let connection else { return false }
         let query = table.filter(Col.id == id)
         let update = query.update(Col.group <- groupId)
         do {
-            let count = try connection?.run(update)
-            Log.database.info("更新条目分组成功，影响行数：\(count ?? 0)")
-            return (count ?? 0) > 0
+            let uniqueId = try connection.pluck(query.select(Col.uniqueId))?[Col.uniqueId]
+            let count = try connection.run(update)
+            if count > 0, let uniqueId {
+                let onlySyncPinned = UserDefaults.standard.object(forKey: "sync_only_pinned") == nil
+                    ? true
+                    : UserDefaults.standard.bool(forKey: "sync_only_pinned")
+                if groupId == -1 {
+                    if onlySyncPinned {
+                        SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [uniqueId])
+                    }
+                } else {
+                    SyncPendingDeletionsStore.shared.removeDeletions(uniqueIds: [uniqueId])
+                }
+            }
+            Log.database.info("更新条目分组成功，影响行数：\(count)")
+            return count > 0
         } catch {
             log.error("更新项目分组失败：\(error)")
             return false
@@ -404,6 +430,20 @@ extension PasteSQLManager {
             log.error("更新别名失败：\(error)，id：\(id)")
             return false
         }
+    }
+
+    /// 图片类型自动外置到 `.media/blobs/` CAS 存储，成功时主库 `data` 列留空以消除 BLOB 膨胀。
+    nonisolated static func externalizeIfImage(
+        typeRawValue: String,
+        data: Data
+    ) -> (data: Data, relPath: String?, size: Int64) {
+        let isImage = typeRawValue == PasteboardType.png.rawValue
+            || typeRawValue == PasteboardType.tiff.rawValue
+        guard isImage, !data.isEmpty,
+              let stored = MediaBlobStore.shared.writeBlob(data: data, typeRawValue: typeRawValue) else {
+            return (data, nil, 0)
+        }
+        return (Data(), stored.relPath, stored.size)
     }
 
     /// 别名原文入库，归一化文本单独存一列供检索。

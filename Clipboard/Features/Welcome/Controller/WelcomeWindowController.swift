@@ -40,6 +40,7 @@ final class WelcomeWindowController: NSWindowController {
         window.backgroundColor = .clear
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.collectionBehavior = [.moveToActiveSpace]
         window.level = .normal
         window.hasShadow = false

@@ -8,6 +8,16 @@
 import SwiftUI
 
 @main
+enum ClipboardEntrypoint {
+    static func main() {
+        if CommandLine.arguments.contains("--ocr-worker") {
+            OCRWorkerProcess.runLoop()
+            return
+        }
+        ClipboardApp.main()
+    }
+}
+
 struct ClipboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 

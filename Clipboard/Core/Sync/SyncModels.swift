@@ -209,9 +209,11 @@ extension SyncIndex {
         retentionDays: Int = 30,
         currentTimeMillis: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) -> Int {
-        let cutoff = currentTimeMillis - Int64(retentionDays * 24 * 3600 * 1000)
+        let cutoffMillis = currentTimeMillis - Int64(retentionDays * 24 * 3600 * 1000)
         let expiredKeys = entries.compactMap { (key, entry) -> String? in
-            (entry.isDeleted && entry.updatedAt < cutoff) ? key : nil
+            guard entry.isDeleted else { return nil }
+            let updatedMillis = entry.updatedAt > 100_000_000_000 ? entry.updatedAt : entry.updatedAt * 1000
+            return updatedMillis < cutoffMillis ? key : nil
         }
         for key in expiredKeys {
             entries.removeValue(forKey: key)

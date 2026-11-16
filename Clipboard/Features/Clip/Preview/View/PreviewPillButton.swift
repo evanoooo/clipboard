@@ -27,6 +27,16 @@ final class PreviewPillButton: NSView {
 
     var onAction: (() -> Void)?
 
+    var isEnabled: Bool = true {
+        didSet {
+            alphaValue = isEnabled ? 1.0 : 0.45
+            if !isEnabled {
+                isHovering = false
+                updateAppearance(animated: false)
+            }
+        }
+    }
+
     // MARK: - Private
 
     private let style: Style
@@ -169,6 +179,7 @@ final class PreviewPillButton: NSView {
     // MARK: - Click
 
     override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let pressedColor: NSColor = switch style {
         case .secondary:
@@ -186,6 +197,7 @@ final class PreviewPillButton: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        guard isEnabled else { return }
         updateAppearance(animated: false)
 
         let loc = convert(event.locationInWindow, from: nil)

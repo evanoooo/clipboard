@@ -5298,6 +5298,42 @@
         }
       }
     },
+    "edit_save_failed_title": {
+      "comment": "Edit save failure alert title",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存失败"
+          }
+        }
+      }
+    },
+    "edit_save_failed_message": {
+      "comment": "Edit save failure alert message",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to save the edited content. Please try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存修改后的内容，请重试。"
+          }
+        }
+      }
+    },
     "search": {
       "comment": "Search placeholder",
       "extractionState": "manual",

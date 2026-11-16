@@ -120,7 +120,7 @@ extension PasteDataStore {
         case let .deleted(snapshots):
             // 恢复在单个事务中执行：要么全部成功，要么全部回滚。
             let restored = await sqlManager.restore(snapshots)
-            let restoredUids = snapshots.filter { restored.contains($0.id) }.map(\.uniqueId)
+            let restoredUids = restored.isEmpty ? [] : snapshots.map(\.uniqueId)
             SyncPendingDeletionsStore.shared.removeDeletions(uniqueIds: restoredUids)
             SyncEngine.shared.markDirtyAndSchedule()
             return UndoOutcome(
@@ -192,6 +192,8 @@ extension PasteDataStore {
         }
         let inFilter = isInFilterMode
         let activeFilter = currentFilter
+        let capturedFilterRev = filterRevision
+        let capturedListRev = listRevision
 
         enqueueMutation { [weak self, sqlManager] in
             guard let self else { return }
@@ -215,6 +217,9 @@ extension PasteDataStore {
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 totalCount = count
+                guard self.filterRevision == capturedFilterRev, self.listRevision == capturedListRev else {
+                    return
+                }
                 if let scanned {
                     updateFilteredCount(scanned: scanned)
                 } else {

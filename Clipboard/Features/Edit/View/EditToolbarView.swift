@@ -160,6 +160,12 @@ final class EditToolbarView: NSView {
         }
     }
 
+    func setSaving(_ saving: Bool) {
+        saveButton.isEnabled = !saving
+        cancelButton.isEnabled = !saving
+        setLoading(saving)
+    }
+
     func setModeToggleVisible(_ visible: Bool) {
         modeButton.isHidden = !visible
     }

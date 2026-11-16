@@ -108,6 +108,8 @@ private extension HUDManager {
         dismissTask = nil
 
         guard let window = hudWindow else { return }
+        let expectedText = currentText
+        let expectedInstant = lastPresentInstant
 
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.3
@@ -115,7 +117,10 @@ private extension HUDManager {
             window.animator().alphaValue = 0
         } completionHandler: { [weak self] in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self,
+                      self.hudWindow === window,
+                      self.lastPresentInstant == expectedInstant,
+                      self.currentText == expectedText else { return }
                 window.orderOut(nil)
                 self.hudWindow = nil
                 self.currentText = nil

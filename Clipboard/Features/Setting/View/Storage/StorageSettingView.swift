@@ -185,7 +185,7 @@ struct StorageSettingView: View {
                             PasteUserDefaults.softQuotaBytes = newValue
                             PasteUserDefaults.enableSoftQuota = newValue > 0
                             Task {
-                                await storageService.refreshQuotaStatus()
+                                await storageService.refreshQuotaStatus(recomputeCandidates: false)
                             }
                         }
                     }
@@ -467,7 +467,7 @@ struct StorageSettingView: View {
         Task {
             do {
                 let freed = try await storageService.applyRecommendedEviction()
-                let freedStr = ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+                let freedStr = freed.formatted(.byteCount(style: .file))
                 totalCount = await PasteSQLManager.manager.getTotalCount()
                 alertTitle = "瘦身完成"
                 alertMessage = "已安全清理未收藏临时旧图，共释放 \(freedStr) 数据。加星收藏与纯文本记录完好无损。"
@@ -489,8 +489,8 @@ struct StorageSettingView: View {
             do {
                 let (before, after) = try await storageService.vacuumDatabase()
                 let freed = max(before - after, 0)
-                let freedStr = ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
-                let currentStr = ByteCountFormatter.string(fromByteCount: after, countStyle: .file)
+                let freedStr = freed.formatted(.byteCount(style: .file))
+                let currentStr = after.formatted(.byteCount(style: .file))
                 totalCount = await PasteSQLManager.manager.getTotalCount()
                 alertTitle = "压缩完成"
                 alertMessage = "已成功整理数据库碎片！释放了约 \(freedStr) 磁盘空间，当前物理占用为 \(currentStr)。"

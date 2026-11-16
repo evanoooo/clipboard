@@ -133,6 +133,13 @@ final class RichTextEditorView: NSView {
         textView.undoManager?.removeAllActions()
     }
 
+    func setAttributedText(_ attributedText: NSAttributedString) {
+        textView.undoManager?.disableUndoRegistration()
+        textView.textStorage?.setAttributedString(attributedText)
+        textView.undoManager?.enableUndoRegistration()
+        textView.undoManager?.removeAllActions()
+    }
+
     func focus() {
         window?.makeFirstResponder(textView)
     }

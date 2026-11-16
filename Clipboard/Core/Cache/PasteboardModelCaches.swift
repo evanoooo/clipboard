@@ -21,8 +21,15 @@ final class ModelThumbnailCache: @unchecked Sendable {
     }
 
     func setThumbnail(_ image: NSImage, for uniqueId: String) {
-        let cost = Int(image.size.width * image.size.height * 4)
+        let cost = Self.pixelCost(for: image)
         cache.setObject(image, forKey: uniqueId as NSString, cost: max(cost, 1024))
+    }
+
+    static func pixelCost(for image: NSImage) -> Int {
+        if let rep = image.representations.first, rep.pixelsWide > 0, rep.pixelsHigh > 0 {
+            return rep.pixelsWide * rep.pixelsHigh * 4
+        }
+        return Int(image.size.width * image.size.height * 4)
     }
 
     func remove(for uniqueId: String) {
@@ -48,7 +55,8 @@ final class ModelAttributedTextCache: @unchecked Sendable {
     }
 
     func setText(_ text: NSAttributedString, for key: String) {
-        let cost = text.length * 2
+        // 含属性字典、字体/颜色对象与布局元数据，按单字符 ~16B 估算以使 12MB 限额真实生效
+        let cost = text.length * 16
         cache.setObject(text, forKey: key as NSString, cost: max(cost, 512))
     }
 
@@ -71,10 +79,10 @@ final class LinkMetadataWrapper: NSObject {
     var cost: Int {
         var bytes = 512
         if let preview = metadata.previewImage {
-            bytes += Int(preview.size.width * preview.size.height * 4)
+            bytes += ModelThumbnailCache.pixelCost(for: preview)
         }
         if let icon = metadata.iconImage {
-            bytes += Int(icon.size.width * icon.size.height * 4)
+            bytes += ModelThumbnailCache.pixelCost(for: icon)
         }
         return bytes
     }
@@ -100,6 +108,33 @@ final class ModelLinkMetadataCache: @unchecked Sendable {
 
     func remove(for uniqueId: String) {
         cache.removeObject(forKey: uniqueId as NSString)
+    }
+
+    func removeAll() {
+        cache.removeAllObjects()
+    }
+}
+
+/// 有界 `showData` 缩略数据 LRU 缓存（上限 200 条 / 4MB），避免重复点查与长列表常驻膨胀
+nonisolated final class ModelShowDataCache: @unchecked Sendable {
+    static let shared = ModelShowDataCache()
+    private let cache = NSCache<NSNumber, NSData>()
+
+    private init() {
+        cache.countLimit = 200
+        cache.totalCostLimit = 4 * 1024 * 1024
+    }
+
+    func data(for id: Int64) -> Data? {
+        cache.object(forKey: NSNumber(value: id)) as Data?
+    }
+
+    func setData(_ data: Data, for id: Int64) {
+        cache.setObject(data as NSData, forKey: NSNumber(value: id), cost: max(data.count, 256))
+    }
+
+    func remove(for id: Int64) {
+        cache.removeObject(forKey: NSNumber(value: id))
     }
 
     func removeAll() {

@@ -183,6 +183,7 @@ final class EditContentView: NSVisualEffectView {
 
     private func loadContent(from model: PasteboardModel) {
         let typeRawValue = model.pasteboardType.rawValue
+        let isRichTextType = model.pasteboardType == .rtf || model.pasteboardType == .rtfd
         let width = jsonEditor.preparationWidth
         let modelId = model.id
         let uniqueId = model.uniqueId
@@ -190,13 +191,14 @@ final class EditContentView: NSVisualEffectView {
         contentTask = Task { @MainActor [weak self] in
             let worker = Task.detached(priority: .userInitiated) { [weak self] in
                 let rawData = PasteDataPointReader.loadData(id: modelId, uniqueId: uniqueId, channel: .bulk) ?? Data()
-                return await JSONDocument.load(data: rawData, type: typeRawValue, width: width) { [weak self] isValid in
+                let document = await JSONDocument.load(data: rawData, type: typeRawValue, width: width) { [weak self] isValid in
                     guard let self, !isClosed, !Task.isCancelled else { return }
                     toolbar.setMode(isValid ? .json : .text)
                     onModeChange?(isValid ? .json : .text, false)
                 }
+                return (document, isRichTextType && !document.isValid ? rawData : nil)
             }
-            let loaded = await withTaskCancellationHandler {
+            let (loaded, richRawData) = await withTaskCancellationHandler {
                 await worker.value
             } onCancel: {
                 worker.cancel()
@@ -204,6 +206,9 @@ final class EditContentView: NSVisualEffectView {
 
             guard let self, !Task.isCancelled else { return }
             let initialMode: EditMode = loaded.isValid ? .json : .text
+            let initialAttributedText = richRawData.flatMap {
+                EditTextLoader.loadAttributedString(data: $0, typeRawValue: typeRawValue)
+            }
             isLoaded = true
             toolbar.setLoading(false)
             setLoading(false)
@@ -212,6 +217,7 @@ final class EditContentView: NSVisualEffectView {
             applyMode(
                 initialMode,
                 text: loaded.text,
+                initialAttributedText: initialAttributedText,
                 initialDocument: loaded.index,
                 preparedText: loaded.preparedText
             )
@@ -246,6 +252,7 @@ final class EditContentView: NSVisualEffectView {
     private func applyMode(
         _ newMode: EditMode,
         text initialText: String? = nil,
+        initialAttributedText: NSAttributedString? = nil,
         initialDocument: JSONFoldIndex.Document? = nil,
         preparedText: JSONPreparedText? = nil
     ) {
@@ -280,7 +287,11 @@ final class EditContentView: NSVisualEffectView {
             jsonEditor.setText(text, document: initialDocument, preparedText: preparedText)
         } else {
             jsonEditor.setText("")
-            textEditor.setText(text)
+            if let initialAttributedText {
+                textEditor.setAttributedText(initialAttributedText)
+            } else {
+                textEditor.setText(text)
+            }
         }
 
         toolbar.setMode(newMode)
@@ -340,6 +351,11 @@ final class EditContentView: NSVisualEffectView {
     }
 
     // MARK: - JSON Actions
+
+    func setSaving(_ saving: Bool) {
+        toolbar.setSaving(saving)
+        setLoading(saving)
+    }
 
     private func setLoading(_ loading: Bool) {
         loadingView.isHidden = !loading
@@ -464,21 +480,12 @@ private extension EditContentView {
             }
             guard !Task.isCancelled, self?.mode == .json,
                   let text = initialText ?? self?.jsonEditor.currentText else { return }
-            if knownValidity == nil {
-                let validator = Task.detached(priority: .utility) {
-                    JSONTransformer.isValid(text)
-                }
-                let isValid = await withTaskCancellationHandler {
-                    await validator.value
-                } onCancel: {
-                    validator.cancel()
-                }
-                guard !Task.isCancelled else { return }
-                self?.jsonEditor.knownValidity = isValid
-                self?.statisticsBar.setJSONValid(isValid)
-            }
-            let worker = Task.detached(priority: .utility) {
-                TextStatistics(from: text, lineCount: knownLineCount)
+            let worker = Task.detached(priority: .utility) { () -> (isValid: Bool?, stats: TextStatistics) in
+                var contiguous = text
+                contiguous.makeContiguousUTF8()
+                let isValid: Bool? = knownValidity == nil ? JSONTransformer.isValid(contiguous) : nil
+                let stats = TextStatistics(from: contiguous, lineCount: knownLineCount)
+                return (isValid, stats)
             }
             let result = await withTaskCancellationHandler {
                 await worker.value
@@ -487,8 +494,12 @@ private extension EditContentView {
             }
 
             guard let self, !Task.isCancelled, mode == .json else { return }
-            jsonStatistics = result
-            statisticsBar.update(result)
+            if let isValid = result.isValid {
+                jsonEditor.knownValidity = isValid
+                statisticsBar.setJSONValid(isValid)
+            }
+            jsonStatistics = result.stats
+            statisticsBar.update(result.stats)
         }
     }
 

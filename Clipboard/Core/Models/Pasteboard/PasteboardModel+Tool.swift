@@ -13,19 +13,23 @@ extension PasteboardModel {
         data: Data
     ) -> String {
         switch type {
-        case .png, .tiff:
-            let prefix = data.prefix(1024)
-            return "\(prefix.sha256Hex)-\(data.count)"
-        case .rtf, .rtfd:
-            if let attributeString = NSAttributedString(with: data, type: type),
-               let textData = attributeString.string.data(using: .utf8)
-            {
-                return textData.sha256Hex
-            }
-            return data.sha256Hex
+        case .png, .tiff, .rtf, .rtfd:
+            return "\(type.rawValue):\(data.sha256Hex)"
         default:
             return data.sha256Hex
         }
+    }
+
+    /// 提取文件条目的全部文件路径，用于支持多文件拖拽至 Finder 等目标。
+    var filePathsForDragging: [String] {
+        guard pasteboardType.isFile(),
+              let raw = String(data: loadRawData(cache: false), encoding: .utf8) else {
+            return []
+        }
+        return raw
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     // MARK: - 计算图片尺寸

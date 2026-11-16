@@ -37,6 +37,12 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
         loadImage(from: imageData)
     }
 
+    init(imageURL: URL) {
+        super.init(frame: .zero)
+        setupViews()
+        loadImage(from: imageURL)
+    }
+
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError()
@@ -114,6 +120,19 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
         overlayView.snp.makeConstraints { $0.edges.equalToSuperview() }
     }
 
+    private func loadImage(from url: URL) {
+        imageDecodeTask?.cancel()
+        imageDecodeTask = Task { @MainActor [weak self] in
+            let decoded = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                ImageDownsampler.downsampleNSImage(from: url, maxPixelSize: 2048)
+                    ?? (try? Data(contentsOf: url, options: .mappedIfSafe)).flatMap { NSImage(data: $0) }
+            }.value
+
+            guard !Task.isCancelled, let self else { return }
+            applyDecodedImage(decoded)
+        }
+    }
+
     private func loadImage(from data: Data) {
         imageDecodeTask?.cancel()
         imageDecodeTask = Task { @MainActor [weak self] in
@@ -123,19 +142,22 @@ final class PreviewLiveTextView: NSView, ImageAnalysisOverlayViewDelegate, Previ
             }.value
 
             guard !Task.isCancelled, let self else { return }
+            applyDecodedImage(decoded)
+        }
+    }
 
-            if let decoded {
-                self.imageView.image = decoded
-                self.scheduleAnalysisIfNeeded()
-            } else {
-                let configuration = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
-                self.imageView.image = NSImage(
-                    systemSymbolName: "photo.badge.arrow.down",
-                    accessibilityDescription: nil
-                )?.withSymbolConfiguration(configuration)
-                self.imageView.imageScaling = .scaleNone
-                self.imageView.contentTintColor = .secondaryLabelColor
-            }
+    private func applyDecodedImage(_ decoded: NSImage?) {
+        if let decoded {
+            imageView.image = decoded
+            scheduleAnalysisIfNeeded()
+        } else {
+            let configuration = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+            imageView.image = NSImage(
+                systemSymbolName: "photo.badge.arrow.down",
+                accessibilityDescription: nil
+            )?.withSymbolConfiguration(configuration)
+            imageView.imageScaling = .scaleNone
+            imageView.contentTintColor = .secondaryLabelColor
         }
     }
 

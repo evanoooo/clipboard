@@ -121,6 +121,13 @@ final class ClipUndoStore {
 extension ClipSnapshot {
     init?(model: PasteboardModel) {
         guard let id = model.id else { return nil }
+        let fullSearchText: String = if model.searchText.count >= 2000,
+                                        let target = PasteDataPointReader.loadOCRTarget(id: id),
+                                        !target.searchText.isEmpty {
+            target.searchText
+        } else {
+            model.searchText
+        }
         self.init(
             id: id,
             uniqueId: model.uniqueId,
@@ -129,7 +136,7 @@ extension ClipSnapshot {
             showData: model.showData,
             timestamp: model.timestamp,
             appID: model.appID,
-            searchText: model.searchText,
+            searchText: fullSearchText,
             length: model.length,
             group: model.group,
             tag: model.tag,

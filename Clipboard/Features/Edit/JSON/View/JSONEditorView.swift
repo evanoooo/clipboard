@@ -245,6 +245,7 @@ final class JSONEditorView: NSView {
             installViewport(text, document: document, prepared: preparedText)
             return
         }
+        viewport?.cancelWork()
         viewport?.removeFromSuperview()
         viewport = nil
         scrollView.isHidden = false
@@ -912,62 +913,30 @@ extension JSONEditorView: NSTextStorageDelegate {
     func textStorage(
         _ textStorage: NSTextStorage,
         didProcessEditing editedMask: NSTextStorageEditActions,
-        range _: NSRange,
+        range editedRange: NSRange,
         changeInLength delta: Int
     ) {
         guard !suppressChanges,
               editedMask.contains(.editedCharacters)
         else { return }
 
-        let edit: (range: NSRange, replacement: String)?
-        if let pendingEdit,
-           pendingEdit.replacement.utf16.count - pendingEdit.range.length == delta
-        {
-            edit = pendingEdit
-        } else {
-            let markedRange = textView.markedRange()
-            let replacedRange = markedRange.location == NSNotFound
-                ? textView.selectedRange()
-                : markedRange
-            let replacementLength = replacedRange.length + delta
-            guard delta != 0,
-                  replacementLength >= 0
-            else {
-                pendingEdit = nil
-                return
-            }
-
-            let replacementRange = NSRange(
-                location: replacedRange.location,
-                length: replacementLength
-            )
-            guard replacementRange.location <= textStorage.length,
-                  NSMaxRange(replacementRange) <= textStorage.length
-            else {
-                pendingEdit = nil
-                shouldRebuildLineIndex = true
-                return
-            }
-
-            edit = (
-                range: replacedRange,
-                replacement: textStorage.attributedSubstring(from: replacementRange).string
-            )
-        }
         pendingEdit = nil
-
-        guard let edit else { return }
-        guard isLineIndexReady,
-              edit.range.location <= textStorage.length,
-              max(edit.range.length, edit.replacement.utf16.count) <= 65536
+        let preLength = editedRange.length - delta
+        guard preLength >= 0,
+              editedRange.location <= textStorage.length,
+              NSMaxRange(editedRange) <= textStorage.length,
+              isLineIndexReady,
+              max(preLength, editedRange.length) <= 65536
         else {
             shouldRebuildLineIndex = true
             return
         }
 
+        let preRange = NSRange(location: editedRange.location, length: preLength)
+        let replacement = (textStorage.string as NSString).substring(with: editedRange)
         lineIndex.applyReplacement(
-            range: edit.range,
-            replacement: edit.replacement
+            range: preRange,
+            replacement: replacement
         )
         lineIndexRevision &+= 1
     }

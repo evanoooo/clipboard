@@ -10,8 +10,16 @@ import Foundation
 import SQLite
 
 extension PasteSQLManager {
-    /// 统计 SQLite 物理磁盘占用与碎片状态
-    func getStorageDiskUsage() -> StorageDiskUsage {
+    nonisolated private static func openReadOnlyConnection() -> Connection? {
+        guard let db = try? Connection(Self.databasePath, readonly: true) else {
+            return nil
+        }
+        db.busyTimeout = 2.0
+        return db
+    }
+
+    /// 统计 SQLite 与 `.media/` 物理磁盘占用与碎片状态（只读连接，不阻塞写 Actor）
+    nonisolated func getStorageDiskUsage() -> StorageDiskUsage {
         let fm = FileManager.default
         let dbPath = Self.databasePath
         let walPath = dbPath + "-wal"
@@ -20,12 +28,13 @@ extension PasteSQLManager {
         let mainDbBytes = (try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0
         let walBytes = (try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0
         let shmBytes = (try? fm.attributesOfItem(atPath: shmPath)[.size] as? Int64) ?? 0
-        let totalDiskBytes = mainDbBytes + walBytes + shmBytes
+        let mediaBytes = MediaBlobStore.shared.totalMediaDiskBytes()
+        let totalDiskBytes = mainDbBytes + walBytes + shmBytes + mediaBytes
 
         var reclaimableFreeBytes: Int64 = 0
         var totalItemCount: Int = 0
 
-        guard let connection else {
+        guard let readConn = Self.openReadOnlyConnection() else {
             return StorageDiskUsage(
                 mainDbBytes: mainDbBytes,
                 walBytes: walBytes,
@@ -36,12 +45,9 @@ extension PasteSQLManager {
             )
         }
 
-        do {
-            let pageSize = (try? connection.scalar("PRAGMA page_size") as? Int64) ?? 4096
-            let freelistCount = (try? connection.scalar("PRAGMA freelist_count") as? Int64) ?? 0
-            reclaimableFreeBytes = freelistCount * pageSize
-            totalItemCount = (try? connection.scalar(table.count)) ?? 0
-        }
+        reclaimableFreeBytes = ((try? readConn.scalar("PRAGMA freelist_count") as? Int64) ?? 0)
+            * ((try? readConn.scalar("PRAGMA page_size") as? Int64) ?? 4096)
+        totalItemCount = (try? readConn.scalar(Table("Clip").count)) ?? 0
 
         return StorageDiskUsage(
             mainDbBytes: mainDbBytes,
@@ -53,26 +59,26 @@ extension PasteSQLManager {
         )
     }
 
-    /// 获取按数据类型的占用空间分布
-    func getStorageTypeProportions() -> [StorageTypeProportion] {
-        guard let connection else { return [] }
+    /// 获取按数据类型的占用空间分布（只读连接，不阻塞写 Actor）
+    nonisolated func getStorageTypeProportions() -> [StorageTypeProportion] {
+        guard let readConn = Self.openReadOnlyConnection() else { return [] }
         var proportions: [StorageTypeProportion] = []
 
         let sql = """
-            SELECT type, COUNT(*) AS count, COALESCE(SUM(LENGTH(data)), 0) AS total_bytes
+            SELECT type, COUNT(*) AS count, COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) AS total_bytes
             FROM Clip
             GROUP BY type
             ORDER BY total_bytes DESC
         """
 
         do {
-            let stmt = try connection.prepare(sql)
+            let stmt = try readConn.prepare(sql)
             for row in stmt {
                 guard let rawType = row[0] as? String else { continue }
                 let count = Int((row[1] as? Int64) ?? 0)
                 let totalBytes = (row[2] as? Int64) ?? 0
 
-                let (displayName, color) = self.metadataForType(rawType)
+                let (displayName, color) = Self.metadataForType(rawType)
 
                 proportions.append(StorageTypeProportion(
                     typeName: rawType,
@@ -83,13 +89,13 @@ extension PasteSQLManager {
                 ))
             }
         } catch {
-            log.error("Failed to query storage type proportions: \(error)")
+            Log.storage.error("Failed to query storage type proportions: \(error)")
         }
 
         return proportions
     }
 
-    private func metadataForType(_ typeStr: String) -> (displayName: String, color: NSColor) {
+    nonisolated private static func metadataForType(_ typeStr: String) -> (displayName: String, color: NSColor) {
         let lower = typeStr.lowercased()
         if lower.contains("png") || lower.contains("tiff") || lower.contains("jpeg") || lower.contains("jpg") || lower.contains("image") {
             return ("图片", NSColor(red: 0.65, green: 0.38, blue: 0.95, alpha: 1.0)) // 紫色
@@ -108,9 +114,9 @@ extension PasteSQLManager {
         }
     }
 
-    /// 获取占用空间最大的 Top N 条目
-    func getTopStorageItems(limit: Int = 100, filter: StoragePresetFilter = .all) -> [StorageItemSummary] {
-        guard let connection else { return [] }
+    /// 获取占用空间最大的 Top N 条目（只读连接，不阻塞写 Actor）
+    nonisolated func getTopStorageItems(limit: Int = 100, filter: StoragePresetFilter = .all) -> [StorageItemSummary] {
+        guard let readConn = Self.openReadOnlyConnection() else { return [] }
         var list: [StorageItemSummary] = []
 
         var whereClause = "WHERE 1=1"
@@ -144,13 +150,13 @@ extension PasteSQLManager {
             AND (`group` IS NULL OR `group` = -1)
             """
         case .largeImages:
-            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND LENGTH(data) > 5000000"
+            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) > 5000000"
         case .largeRichText:
             whereClause += " AND (tag = 'rich' OR type LIKE '%rtf%' OR type LIKE '%html%') AND LENGTH(data) > 1000000"
         }
 
         let sql = """
-            SELECT id, unique_id, type, timestamp, app_id, tag, `group`, LENGTH(data) AS byte_size, SUBSTR(search_text, 1, 100)
+            SELECT id, unique_id, type, timestamp, app_id, tag, `group`, (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) AS byte_size, SUBSTR(search_text, 1, 100)
             FROM Clip
             \(whereClause)
             ORDER BY byte_size DESC
@@ -158,7 +164,10 @@ extension PasteSQLManager {
         """
 
         do {
-            let stmt = try connection.prepare(sql)
+            let appNames = Dictionary(
+                uniqueKeysWithValues: ((try? SourceAppSQL.readAll(on: readConn)) ?? []).map { ($0.id, $0.name) }
+            )
+            let stmt = try readConn.prepare(sql)
             for row in stmt {
                 guard let id = row[0] as? Int64 else { continue }
                 let uniqueId = (row[1] as? String) ?? ""
@@ -169,7 +178,7 @@ extension PasteSQLManager {
                 let group = Int((row[6] as? Int64) ?? -1)
                 let byteSize = (row[7] as? Int64) ?? 0
                 let summary = (row[8] as? String) ?? ""
-                let appName = apps[appId]?.name
+                let appName = appNames[appId]
 
                 list.append(StorageItemSummary(
                     id: id,
@@ -185,7 +194,7 @@ extension PasteSQLManager {
                 ))
             }
         } catch {
-            log.error("Failed to query top storage items: \(error)")
+            Log.storage.error("Failed to query top storage items: \(error)")
         }
         return list
     }
@@ -234,7 +243,7 @@ extension PasteSQLManager {
     }
 
     /// 压缩并整理数据库碎片（VACUUM），真正将磁盘空间释放归还给 macOS
-    func vacuumDatabase() throws -> (beforeBytes: Int64, afterBytes: Int64) {
+    func vacuumDatabase() async throws -> (beforeBytes: Int64, afterBytes: Int64) {
         guard let connection else {
             return (0, 0)
         }
@@ -258,34 +267,35 @@ extension PasteSQLManager {
         let afterBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
             + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
 
+        await PasteReadStore.shared.reopen()
         Log.storage.info("数据库压缩整理(VACUUM)完成：释放物理碎片空间 \(beforeBytes - afterBytes) 字节 (从 \(beforeBytes) 压缩至 \(afterBytes))")
         return (beforeBytes, afterBytes)
     }
 
     // MARK: - 软配额老化与智能淘汰引擎
 
-    /// 统计符合当前软配额老化策略的待淘汰条目数与预估释放字节数
-    func getEvictionCandidates(policy: SoftQuotaAgingPolicy) -> (count: Int, bytes: Int64) {
-        guard let connection else { return (0, 0) }
+    /// 统计符合当前软配额老化策略的待淘汰条目数与预估释放字节数（只读连接，不阻塞写 Actor）
+    nonisolated func getEvictionCandidates(policy: SoftQuotaAgingPolicy) -> (count: Int, bytes: Int64) {
+        guard let readConn = Self.openReadOnlyConnection() else { return (0, 0) }
         let nowSec = Int64(Date().timeIntervalSince1970)
         let cutoffSec = nowSec - Int64(policy.days * 86400)
 
         let sql = """
-            SELECT COUNT(*), COALESCE(SUM(LENGTH(data)), 0) FROM Clip
+            SELECT COUNT(*), COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) FROM Clip
             WHERE (`group` IS NULL OR `group` = -1)
               AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
               AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
         """
 
         do {
-            let stmt = try connection.prepare(sql)
+            let stmt = try readConn.prepare(sql)
             if let row = stmt.makeIterator().next() {
                 let count = Int((row[0] as? Int64) ?? 0)
                 let bytes = (row[1] as? Int64) ?? 0
                 return (count, bytes)
             }
         } catch {
-            log.error("Failed to calculate eviction candidates: \(error)")
+            Log.storage.error("Failed to calculate eviction candidates: \(error)")
         }
         return (0, 0)
     }
@@ -297,7 +307,7 @@ extension PasteSQLManager {
         let cutoffSec = nowSec - Int64(policy.days * 86400)
 
         let querySql = """
-            SELECT id, LENGTH(data) FROM Clip
+            SELECT id, (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) FROM Clip
             WHERE (`group` IS NULL OR `group` = -1)
               AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
               AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
@@ -322,7 +332,8 @@ extension PasteSQLManager {
 
             if !idsToDelete.isEmpty {
                 _ = await deleteStorageItems(ids: idsToDelete)
-                _ = try? vacuumDatabase()
+                _ = purgeOrphanMediaBlobs()
+                _ = try? await vacuumDatabase()
                 Log.storage.info("自动淘汰完成：已清理 \(idsToDelete.count) 项未收藏旧图，释放 \(totalBytesFreed) 字节，已执行 VACUUM 回收磁盘")
             }
         } catch {
@@ -330,5 +341,24 @@ extension PasteSQLManager {
         }
 
         return totalBytesFreed
+    }
+
+    /// 清理不再被数据库引用且超过 24 小时宽限期的外部 `.media/` 孤儿文件
+    @discardableResult
+    func purgeOrphanMediaBlobs() -> Int {
+        guard let connection else { return 0 }
+        do {
+            let stmt = try connection.prepare("SELECT DISTINCT media_rel_path FROM Clip WHERE media_rel_path IS NOT NULL")
+            var referenced = Set<String>()
+            for row in stmt {
+                if let path = row[0] as? String, !path.isEmpty {
+                    referenced.insert(path)
+                }
+            }
+            return MediaBlobStore.shared.purgeOrphanBlobs(referencedPaths: referenced)
+        } catch {
+            log.error("查询外部媒体引用失败：\(error)")
+            return 0
+        }
     }
 }

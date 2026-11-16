@@ -33,8 +33,13 @@ final class PasteboardModelRuntimeCache: @unchecked Sendable {
         thumbnailLoadTask?.cancel()
         thumbnailLoadTask = nil
         plainText = nil
+        backgroundColor = nil
+        foregroundColor = nil
         richForegrounds.removeAll()
         previewForegrounds = nil
+        filePaths = nil
+        hasBackgroundColor = false
+        needsBottomMask = nil
         isLink = nil
         isCSS = nil
         colorsComputed = false

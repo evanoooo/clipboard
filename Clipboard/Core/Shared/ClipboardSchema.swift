@@ -18,8 +18,9 @@ struct Col {
     nonisolated static let showData = Expression<Data?>("show_data")
     nonisolated static let timestamp = Expression<Int64>("timestamp")
     nonisolated static let sortOrder = Expression<Int64>("sort_order")
+    nonisolated static let orderStep: Int64 = 65_536
     nonisolated static let nextSortOrder = Expression<Int64>(
-        literal: "(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM Clip)"
+        literal: "(SELECT COALESCE(MAX(sort_order), 0) + 65536 FROM Clip)"
     )
     nonisolated static let appID = Expression<Int64>("app_id")
     // 仅供旧备份导入使用。
@@ -34,6 +35,10 @@ struct Col {
     /// 别名归一化文本，检索专用（与 `search_text` 同一套归一化）。
     nonisolated static let aliasSearch = Expression<String?>("alias_search")
     nonisolated static let hidden = Expression<Int>("hidden")
+    /// 外部 CAS 媒体相对路径（位于 `.media/blobs/` 下）；历史未迁移条目为 nil
+    nonisolated static let mediaRelPath = Expression<String?>("media_rel_path")
+    /// 外部 CAS 媒体字节大小；历史未迁移条目为 0
+    nonisolated static let mediaSize = Expression<Int64>("media_size")
 
     private init() {}
 }

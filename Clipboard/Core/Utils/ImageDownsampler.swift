@@ -17,6 +17,23 @@ nonisolated enum ImageDownsampler {
         guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
             return nil
         }
+        return downsampleCGImage(from: source, maxPixelSize: maxPixelSize, options: options)
+    }
+
+    /// 针对本地文件 URL 执行零拷贝流式下采样解码，避免将整张大图先读入堆内存
+    static func downsampleCGImage(from url: URL, maxPixelSize: CGFloat) -> CGImage? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, options) else {
+            return nil
+        }
+        return downsampleCGImage(from: source, maxPixelSize: maxPixelSize, options: options)
+    }
+
+    private static func downsampleCGImage(
+        from source: CGImageSource,
+        maxPixelSize: CGFloat,
+        options: CFDictionary
+    ) -> CGImage? {
         let downsampleOptions = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceShouldCacheImmediately: true,
@@ -24,13 +41,31 @@ nonisolated enum ImageDownsampler {
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
         ] as CFDictionary
 
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions)
-            ?? CGImageSourceCreateImageAtIndex(source, 0, nil)
+        if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) {
+            return thumbnail
+        }
+
+        // 仅当原图尺寸本身不超过目标上限时才允许兜底全图解码，严禁对 4K/8K 大图无界全尺寸解压
+        if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, options) as? [CFString: Any],
+           let pixelWidth = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+           let pixelHeight = properties[kCGImagePropertyPixelHeight] as? CGFloat,
+           max(pixelWidth, pixelHeight) <= maxPixelSize {
+            return CGImageSourceCreateImageAtIndex(source, 0, options)
+        }
+        return nil
     }
 
     /// 针对二进制数据下采样生成 NSImage
     static func downsampleNSImage(from data: Data, maxPixelSize: CGFloat) -> NSImage? {
         guard let cgImage = downsampleCGImage(from: data, maxPixelSize: maxPixelSize) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    /// 针对本地文件 URL 零拷贝下采样生成 NSImage
+    static func downsampleNSImage(from url: URL, maxPixelSize: CGFloat) -> NSImage? {
+        guard let cgImage = downsampleCGImage(from: url, maxPixelSize: maxPixelSize) else {
             return nil
         }
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))

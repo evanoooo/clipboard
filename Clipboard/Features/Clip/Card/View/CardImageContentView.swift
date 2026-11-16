@@ -90,6 +90,9 @@ final class CardImageContentView: NSView, PassthroughMouseEvents, CancellableLoa
         loadingIndicator.isHidden = true
     }
 
+    private var imageWidthConstraint: Constraint?
+    private var imageHeightConstraint: Constraint?
+
     private func setupViews() {
         addSubview(checkerboardView)
         addSubview(imageContainerView)
@@ -99,7 +102,11 @@ final class CardImageContentView: NSView, PassthroughMouseEvents, CancellableLoa
         imageContainerView.addSubview(imageView)
 
         checkerboardView.snp.makeConstraints { $0.edges.equalToSuperview() }
-        imageContainerView.snp.makeConstraints { $0.edges.equalToSuperview() }
+        imageContainerView.snp.makeConstraints { make in
+            make.center.equalToSuperview()
+            imageWidthConstraint = make.width.equalTo(Self.containerSize.width).constraint
+            imageHeightConstraint = make.height.equalTo(Self.containerSize.height).constraint
+        }
         imageView.snp.makeConstraints { $0.edges.equalToSuperview() }
 
         loadingIndicator.snp.makeConstraints { make in
@@ -113,29 +120,32 @@ final class CardImageContentView: NSView, PassthroughMouseEvents, CancellableLoa
 
     private func applyImageLayout(imageSize: CGSize) {
         let containerSize = Self.containerSize
+        guard imageSize.width > 0, imageSize.height > 0 else { return }
         let imageRatio = imageSize.width / imageSize.height
         let containerRatio = containerSize.width / containerSize.height
 
-        imageContainerView.snp.remakeConstraints { make in
-            make.center.equalToSuperview()
-            if isFillMode {
-                if imageRatio > containerRatio {
-                    make.height.equalToSuperview()
-                    make.width.equalTo(imageContainerView.snp.height).multipliedBy(imageRatio)
-                } else {
-                    make.width.equalToSuperview()
-                    make.height.equalTo(imageContainerView.snp.width).dividedBy(imageRatio)
-                }
+        let targetW: CGFloat
+        let targetH: CGFloat
+        if isFillMode {
+            if imageRatio > containerRatio {
+                targetH = containerSize.height
+                targetW = targetH * imageRatio
             } else {
-                if imageRatio > containerRatio {
-                    make.width.equalToSuperview()
-                    make.height.equalTo(imageContainerView.snp.width).dividedBy(imageRatio)
-                } else {
-                    make.height.equalToSuperview()
-                    make.width.equalTo(imageContainerView.snp.height).multipliedBy(imageRatio)
-                }
+                targetW = containerSize.width
+                targetH = targetW / imageRatio
+            }
+        } else {
+            if imageRatio > containerRatio {
+                targetW = containerSize.width
+                targetH = targetW / imageRatio
+            } else {
+                targetH = containerSize.height
+                targetW = targetH * imageRatio
             }
         }
+
+        imageWidthConstraint?.update(offset: targetW)
+        imageHeightConstraint?.update(offset: targetH)
     }
 
     private func load(model: PasteboardModel, keyword: String) {

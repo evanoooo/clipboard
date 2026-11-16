@@ -19,6 +19,7 @@ enum PasteboardTextPreparation {
         let searchText: String
         let length: Int
         let uniqueId: String
+        let tag: String
     }
 
     nonisolated static func prepare(_ data: Data) -> Content? {
@@ -29,7 +30,8 @@ enum PasteboardTextPreparation {
             showData: Data(prefixText.utf8),
             searchText: PasteboardModel.normalizeSearchText(text),
             length: text.utf16.count,
-            uniqueId: data.sha256Hex
+            uniqueId: data.sha256Hex,
+            tag: PasteboardModel.calculateTextTag(text)
         )
     }
 }

@@ -65,16 +65,16 @@ extension String {
         return candidate
     }
 
+    private nonisolated static let sharedLinkDetector: NSDataDetector? = {
+        try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+    }()
+
     func detectLinks() -> [URL] {
         if let url = asCompleteURL() {
             return [url]
         }
 
-        guard
-            let detector = try? NSDataDetector(
-                types: NSTextCheckingResult.CheckingType.link.rawValue
-            )
-        else {
+        guard let detector = Self.sharedLinkDetector else {
             return []
         }
 
@@ -239,9 +239,13 @@ extension String {
     nonisolated private var fastSmartWordCount: Int {
         var count = 0
         var inWord = false
+        var iter = 0
 
         for scalar in unicodeScalars {
-            guard !withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) else { return count }
+            if (iter & 0xFFF) == 0, withUnsafeCurrentTask(body: { $0?.isCancelled ?? false }) {
+                return count
+            }
+            iter &+= 1
             let val = scalar.value
             // CJK 统一表意文字：每个汉字单独计词
             if val >= 0x4E00 && val <= 0x9FFF {

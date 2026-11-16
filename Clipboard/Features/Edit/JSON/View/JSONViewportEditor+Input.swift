@@ -28,8 +28,10 @@ extension JSONViewportEditor {
         var prefix = 0
         let limit = min(previous.length, updated.length)
         while prefix < limit, previous.character(at: prefix) == updated.character(at: prefix) { prefix += 1 }
-        if prefix == previous.length, prefix == updated.length { return nil }
-        if let pendingReplacement { return (pendingReplacement, textView.string) }
+        if prefix == previous.length, prefix == updated.length {
+            if let pendingReplacement { return (pendingReplacement, "") }
+            return nil
+        }
         if prefix > 0, (0xD800...0xDBFF).contains(previous.character(at: prefix - 1)) { prefix -= 1 }
         var suffix = 0
         while suffix < limit - prefix,
@@ -40,8 +42,10 @@ extension JSONViewportEditor {
         if suffix > 0, (0xDC00...0xDFFF).contains(previous.character(at: previous.length - suffix)) {
             suffix -= 1
         }
-        let range = NSRange(location: page.location + prefix, length: previous.length - prefix - suffix)
-        let replacement = updated.substring(with: NSRange(location: prefix, length: updated.length - prefix - suffix))
+        let replacementLength = max(0, updated.length - prefix - suffix)
+        let replacement = updated.substring(with: NSRange(location: prefix, length: replacementLength))
+        if let pendingReplacement { return (pendingReplacement, replacement) }
+        let range = NSRange(location: page.location + prefix, length: max(0, previous.length - prefix - suffix))
         return (folds.sourceRange(for: range), replacement)
     }
 }

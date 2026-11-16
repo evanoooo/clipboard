@@ -117,7 +117,7 @@ extension ClipMainViewController: NSCollectionViewDelegate {
 
     func collectionView(
         _: NSCollectionView,
-        draggingSession _: NSDraggingSession,
+        draggingSession session: NSDraggingSession,
         willBeginAt _: NSPoint,
         forItemsAt indexPaths: Set<IndexPath>
     ) {
@@ -126,6 +126,15 @@ extension ClipMainViewController: NSCollectionViewDelegate {
         // 遮罩位于列表上方；hitTest 穿透不会让已注册的拖放目标穿透。
         dropOverlayView.unregisterDraggedTypes()
         dropOverlayView.resetDragState()
+
+        let extraURLs = indexPaths.flatMap { indexPath -> [NSURL] in
+            guard let paths = displayedModel(at: indexPath)?.filePathsForDragging,
+                  paths.count > 1 else { return [] }
+            return paths.dropFirst().map { URL(fileURLWithPath: $0) as NSURL }
+        }
+        if !extraURLs.isEmpty {
+            session.draggingPasteboard.writeObjects(extraURLs)
+        }
     }
 
     func collectionView(

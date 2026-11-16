@@ -75,14 +75,28 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
             schema.column(Col.alias)
             schema.column(Col.aliasSearch)
             schema.column(Col.hidden, defaultValue: 0)
+            schema.column(Col.mediaRelPath)
+            schema.column(Col.mediaSize, defaultValue: 0)
         }
         do {
             try conn.run(statement)
+            try migrateMediaColumnsIfNeeded(on: conn)
             try PasteOrder.setup(on: conn)
             try PasteAliasMigration.setup(on: conn)
             try PasteFTSMigration.setup(on: conn)
         } catch {
             log.error("Create Table Error: \(error)")
+        }
+    }
+
+    nonisolated private static func migrateMediaColumnsIfNeeded(on conn: Connection) throws {
+        let columns = try conn.prepare("PRAGMA table_info(Clip)")
+            .compactMap { $0[1] as? String }
+        if !columns.contains("media_rel_path") {
+            try conn.run("ALTER TABLE Clip ADD COLUMN media_rel_path TEXT")
+        }
+        if !columns.contains("media_size") {
+            try conn.run("ALTER TABLE Clip ADD COLUMN media_size INTEGER NOT NULL DEFAULT 0")
         }
     }
 
@@ -115,6 +129,14 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
             (
                 "idx_hidden_ts",
                 "CREATE INDEX IF NOT EXISTS idx_hidden_ts ON Clip(hidden, timestamp DESC)"
+            ),
+            (
+                "idx_hidden_ts_app",
+                "CREATE INDEX IF NOT EXISTS idx_hidden_ts_app ON Clip(hidden, timestamp DESC, app_id)"
+            ),
+            (
+                "idx_unpinned_ts",
+                "CREATE INDEX IF NOT EXISTS idx_unpinned_ts ON Clip(timestamp) WHERE \"group\" = -1"
             )
         ]
 

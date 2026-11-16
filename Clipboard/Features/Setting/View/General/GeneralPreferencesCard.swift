@@ -56,24 +56,13 @@ struct GeneralPreferencesCard: View {
         .settingsStyle()
         .onAppear {
             refreshLaunchAtLoginStatus()
-            startLaunchAtLoginTimer()
-        }
-        .onDisappear {
-            stopLaunchAtLoginTimer()
         }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: NSWindow.didBecomeKeyNotification
+                for: NSApplication.didBecomeActiveNotification
             )
         ) { _ in
-            startLaunchAtLoginTimer()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: NSWindow.didResignKeyNotification
-            )
-        ) { _ in
-            stopLaunchAtLoginTimer()
+            refreshLaunchAtLoginStatus()
         }
     }
 
@@ -82,22 +71,5 @@ struct GeneralPreferencesCard: View {
     private func refreshLaunchAtLoginStatus() {
         launchAtLogin = LaunchAtLoginHelper.shared.isEnabled
         PasteUserDefaults.onStart = launchAtLogin
-    }
-
-    private func startLaunchAtLoginTimer() {
-        stopLaunchAtLoginTimer()
-        launchAtLoginTimer = Timer.scheduledTimer(
-            withTimeInterval: 2.0,
-            repeats: true
-        ) { _ in
-            Task { @MainActor in
-                refreshLaunchAtLoginStatus()
-            }
-        }
-    }
-
-    private func stopLaunchAtLoginTimer() {
-        launchAtLoginTimer?.invalidate()
-        launchAtLoginTimer = nil
     }
 }

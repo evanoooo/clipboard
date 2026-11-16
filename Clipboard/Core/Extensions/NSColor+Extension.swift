@@ -13,14 +13,34 @@ extension NSColor {
         var hexString = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         hexString = hexString.replacing("#", with: "")
 
-        var rgb: UInt64 = 0
-        Scanner(string: hexString).scanHexInt64(&rgb)
+        var raw: UInt64 = 0
+        Scanner(string: hexString).scanHexInt64(&raw)
 
-        let red = CGFloat((rgb & 0xFF0000) >> 16) / 255.0
-        let green = CGFloat((rgb & 0x00FF00) >> 8) / 255.0
-        let blue = CGFloat(rgb & 0x0000FF) / 255.0
+        let red, green, blue, alpha: CGFloat
+        switch hexString.count {
+        case 3:
+            red = CGFloat((raw & 0xF00) >> 8) / 15.0
+            green = CGFloat((raw & 0x0F0) >> 4) / 15.0
+            blue = CGFloat(raw & 0x00F) / 15.0
+            alpha = 1.0
+        case 4:
+            red = CGFloat((raw & 0xF000) >> 12) / 15.0
+            green = CGFloat((raw & 0x0F00) >> 8) / 15.0
+            blue = CGFloat((raw & 0x00F0) >> 4) / 15.0
+            alpha = CGFloat(raw & 0x000F) / 15.0
+        case 8:
+            red = CGFloat((raw & 0xFF00_0000) >> 24) / 255.0
+            green = CGFloat((raw & 0x00FF_0000) >> 16) / 255.0
+            blue = CGFloat((raw & 0x0000_FF00) >> 8) / 255.0
+            alpha = CGFloat(raw & 0x0000_00FF) / 255.0
+        default:
+            red = CGFloat((raw & 0xFF0000) >> 16) / 255.0
+            green = CGFloat((raw & 0x00FF00) >> 8) / 255.0
+            blue = CGFloat(raw & 0x0000FF) / 255.0
+            alpha = 1.0
+        }
 
-        self.init(red: red, green: green, blue: blue, alpha: 1.0)
+        self.init(red: red, green: green, blue: blue, alpha: alpha)
     }
 
     /// 将 NSColor 转为十六进制字符串 (#RRGGBB 或 #RRGGBBAA)

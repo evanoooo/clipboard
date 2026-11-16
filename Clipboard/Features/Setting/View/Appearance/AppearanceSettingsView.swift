@@ -42,6 +42,9 @@ struct AppearanceSettingsView: View {
                     )
                     .padding(.horizontal, Const.space16)
                     .onChange(of: showMenuBarIcon) { _, newValue in
+                        if !newValue && !showDockIcon {
+                            showDockIcon = true
+                        }
                         NotificationCenter.default.post(
                             name: .menuBarIconVisibilityChanged,
                             object: newValue
@@ -57,6 +60,9 @@ struct AppearanceSettingsView: View {
                     )
                     .padding(.horizontal, Const.space16)
                     .onChange(of: showDockIcon) { _, newValue in
+                        if !newValue && !showMenuBarIcon {
+                            showMenuBarIcon = true
+                        }
                         scheduleDockIconUpdate(visible: newValue)
                     }
 

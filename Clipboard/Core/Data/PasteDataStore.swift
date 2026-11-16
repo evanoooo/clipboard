@@ -40,16 +40,14 @@ final class PasteDataStore {
     @MainActor
     func trimExcessMemory(forceCachesOnly: Bool = false) {
         if !forceCachesOnly, !WindowManager.shared.isVisible {
+            for model in dataList.value {
+                model.clearLoadedPayload()
+            }
             if dataList.value.count > pageSize {
                 hasMoreData = true
                 lastRequestedPage = 0
                 pageIndex = 0
                 updateData(with: Array(dataList.value.prefix(pageSize)), changeType: .reset)
-            }
-            for model in dataList.value {
-                model.cachedHighlightedCode = nil
-                model.cachedPlainTextAttributedString = nil
-                model.clearLoadedPayload()
             }
             trimmedUpToIndex = 0
             ClipUndoStore.shared.removeAll()
@@ -60,6 +58,7 @@ final class PasteDataStore {
         FileThumbnailService.shared.clearCache()
         ModelThumbnailCache.shared.removeAll()
         ModelAttributedTextCache.shared.removeAll()
+        ModelShowDataCache.shared.removeAll()
         ModelLinkMetadataCache.shared.removeAll()
         sqlite3_release_memory(Int32.max)
         malloc_zone_pressure_relief(malloc_default_zone(), 0)
@@ -152,6 +151,7 @@ final class PasteDataStore {
         totalCount = count
         filterState.filteredCount = count
         SourceAppCache.shared.warmMissingIcons()
+        malloc_zone_pressure_relief(malloc_default_zone(), 0)
         return true
     }
 
@@ -367,11 +367,15 @@ extension PasteDataStore {
     private func applyOrder(_ entries: [(id: Int64, order: Int64)]) {
         let models = Dictionary(dataList.value.compactMap { model in
             model.id.map { ($0, model) }
-        }, uniquingKeysWith: { first, _ in first } )
-        let sorted = entries.compactMap { entry -> PasteboardModel? in
-            guard let model = models[entry.id] else { return nil }
-            model.sortOrder = entry.order
-            return model
+        }, uniquingKeysWith: { first, _ in first })
+        for entry in entries {
+            models[entry.id]?.sortOrder = entry.order
+        }
+        let sorted = dataList.value.sorted {
+            if $0.sortOrder != $1.sortOrder {
+                return $0.sortOrder > $1.sortOrder
+            }
+            return ($0.id ?? 0) > ($1.id ?? 0)
         }
         updateData(with: sorted, changeType: .reorder)
     }
@@ -721,7 +725,9 @@ extension PasteDataStore {
         let insertedAppID = result.appID
         await MainActor.run { SourceAppCache.shared.promote(appID: insertedAppID) }
         AppColorService.shared.updateColor(for: model)
-        totalCount += 1
+        if result.didIncreaseTotalCount {
+            totalCount += 1
+        }
         let count = totalCount
 
         model.id = result.id
@@ -751,7 +757,7 @@ extension PasteDataStore {
         list.removeAll(where: { $0.uniqueId == model.uniqueId })
         list.insert(model, at: 0)
         let truncated = Array(list.prefix(pageSize))
-        hasMoreData = isInFilterMode ? (list.count >= pageSize) : (totalCount > truncated.count)
+        hasMoreData = isInFilterMode ? (isFilteredCountCapped || filteredCount > truncated.count) : (totalCount > truncated.count)
 
         pageIndex = 0
         lastRequestedPage = 0
@@ -827,12 +833,8 @@ extension PasteDataStore {
         }
 
         var list = dataList.value
-        if let idx = list.firstIndex(where: { $0.id == id }) {
-            list.remove(at: idx)
-            list.insert(updatedModel, at: 0)
-        } else {
-            list.insert(updatedModel, at: 0)
-        }
+        list.removeAll { $0.id == id || $0.uniqueId == updatedModel.uniqueId }
+        list.insert(updatedModel, at: 0)
 
         totalCount = await sqlManager.getTotalCount()
         if isInFilterMode, let currentFilter {

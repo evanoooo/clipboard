@@ -138,10 +138,20 @@ nonisolated private final class AsyncFileLogWriter: @unchecked Sendable {
         }
     }
 
-    nonisolated func enqueue(_ logLine: String) {
+    nonisolated func enqueue(
+        timestamp: Date,
+        level: String,
+        category: String,
+        fileName: String,
+        line: Int,
+        function: String,
+        message: String,
+        format: Date.FormatStyle
+    ) {
         writeQueue.async { [weak self] in
             guard let self else { return }
-            self.pendingEntries.append(logLine + "\n")
+            let logLine = "[\(timestamp.formatted(format))] [\(level)] [\(category)] [\(fileName):\(line)] \(function) - \(message)\n"
+            self.pendingEntries.append(logLine)
 
             // 批量触发：满 20 条立即落盘，否则 1 秒去抖冲刷
             if self.pendingEntries.count >= 20 {
@@ -308,9 +318,17 @@ final class AppLogger: Sendable {
         )
         ringBuffer.append(entry)
 
-        // 2. 投递到异步批量写盘队列，平滑写入 clip-YYYYMMDD.log（零阻塞主线程）
-        let fileLogLine = "[\(timestamp.formatted(Self.fileTimestampFormat))] [\(level.rawValue)] [\(category.rawValue)] [\(fileName):\(line)] \(function) - \(message)"
-        fileWriter.enqueue(fileLogLine)
+        // 2. 投递到异步批量写盘队列，将 Date 格式化推迟到后台串行队列执行（零阻塞主线程）
+        fileWriter.enqueue(
+            timestamp: timestamp,
+            level: level.rawValue,
+            category: category.rawValue,
+            fileName: fileName,
+            line: line,
+            function: function,
+            message: message,
+            format: Self.fileTimestampFormat
+        )
     }
 
     nonisolated private static let fileTimestampFormat: Date.FormatStyle = .dateTime

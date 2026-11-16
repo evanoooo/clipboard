@@ -87,6 +87,10 @@ extension PasteDataStore {
             return
         }
 
+        // 仅当预览未发生截断或完整数据已在内存时才校验链接有效性，防止截断的百分号编码误伤长链接
+        if storedType == .link, !model.hasLoadedData, model.length > (model.showData?.count ?? 0) {
+            return
+        }
         let isStillValid = (storedType == .link && model.isLink) || (storedType == .color && model.isCSS)
         guard !isStillValid else { return }
 

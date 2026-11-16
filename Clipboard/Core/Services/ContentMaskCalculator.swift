@@ -20,6 +20,20 @@ enum ContentMaskCalculator {
         return (contentTopPadding + contentTextHeight) > contentHeightBeforeBottomOverlay
     }
 
+    @MainActor private static let measurementStack: (
+        storage: NSTextStorage,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer
+    ) = {
+        let storage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: CGSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        layoutManager.addTextContainer(textContainer)
+        storage.addLayoutManager(layoutManager)
+        return (storage, layoutManager, textContainer)
+    }()
+
     private static func calculateContentTextHeight(model: PasteboardModel) -> CGFloat {
         let availableWidth = Const.cardSize - Const.space10 * 4
 
@@ -27,23 +41,22 @@ enum ContentMaskCalculator {
         // 对混合字体、行高、富文本的测量结果更准确；
         // 对于长文本截取前 800 字符计算已远超卡片遮罩阈值，杜绝主线程全文排版卡顿
         let rawAttr = model.attributeString
-        let measureAttr = rawAttr.length > 800
-            ? rawAttr.attributedSubstring(from: NSRange(location: 0, length: 800))
-            : rawAttr
+        let measureAttr: NSAttributedString
+        if rawAttr.length > 800 {
+            let safeRange = (rawAttr.string as NSString)
+                .rangeOfComposedCharacterSequences(for: NSRange(location: 0, length: 800))
+            measureAttr = rawAttr.attributedSubstring(from: safeRange)
+        } else {
+            measureAttr = rawAttr
+        }
         let attrString = preparedAttributedString(from: measureAttr)
 
-        let textStorage = NSTextStorage(attributedString: attrString)
-        let layoutManager = NSLayoutManager()
-        let textContainer = NSTextContainer(
-            size: CGSize(width: max(0, availableWidth), height: .greatestFiniteMagnitude)
-        )
-        textContainer.lineFragmentPadding = 0
-
-        layoutManager.addTextContainer(textContainer)
-        textStorage.addLayoutManager(layoutManager)
-
-        layoutManager.ensureLayout(for: textContainer)
-        let usedRect = layoutManager.usedRect(for: textContainer)
+        let stack = measurementStack
+        stack.textContainer.containerSize = CGSize(width: max(0, availableWidth), height: .greatestFiniteMagnitude)
+        stack.storage.setAttributedString(attrString)
+        stack.layoutManager.ensureLayout(for: stack.textContainer)
+        let usedRect = stack.layoutManager.usedRect(for: stack.textContainer)
+        stack.storage.setAttributedString(NSAttributedString())
         return ceil(usedRect.height)
     }
 

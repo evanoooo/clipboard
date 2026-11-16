@@ -6,6 +6,21 @@
 import AppKit
 
 enum EditTextLoader {
+    nonisolated static func loadAttributedString(data: Data, typeRawValue: String) -> NSAttributedString? {
+        let type = NSPasteboard.PasteboardType(typeRawValue)
+        guard type == .rtf || type == .rtfd else { return nil }
+        return autoreleasepool {
+            switch type {
+            case .rtf:
+                NSAttributedString(rtf: data, documentAttributes: nil)
+            case .rtfd:
+                NSAttributedString(rtfd: data, documentAttributes: nil)
+            default:
+                nil
+            }
+        }
+    }
+
     nonisolated static func load(data: Data, typeRawValue: String) -> String {
         let type = NSPasteboard.PasteboardType(typeRawValue)
 

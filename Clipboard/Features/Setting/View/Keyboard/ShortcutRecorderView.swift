@@ -147,6 +147,7 @@ struct ShortcutRecorder: View {
     // MARK: - 录入状态管理
 
     private func startRecording() {
+        guard !isRecording else { return }
         isRecording = true
         displayText = String(localized: .keyboardShortcutTip)
         installEventHandle()
@@ -165,6 +166,7 @@ struct ShortcutRecorder: View {
     // MARK: - EventHandle
 
     private func installEventHandle() {
+        uninstallEventHandle()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
             event in
             handleKeyEvent(event)

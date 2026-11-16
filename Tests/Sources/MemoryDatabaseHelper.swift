@@ -31,6 +31,8 @@ enum MemoryDatabaseHelper {
             schema.column(Col.alias)
             schema.column(Col.aliasSearch)
             schema.column(Col.hidden, defaultValue: 0)
+            schema.column(Col.mediaRelPath)
+            schema.column(Col.mediaSize, defaultValue: 0)
         }
         try db.run(statement)
 

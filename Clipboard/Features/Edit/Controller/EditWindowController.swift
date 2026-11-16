@@ -19,7 +19,7 @@ final class EditWindowController: NSWindowController, NSWindowDelegate {
 
     private(set) var currentModel: PasteboardModel?
 
-    private var editContentView: EditContentView?
+    var editContentView: EditContentView?
     private var stableWindowCenter: NSPoint?
     private var resizeGeneration = 0
     private var isResizingForMode = false
@@ -50,6 +50,7 @@ final class EditWindowController: NSWindowController, NSWindowDelegate {
         window.level = .normal
         window.center()
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.titlebarSeparatorStyle = .none
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -121,6 +122,8 @@ final class EditWindowController: NSWindowController, NSWindowDelegate {
         saveTask?.cancel()
         saveTask = nil
         editContentView?.cancelWork()
+        window?.makeFirstResponder(nil)
+        window?.undoManager?.removeAllActions()
         window?.orderOut(nil)
         let contentView = EditContentView(model: model)
         contentView.onCancel = { [weak self] in
@@ -142,6 +145,8 @@ final class EditWindowController: NSWindowController, NSWindowDelegate {
         saveTask = nil
         editContentView?.cancelWork()
         finishModeResize()
+        window?.makeFirstResponder(nil)
+        window?.undoManager?.removeAllActions()
         window?.orderOut(nil)
         window?.contentView = nil
         currentModel = nil
@@ -158,6 +163,8 @@ final class EditWindowController: NSWindowController, NSWindowDelegate {
         saveTask = nil
         editContentView?.cancelWork()
         finishModeResize()
+        window?.makeFirstResponder(nil)
+        window?.undoManager?.removeAllActions()
         window?.contentView = nil
         currentModel = nil
         editContentView = nil

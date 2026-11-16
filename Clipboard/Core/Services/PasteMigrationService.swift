@@ -300,11 +300,13 @@ actor PasteMigrationService {
         // 7. 刷新缓存与状态
         try? await PasteSQLManager.manager.loadApps()
         let records = await PasteSQLManager.manager.getDistinctAppInfo()
+        let newTotal = await PasteSQLManager.manager.getTotalCount()
         await MainActor.run {
             ClipUndoStore.shared.removeAll()
             SourceAppCache.shared.replace(records)
             SourceAppCache.shared.warmMissingIcons()
             AppColorService.shared.fillMissingColors()
+            PasteDataStore.main.totalCount = newTotal
         }
         await PasteDataStore.main.resetDefaultList()
 
@@ -412,9 +414,10 @@ actor PasteMigrationService {
     private func decompressLZFSE(data: Data) -> Data? {
         guard !data.isEmpty else { return nil }
 
-        let expansionFactors = [15, 40, 100, 200]
+        let maxCapacity = 64 * 1024 * 1024
+        let expansionFactors = [4, 15, 40, 100]
         for factor in expansionFactors {
-            let capacity = max(data.count * factor + 1024 * 1024, 2 * 1024 * 1024)
+            let capacity = min(max(data.count * factor + 64 * 1024, 64 * 1024), maxCapacity)
             var destination = Data(count: capacity)
 
             let decodedSize = destination.withUnsafeMutableBytes { destBytes -> Int in
@@ -532,7 +535,7 @@ actor PasteMigrationService {
                 type: .string,
                 data: textData,
                 showData: showData,
-                searchText: str,
+                searchText: PasteboardModel.normalizeSearchText(str),
                 length: str.count,
                 tag: tag
             )
@@ -545,19 +548,20 @@ actor PasteMigrationService {
                 type: .rtf,
                 data: rtfData,
                 showData: nil,
-                searchText: str,
+                searchText: PasteboardModel.normalizeSearchText(str),
                 length: str.count,
                 tag: "rich"
             )
         }
 
-        // 3. 图片 (PNG / TIFF / JPEG)
+        // 3. 图片 (PNG / TIFF / JPEG)：无标题时不写入“图片”占位词，保留为空以便后台 OCR 正常扫描
+        let imageSearchText = title.map(PasteboardModel.normalizeSearchText) ?? ""
         if let pngData = byteMap["public.png"] {
             return ExtractedClip(
                 type: .png,
                 data: pngData,
                 showData: nil,
-                searchText: title ?? "图片",
+                searchText: imageSearchText,
                 length: pngData.count,
                 tag: "image"
             )
@@ -567,7 +571,7 @@ actor PasteMigrationService {
                 type: .tiff,
                 data: tiffData,
                 showData: nil,
-                searchText: title ?? "图片",
+                searchText: imageSearchText,
                 length: tiffData.count,
                 tag: "image"
             )
@@ -577,7 +581,7 @@ actor PasteMigrationService {
                 type: .png,
                 data: jpegData,
                 showData: nil,
-                searchText: title ?? "图片",
+                searchText: imageSearchText,
                 length: jpegData.count,
                 tag: "image"
             )
@@ -590,7 +594,7 @@ actor PasteMigrationService {
                 type: .fileURL,
                 data: fileData,
                 showData: nil,
-                searchText: str,
+                searchText: PasteboardModel.normalizeSearchText(str),
                 length: str.count,
                 tag: "file"
             )
@@ -604,7 +608,7 @@ actor PasteMigrationService {
                 type: type,
                 data: firstData,
                 showData: nil,
-                searchText: str,
+                searchText: PasteboardModel.normalizeSearchText(str),
                 length: firstData.count,
                 tag: ""
             )

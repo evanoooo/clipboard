@@ -180,7 +180,8 @@ extension AppDelegate {
     private func initLocalEvent() {
         monitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
             event in
-            if event.modifierFlags.contains(.command) {
+            let relevantModifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            if relevantModifiers == .command {
                 let modifiers = event.charactersIgnoringModifiers
                 if modifiers == "," || modifiers == "，" {
                     SettingWindowController.shared.toggleWindow(page: .general)

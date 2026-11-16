@@ -298,7 +298,7 @@ nonisolated struct CodeLanguageRules: Sendable {
                 add all alter and as asc auto_increment begin between by cascade case cast
                 check collate column commit constraint create cross database default delete desc
                 distinct drop else end escape except exists foreign from full group having if in
-                index inner insert int integerinto is join key left like limit merge natural not
+                index inner insert int integer into is join key left like limit merge natural not
                 null offset on or order outer primary references rename replace return right
                 rollback row rows select set table temporary then to transaction trigger union
                 unique update use values view when where with

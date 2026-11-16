@@ -9,8 +9,10 @@ extension EditWindowController {
     func saveContent(_ editedContent: EditedContent) {
         guard let model = currentModel, saveTask == nil else { return }
         let inserting = isNewItem
+        editContentView?.setSaving(true)
         saveTask = Task {
             defer {
+                editContentView?.setSaving(false)
                 saveTask = nil
             }
             guard !Task.isCancelled else { return }
@@ -29,13 +31,27 @@ extension EditWindowController {
             if inserting {
                 await insertContent(content, searchText: searchText, source: model)
             } else if let id = model.id {
-                guard await PasteDataStore.main.updateItemContent(
+                let updated = await PasteDataStore.main.updateItemContent(
                     id: id, content: content, searchText: searchText
-                ) else { return }
+                )
+                guard updated else {
+                    showSaveErrorAlert()
+                    return
+                }
             }
             guard !Task.isCancelled, currentModel === model else { return }
             closeWindow()
         }
+    }
+
+    private func showSaveErrorAlert() {
+        guard let window else { return }
+        let alert = NSAlert.appAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: .editSaveFailedTitle)
+        alert.informativeText = String(localized: .editSaveFailedMessage)
+        alert.addButton(withTitle: String(localized: .commonConfirm))
+        alert.beginSheetModal(for: window)
     }
 
     private func makePasteContent(_ content: EditedContent) async -> PasteContent? {
@@ -109,6 +125,8 @@ extension EditWindowController {
         )
 
         await PasteDataStore.main.insertModel(model)
+        SyncEngine.shared.markDirtyAndSchedule()
+        model.evictRawData()
     }
 
     private static func hasRichTextAttributes(

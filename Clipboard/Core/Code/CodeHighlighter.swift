@@ -182,8 +182,31 @@ enum CodeHighlighter {
                 continue
             }
 
-            // 4. 检查常规字符串（"...", '...', `...`）
-            if let stringRule = rules.strings.first(where: { remainder.hasPrefix($0.open) }) {
+            // 4. 字符字面量与生命周期识别（如 Rust 中的 'a'、'\n' 与生命周期 'static）
+            if rules.charLiterals, text[currentIndex] == "'" {
+                if let charEnd = matchCharLiteralEnd(in: text, from: currentIndex) {
+                    appendSpan(kind: .string, from: currentIndex, to: charEnd, fullText: fullText, in: &spans)
+                    currentIndex = charEnd
+                    continue
+                }
+                // Rust 生命周期（如 'a、'static、'_）：不将其当作未闭合字符串吞掉后续代码
+                let afterQuote = text.index(after: currentIndex)
+                if afterQuote < text.endIndex, (text[afterQuote].isLetter || text[afterQuote] == "_") {
+                    var lifetimeEnd = text.index(after: afterQuote)
+                    while lifetimeEnd < text.endIndex, (text[lifetimeEnd].isLetter || text[lifetimeEnd].isNumber || text[lifetimeEnd] == "_") {
+                        lifetimeEnd = text.index(after: lifetimeEnd)
+                    }
+                    appendSpan(kind: .type, from: currentIndex, to: lifetimeEnd, fullText: fullText, in: &spans)
+                    currentIndex = lifetimeEnd
+                    continue
+                }
+            }
+
+            // 5. 检查常规字符串（"...", '...', `...`）
+            if let stringRule = rules.strings.first(where: {
+                if rules.charLiterals, $0.open == "'" { return false }
+                return remainder.hasPrefix($0.open)
+            }) {
                 let tokenStart = currentIndex
                 currentIndex = text.index(currentIndex, offsetBy: stringRule.open.count)
                 var escaped = false
@@ -209,6 +232,62 @@ enum CodeHighlighter {
             }
 
             let currentChar = text[currentIndex]
+
+            // 5.1 HTML/XML 标签名高亮（<tag, </tag）
+            if rules.tagNamesAsKeywords, currentChar == "<" {
+                var tagStart = text.index(after: currentIndex)
+                if tagStart < text.endIndex, text[tagStart] == "/" {
+                    tagStart = text.index(after: tagStart)
+                }
+                if tagStart < text.endIndex, (text[tagStart].isLetter || text[tagStart] == "_") {
+                    var tagEnd = text.index(after: tagStart)
+                    while tagEnd < text.endIndex {
+                        let c = text[tagEnd]
+                        if c.isLetter || c.isNumber || c == "_" || c == "-" || c == ":" {
+                            tagEnd = text.index(after: tagEnd)
+                        } else {
+                            break
+                        }
+                    }
+                    appendSpan(kind: .keyword, from: tagStart, to: tagEnd, fullText: fullText, in: &spans)
+                    currentIndex = tagEnd
+                    continue
+                }
+            }
+
+            // 5.2 @ 注解/指令高亮（@State, @Override, @media 等）
+            if rules.atSignAsKeyword, currentChar == "@" {
+                var nextIndex = text.index(after: currentIndex)
+                while nextIndex < text.endIndex {
+                    let c = text[nextIndex]
+                    if c.isLetter || c.isNumber || c == "_" || (language == .css && c == "-") {
+                        nextIndex = text.index(after: nextIndex)
+                    } else {
+                        break
+                    }
+                }
+                if nextIndex > text.index(after: currentIndex) {
+                    appendSpan(kind: .keyword, from: currentIndex, to: nextIndex, fullText: fullText, in: &spans)
+                    currentIndex = nextIndex
+                    continue
+                }
+            }
+
+            // 5.3 CSS 十六进制颜色高亮（#fff, #1e293b, #11223344）
+            if rules.hexColorAsNumber, currentChar == "#" {
+                var nextIndex = text.index(after: currentIndex)
+                var hexCount = 0
+                while nextIndex < text.endIndex, text[nextIndex].isHexDigit {
+                    hexCount += 1
+                    nextIndex = text.index(after: nextIndex)
+                }
+                if (hexCount == 3 || hexCount == 4 || hexCount == 6 || hexCount == 8),
+                   nextIndex == text.endIndex || !(text[nextIndex].isLetter || text[nextIndex].isNumber || text[nextIndex] == "_") {
+                    appendSpan(kind: .number, from: currentIndex, to: nextIndex, fullText: fullText, in: &spans)
+                    currentIndex = nextIndex
+                    continue
+                }
+            }
 
             // 5. 变量识别（特别是 Nginx / Shell / PHP 中的 $variable 或 ${variable}，以及 Shell 特殊变量 $?, $@, $#, $$, $*, $!, $-）
             if currentChar == "$" {
@@ -308,6 +387,44 @@ enum CodeHighlighter {
         }
 
         return spans
+    }
+
+    nonisolated private static func matchCharLiteralEnd(in text: Substring, from start: String.Index) -> String.Index? {
+        var cursor = text.index(after: start)
+        guard cursor < text.endIndex else { return nil }
+
+        if text[cursor] == "\\" {
+            cursor = text.index(after: cursor)
+            guard cursor < text.endIndex else { return nil }
+            if text[cursor] == "u" {
+                cursor = text.index(after: cursor)
+                if cursor < text.endIndex, text[cursor] == "{" {
+                    cursor = text.index(after: cursor)
+                    var digits = 0
+                    while cursor < text.endIndex, text[cursor].isHexDigit, digits < 6 {
+                        digits += 1
+                        cursor = text.index(after: cursor)
+                    }
+                    guard digits > 0, cursor < text.endIndex, text[cursor] == "}" else { return nil }
+                    cursor = text.index(after: cursor)
+                }
+            } else if text[cursor] == "x" {
+                cursor = text.index(after: cursor)
+                for _ in 0..<2 {
+                    guard cursor < text.endIndex, text[cursor].isHexDigit else { return nil }
+                    cursor = text.index(after: cursor)
+                }
+            } else {
+                cursor = text.index(after: cursor)
+            }
+        } else if text[cursor] == "'" || text[cursor] == "\n" || text[cursor] == "\r" {
+            return nil
+        } else {
+            cursor = text.index(after: cursor)
+        }
+
+        guard cursor < text.endIndex, text[cursor] == "'" else { return nil }
+        return text.index(after: cursor)
     }
 
     nonisolated private static func isIdentifierStart(_ c: Character, language: CodeLanguage) -> Bool {

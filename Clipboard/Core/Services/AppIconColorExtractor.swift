@@ -113,13 +113,19 @@ enum AppIconColorExtractor {
             let offset = (nextRow * pixelSize + nextColumn) * 4
             let alpha = Double(pixels[offset + 3])
             guard alpha > 128 else { continue }
-            let neighbor = ColorArea(
-                red: min(255, Double(pixels[offset]) * 255 / alpha),
-                green: min(255, Double(pixels[offset + 1]) * 255 / alpha),
-                blue: min(255, Double(pixels[offset + 2]) * 255 / alpha), area: 1
-            )
-            guard neighbor.isSuitable else { continue }
-            total += sample.squaredDistance(to: neighbor).squareRoot() / (255 * Double(3).squareRoot())
+            let red = min(255, Double(pixels[offset]) * 255 / alpha)
+            let green = min(255, Double(pixels[offset + 1]) * 255 / alpha)
+            let blue = min(255, Double(pixels[offset + 2]) * 255 / alpha)
+            let brightness = (red + green + blue) / 3
+            let maximum = max(red, green, blue)
+            let saturation = maximum > 0 ? (maximum - min(red, green, blue)) / maximum : 0
+            let isSuitable = brightness > 30 && brightness <= 240 && saturation >= 0.08
+                && !(saturation > 0.95 && brightness > 180)
+            guard isSuitable else { continue }
+            let dR = sample.red - red
+            let dG = sample.green - green
+            let dB = sample.blue - blue
+            total += (dR * dR + dG * dG + dB * dB).squareRoot() / (255 * Double(3).squareRoot())
             count += 1
         }
         return count > 0 ? total / count : 0

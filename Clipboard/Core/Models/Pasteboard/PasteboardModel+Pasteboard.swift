@@ -18,9 +18,11 @@ extension PasteboardModel {
         else { return nil }
 
         let type: PasteboardType
+        var extractedPaths: [String]?
         if let paths = Self.extractFilePaths(from: pasteboard, item: item),
            !paths.isEmpty {
             type = .fileURL
+            extractedPaths = paths
         } else if let matched = item.availableType(from: PasteboardType.supportTypes) {
             type = matched
         } else {
@@ -32,7 +34,7 @@ extension PasteboardModel {
         var length = 0
 
         if type.isFile() {
-            guard let paths = Self.extractFilePaths(from: pasteboard, item: item),
+            guard let paths = extractedPaths,
                   !paths.isEmpty
             else { return nil }
 
@@ -68,6 +70,11 @@ extension PasteboardModel {
         }
 
         let calculatedTag = Self.calculateTag(type: type, content: content ?? Data(), extractedText: extractedTextString)
+        let precomputedUniqueId: String? = if let content, (type == .rtf || type == .rtfd) {
+            "\(type.rawValue):\(content.sha256Hex)"
+        } else {
+            nil
+        }
 
         let app = sourceApp ?? NSWorkspace.shared.frontmostApplication
 
@@ -82,6 +89,7 @@ extension PasteboardModel {
             length: length,
             group: -1,
             tag: calculatedTag,
+            uniqueId: precomputedUniqueId,
             sourceBundleID: app?.bundleIdentifier
         )
     }
@@ -90,19 +98,147 @@ extension PasteboardModel {
         _ content: Data?, type: PasteboardType
     ) -> (source: NSAttributedString, showData: Data?)? {
         guard let content, !content.isEmpty else { return nil }
-        // 针对过大富文本（>256KB），避免在入库时全量反序列化 RTF 导致主线程卡顿
-        if (type == .rtf || type == .rtfd) && content.count > 262144 {
-            if let str = String(data: content, encoding: .utf8) ?? String(data: content, encoding: .ascii) {
-                let preview = str.prefix(300)
-                let attr = NSAttributedString(string: str)
-                return (attr, Data(preview.utf8))
-            }
+        // 针对过大富文本（>256KB），避免在入库时全量反序列化 RTF 导致主线程卡顿，也不把原始 RTF 控制字当作正文
+        if (type == .rtf || type == .rtfd) && content.count > 262_144 {
+            let extracted = extractPlainTextFromLargeRichText(content, type: type)
+            guard !extracted.allSatisfy(\.isWhitespace) else { return nil }
+            let preview = String(extracted.prefix(300))
+            let attr = NSAttributedString(string: extracted)
+            return (attr, Data(preview.utf8))
         }
         let text = NSAttributedString(with: content, type: type) ?? NSAttributedString()
         guard !text.string.allSatisfy(\.isWhitespace) else { return nil }
         let preview = text.length > 300
             ? text.attributedSubstring(from: NSRange(location: 0, length: 300)) : text
-        return (text, preview.toData(with: type))
+        var previewData: Data?
+        if type == .rtfd {
+            // 剥离内嵌附件后转为轻量 RTF 存入 showData，避免数十 MB 图片附件常驻内存
+            let mutable = NSMutableAttributedString(attributedString: preview)
+            mutable.removeAttribute(.attachment, range: NSRange(location: 0, length: mutable.length))
+            previewData = mutable.toData(with: .rtf)
+        } else {
+            previewData = preview.toData(with: type)
+        }
+        if let data = previewData, data.count > 16_384 {
+            previewData = Data(preview.string.utf8)
+        }
+        return (text, previewData)
+    }
+
+    /// 对超大 RTF/RTFD 进行轻量纯文本提取，避免全量反序列化富文本或将原始 RTF 控制字当作正文。
+    private static func extractPlainTextFromLargeRichText(_ data: Data, type: PasteboardType) -> String {
+        let rtfData: Data
+        if type == .rtfd {
+            guard let wrapper = FileWrapper(serializedRepresentation: data),
+                  let txtRTF = wrapper.fileWrappers?["TXT.rtf"]?.regularFileContents else {
+                return ""
+            }
+            if txtRTF.count <= 262_144,
+               let attr = NSAttributedString(with: txtRTF, type: .rtf) {
+                return attr.string
+            }
+            rtfData = txtRTF
+        } else {
+            rtfData = data
+        }
+
+        // 限制扫描前 512KB 以确保入库零卡顿
+        let slice = rtfData.prefix(524_288)
+        guard let raw = String(data: slice, encoding: .ascii) ?? String(data: slice, encoding: .utf8) else {
+            return ""
+        }
+        return stripRTFControlWords(raw)
+    }
+
+    private static func stripRTFControlWords(_ rtf: String) -> String {
+        let skippedDestinations: Set<String> = [
+            "fonttbl", "colortbl", "stylesheet", "info", "pict", "object",
+            "fldinst", "header", "footer", "headerl", "headerr", "headerf",
+            "footerl", "footerr", "footerf", "listtable", "listoverridetable"
+        ]
+        var result = ""
+        result.reserveCapacity(min(rtf.count / 4, 32_768))
+
+        let chars = Array(rtf.unicodeScalars)
+        let count = chars.count
+        var i = 0
+        var depth = 0
+        var skipDepth: Int?
+
+        while i < count {
+            let ch = chars[i]
+            if ch == "{" {
+                depth += 1
+                if skipDepth == nil, i + 2 < count, chars[i + 1] == "\\", chars[i + 2] == "*" {
+                    skipDepth = depth
+                }
+                i += 1
+                continue
+            }
+            if ch == "}" {
+                if let sd = skipDepth, depth <= sd {
+                    skipDepth = nil
+                }
+                depth = max(0, depth - 1)
+                i += 1
+                continue
+            }
+            if skipDepth != nil {
+                i += 1
+                continue
+            }
+            if ch == "\\" {
+                i += 1
+                guard i < count else { break }
+                let next = chars[i]
+                if next == "\\" || next == "{" || next == "}" {
+                    result.unicodeScalars.append(next)
+                    i += 1
+                } else if next == "'" {
+                    // \'hh 十六进制转义：跳过两字符
+                    i = min(count, i + 3)
+                } else if next == "~" {
+                    result.append(" ")
+                    i += 1
+                } else if next == "\n" || next == "\r" {
+                    result.append("\n")
+                    i += 1
+                } else if CharacterSet.letters.contains(next) {
+                    let wordStart = i
+                    while i < count, CharacterSet.letters.contains(chars[i]) {
+                        i += 1
+                    }
+                    let word = String(String.UnicodeScalarView(chars[wordStart..<i]))
+                    // 跳过可选数字参数
+                    if i < count, (chars[i] == "-" || CharacterSet.decimalDigits.contains(chars[i])) {
+                        i += 1
+                        while i < count, CharacterSet.decimalDigits.contains(chars[i]) {
+                            i += 1
+                        }
+                    }
+                    if i < count, chars[i] == " " {
+                        i += 1
+                    }
+                    if skippedDestinations.contains(word) {
+                        skipDepth = depth
+                    } else if word == "par" || word == "line" {
+                        result.append("\n")
+                    } else if word == "tab" {
+                        result.append("\t")
+                    }
+                } else {
+                    i += 1
+                }
+                continue
+            }
+            if ch == "\r" || ch == "\n" {
+                i += 1
+                continue
+            }
+            result.unicodeScalars.append(ch)
+            i += 1
+        }
+        return result
     }
 
     // MARK: - 缩略图生成

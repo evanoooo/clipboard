@@ -8,33 +8,65 @@
 import AppKit
 import Vision
 
-final class OCRViewService {
+actor OCRViewService {
     static let shared = OCRViewService()
+
+    private let maxConcurrentTasks = 2
+    private var activeTasks = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     private init() {}
 
-    func recognizeText(from data: Data) async -> String {
-        await Task.detached(priority: .utility) {
-            autoreleasepool {
-                // OCR 下采样至 3000px，保留高精度文字识别细节的同时将 5K 位图面积收敛至 1/3~1/4，杜绝单次 OCR 占用 150MB+ 内存尖峰
-                guard let cgImage = ImageDownsampler.downsampleCGImage(from: data, maxPixelSize: 3000) else { return "" }
+    private func acquireSlot() async {
+        if activeTasks < maxConcurrentTasks {
+            activeTasks += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
 
-                let request = VNRecognizeTextRequest()
-                request.recognitionLevel = .accurate
-                request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
-                request.usesLanguageCorrection = true
+    private func releaseSlot() {
+        if !waiters.isEmpty {
+            let next = waiters.removeFirst()
+            next.resume()
+        } else {
+            activeTasks = max(0, activeTasks - 1)
+        }
+    }
 
-                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+    func recognizeText(from data: Data, priority: TaskPriority = .utility) async -> String {
+        await acquireSlot()
+        defer { releaseSlot() }
 
-                do {
-                    try handler.perform([request])
-                    return (request.results ?? [])
-                        .compactMap { $0.topCandidates(1).first?.string }
-                        .joined(separator: "\n")
-                } catch {
-                    return ""
-                }
+        let tempURL = FileManager.default.temporaryDirectory
+            .appending(path: "clip-ocr-\(UUID().uuidString).img")
+        do {
+            try data.write(to: tempURL, options: .atomic)
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            if let isolatedResult = await OCRWorkerClient.shared.recognize(fileURL: tempURL) {
+                return isolatedResult
             }
+        } catch {
+            // 临时文件写入失败时降级为本地识别
+        }
+
+        return await Task.detached(priority: priority) {
+            OCRWorkerProcess.recognizeData(data)
+        }.value
+    }
+
+    func recognizeText(at fileURL: URL, priority: TaskPriority = .utility) async -> String {
+        await acquireSlot()
+        defer { releaseSlot() }
+
+        if let isolatedResult = await OCRWorkerClient.shared.recognize(fileURL: fileURL) {
+            return isolatedResult
+        }
+
+        return await Task.detached(priority: priority) {
+            OCRWorkerProcess.recognizeFile(at: fileURL)
         }.value
     }
 }

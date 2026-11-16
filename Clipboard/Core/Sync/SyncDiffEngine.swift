@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SyncDiffEngine: Sendable {
+nonisolated enum SyncDiffEngine: Sendable {
     /// 纯函数：计算本地与远端索引的增量差异矩阵
     static func calculateDiff(
         localItems: [SyncItemBlob],
@@ -45,9 +45,12 @@ enum SyncDiffEngine: Sendable {
             }
 
             if remoteEntry.isDeleted {
-                // 远端为墓碑：严格遵循 LWW (Last-Write-Wins) 准则
+                // 远端为墓碑：严格遵循 LWW (Last-Write-Wins) 准则，统一规范到秒级比较
+                let remoteUpdatedSec = remoteEntry.updatedAt > 100_000_000_000
+                    ? remoteEntry.updatedAt / 1000
+                    : remoteEntry.updatedAt
                 if let local = localMap[id] {
-                    if local.timestamp > remoteEntry.updatedAt {
+                    if local.timestamp > remoteUpdatedSec {
                         // 本地更新时间晚于远端删除时间（删后本地又进行了复制或更新）：本地胜出，复活该项并重新上传
                         diff.toUpload.append(local)
                     } else {

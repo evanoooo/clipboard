@@ -7,7 +7,15 @@ final class JSONViewportEditor: NSView {
     var onCursor: ((Int, Int) -> Void)?
     var indentation = JSONIndentation.four
     var isEditable = true { didSet { textView.isEditable = isEditable } }
-    var currentText = ""
+    private var cachedText = ""
+    private var cachedTextRevision = -1
+    var currentText: String {
+        if cachedTextRevision != revision {
+            cachedText = mutableSource as String
+            cachedTextRevision = revision
+        }
+        return cachedText
+    }
     var selection = NSRange(location: 0, length: 0)
 
     let scrollView = NSScrollView()
@@ -15,7 +23,8 @@ final class JSONViewportEditor: NSView {
     let textView = JSONTextView(frame: .zero)
     let lineIndex = JSONLineIndex()
     lazy var ruler = JSONLineNumberRulerView(textView: textView, lineIndex: lineIndex)
-    var source: NSString = ""
+    var mutableSource = NSMutableString()
+    var source: NSString { mutableSource }
     var blocks: [JSONViewportIndex.Block] = []
     var displayBlocks: [JSONViewportIndex.Block] = []
     var heights: [CGFloat] = []
@@ -72,8 +81,9 @@ final class JSONViewportEditor: NSView {
         revision += 1
         pendingAnchor = nil
         pendingReplacement = nil
-        currentText = text
-        source = prepared.source
+        cachedText = text
+        cachedTextRevision = revision
+        mutableSource = (prepared.source.mutableCopy() as? NSMutableString) ?? NSMutableString(string: text)
         blocks = prepared.index.blocks
         lineIndex.replace(with: document?.lineStarts ?? [0])
         folds.reset(nodes: document?.nodes ?? [])

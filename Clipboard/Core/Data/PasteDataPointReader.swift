@@ -47,13 +47,13 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
             let mmapBytes = Int64(PasteUserDefaults.sqliteMmapSizeMB) * 1024 * 1024
             sqlite3_exec(db, "PRAGMA mmap_size = \(mmapBytes);", nil, nil, nil)
 
-            let sqlById = "SELECT data FROM Clip WHERE id = ? LIMIT 1"
+            let sqlById = "SELECT data, media_rel_path FROM Clip WHERE id = ? LIMIT 1"
             sqlite3_prepare_v2(db, sqlById, -1, &stmtById, nil)
 
-            let sqlByUniqueId = "SELECT data FROM Clip WHERE unique_id = ? LIMIT 1"
+            let sqlByUniqueId = "SELECT data, media_rel_path FROM Clip WHERE unique_id = ? LIMIT 1"
             sqlite3_prepare_v2(db, sqlByUniqueId, -1, &stmtByUniqueId, nil)
 
-            let sqlOCR = "SELECT search_text, unique_id, data FROM Clip WHERE id = ? LIMIT 1"
+            let sqlOCR = "SELECT search_text, unique_id, data, media_rel_path FROM Clip WHERE id = ? LIMIT 1"
             sqlite3_prepare_v2(db, sqlOCR, -1, &stmtOCR, nil)
 
             let sqlShowData = "SELECT show_data FROM Clip WHERE id = ? LIMIT 1"
@@ -95,10 +95,47 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
                 }
 
                 if sqlite3_step(stmt) == SQLITE_ROW {
+                    if let relPtr = sqlite3_column_text(stmt, 1) {
+                        let relPath = String(cString: relPtr)
+                        if !relPath.isEmpty, let external = MediaBlobStore.shared.readBlob(relPath: relPath) {
+                            return external
+                        }
+                    }
                     if let bytes = sqlite3_column_blob(stmt, 0) {
                         let count = sqlite3_column_bytes(stmt, 0)
                         return Data(bytes: bytes, count: Int(count))
                     }
+                }
+                return nil
+            }
+        }
+
+        func loadMediaURL(id: Int64?, uniqueId: String, parent: PersistentPointReader) -> URL? {
+            lock.withLock {
+                guard ensureOpen(parent: parent) else { return nil }
+                let stmt: OpaquePointer?
+                if let id {
+                    stmt = stmtById
+                    guard let stmt else { return nil }
+                    sqlite3_reset(stmt)
+                    sqlite3_clear_bindings(stmt)
+                    sqlite3_bind_int64(stmt, 1, id)
+                } else {
+                    stmt = stmtByUniqueId
+                    guard let stmt else { return nil }
+                    sqlite3_reset(stmt)
+                    sqlite3_clear_bindings(stmt)
+                    sqlite3_bind_text(stmt, 1, uniqueId, -1, SQLITE_TRANSIENT)
+                }
+                defer {
+                    sqlite3_reset(stmt)
+                    sqlite3_clear_bindings(stmt)
+                }
+
+                if sqlite3_step(stmt) == SQLITE_ROW,
+                   let relPtr = sqlite3_column_text(stmt, 1) {
+                    let relPath = String(cString: relPtr)
+                    return MediaBlobStore.shared.blobURL(for: relPath)
                 }
                 return nil
             }
@@ -154,6 +191,13 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
                         return (searchText: searchText, uniqueId: uniqueId, data: nil)
                     }
 
+                    if let relPtr = sqlite3_column_text(stmt, 3) {
+                        let relPath = String(cString: relPtr)
+                        if !relPath.isEmpty, let external = MediaBlobStore.shared.readBlob(relPath: relPath) {
+                            return (searchText: searchText, uniqueId: uniqueId, data: external)
+                        }
+                    }
+
                     if let bytes = sqlite3_column_blob(stmt, 2) {
                         let count = sqlite3_column_bytes(stmt, 2)
                         return (searchText: searchText, uniqueId: uniqueId, data: Data(bytes: bytes, count: Int(count)))
@@ -205,6 +249,10 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
         uiChannel.loadShowData(id: id, parent: self)
     }
 
+    func loadMediaURL(id: Int64?, uniqueId: String) -> URL? {
+        uiChannel.loadMediaURL(id: id, uniqueId: uniqueId, parent: self)
+    }
+
     func loadOCRTarget(id: Int64) -> (searchText: String, uniqueId: String, data: Data?)? {
         bulkChannel.loadOCRTarget(id: id, parent: self)
     }
@@ -224,9 +272,24 @@ nonisolated enum PasteDataPointReader {
         PersistentPointReader.shared.loadData(id: id, uniqueId: uniqueId, channel: channel)
     }
 
-    /// 点查单条记录的轻量 showData 缩略数据
+    /// 若该条目已外置至 `.media/` CAS 存储，则返回可用于零拷贝流式解码的本地文件 URL
+    nonisolated static func loadMediaURL(
+        id: Int64?,
+        uniqueId: String
+    ) -> URL? {
+        PersistentPointReader.shared.loadMediaURL(id: id, uniqueId: uniqueId)
+    }
+
+    /// 点查单条记录的轻量 showData 缩略数据（命中 4MB 有界 LRU 缓存时零磁盘 I/O）
     nonisolated static func loadShowData(id: Int64) -> Data? {
-        PersistentPointReader.shared.loadShowData(id: id)
+        if let cached = ModelShowDataCache.shared.data(for: id) {
+            return cached
+        }
+        guard let loaded = PersistentPointReader.shared.loadShowData(id: id) else {
+            return nil
+        }
+        ModelShowDataCache.shared.setData(loaded, for: id)
+        return loaded
     }
 
     /// 后台原子只读点查：获取单条记录的 searchText, uniqueId 以及必要的图片 data（走 Bulk 通道）

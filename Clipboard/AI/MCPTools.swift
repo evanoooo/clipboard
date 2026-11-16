@@ -181,15 +181,24 @@ struct MCPTools {
         if tag == "image" {
             blocks.append(["type": "text", "text": header])
             if let data = try? row.get(Col.data) {
-                let mimeType = type == "public.tiff" ? "image/tiff" : "image/png"
-                blocks.append([
-                    "type": "image",
-                    "data": data.base64EncodedString(),
-                    "mimeType": mimeType
-                ])
+                if let thumb = downsampleImageForMCP(data: data, maxPixelSize: 1024) {
+                    blocks.append([
+                        "type": "image",
+                        "data": thumb.base64EncodedString(),
+                        "mimeType": "image/jpeg"
+                    ])
+                } else if data.count <= 2 * 1024 * 1024 {
+                    let mimeType = type == "public.tiff" ? "image/tiff" : "image/png"
+                    blocks.append([
+                        "type": "image",
+                        "data": data.base64EncodedString(),
+                        "mimeType": mimeType
+                    ])
+                }
             }
         } else {
-            let body = extractText(from: row, type: type)
+            let rawBody = extractText(from: row, type: type)
+            let body = rawBody.count > 20_000 ? String(rawBody.prefix(20_000)) + "\n...(truncated)" : rawBody
             blocks.append(["type": "text", "text": "\(header)\n\(body)"])
         }
         return blocks
@@ -281,7 +290,7 @@ struct MCPTools {
             Col.sortOrder <- Col.nextSortOrder,
             Col.appID <- appID,
             Col.searchText <- normalizedSearchText,
-            Col.length <- content.count,
+            Col.length <- content.utf16.count,
             Col.group <- -1,
             Col.tag <- tagValue(for: content),
             Col.hidden <- 0
@@ -304,6 +313,20 @@ struct MCPTools {
 // MARK: - Helpers
 
 private extension MCPTools {
+
+    private func downsampleImageForMCP(data: Data, maxPixelSize: CGFloat) -> Data? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
+        let thumbOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions) else { return nil }
+        let rep = NSBitmapImageRep(cgImage: cgImage)
+        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.75])
+    }
 
     private func tagForType(_ type: String) -> String {
         switch type {

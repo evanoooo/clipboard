@@ -23,16 +23,25 @@ extension JSONViewportEditor {
         }
         guard !folds.collapsed.isEmpty else { return range }
         let anchor = scrollAnchor()
-        let target = range.location == NSNotFound ? selection : folds.sourceRange(for: NSRange(
-            location: page.location + range.location, length: range.length
-        ))
+        let target: NSRange
+        if range.location == NSNotFound {
+            target = selection
+        } else {
+            let clampedLoc = max(0, min(page.length, range.location))
+            let clampedLen = max(0, min(page.length - clampedLoc, range.length))
+            target = folds.sourceRange(for: NSRange(
+                location: page.location + clampedLoc, length: clampedLen
+            ))
+        }
         folds.reset(nodes: folds.nodes)
         rebuildProjection()
         selection = target
         restoreScrollAnchor(anchor)
         if target.location < page.location || target.location > NSMaxRange(page) { scroll(to: target.location) }
         restoreVisibleSelection()
-        return NSRange(location: target.location - page.location, length: target.length)
+        let localStart = max(0, min(page.length, target.location - page.location))
+        let localEnd = max(localStart, min(page.length, NSMaxRange(target) - page.location))
+        return NSRange(location: localStart, length: localEnd - localStart)
     }
 
     func updateCursor() {
@@ -116,8 +125,7 @@ extension JSONViewportEditor {
                 target.replace(previous, in: NSRange(location: range.location, length: replacementLength))
             }
         }
-        source = source.replacingCharacters(in: range, with: text) as NSString
-        currentText = source as String
+        mutableSource.replaceCharacters(in: range, with: text)
         revision += 1
         updateIndexes(range: range, replacement: text)
         selection = selectedRange ?? NSRange(location: range.location + replacementLength, length: 0)

@@ -14,7 +14,7 @@ enum PasteOrder {
                         SELECT id, ROW_NUMBER() OVER (ORDER BY timestamp, id) AS rank
                         FROM Clip
                     )
-                    UPDATE Clip SET sort_order = (SELECT rank FROM ranks WHERE ranks.id = Clip.id)
+                    UPDATE Clip SET sort_order = (SELECT rank * \(Col.orderStep) FROM ranks WHERE ranks.id = Clip.id)
                     """)
             }
             try database.run("CREATE INDEX IF NOT EXISTS idx_sort_order ON Clip(sort_order DESC, id DESC)")
@@ -36,50 +36,138 @@ enum PasteOrder {
             let stored = try database.scalar("SELECT COALESCE(MAX(sort_order), 0) FROM Clip")
             let base = (stored as? Int64) ?? 0
             for (offset, id) in ids.reversed().enumerated() {
-                try database.run(table.filter(Col.id == id).update(Col.sortOrder <- Col.nextSortOrder))
-                result[id] = base + Int64(offset) + 1
+                let nextOrder = base + Int64(offset + 1) * Col.orderStep
+                try database.run(table.filter(Col.id == id).update(Col.sortOrder <- nextOrder))
+                result[id] = nextOrder
             }
         }
         return result
     }
 
-    /// before 优先；结果末尾使用 after，避免误移到尚未加载的历史记录之后。
-    /// 返回每个条目写入后的序号，供内存模型同步。
+    /// 基于间隙的 O(1) 拖拽重排：仅查询锚点及相邻 1 条记录并计算中点序号；
+    /// 仅当间隙耗尽时才执行一次全表步长重整（步长 65536）。
+    /// 返回发生变更的条目新序号，供内存模型同步。
     nonisolated static func move(
         _ ids: [Int64],
         before: Int64?,
         after: Int64?,
         on database: Connection
     ) throws -> [(id: Int64, order: Int64)] {
+        let moved = Set(ids)
+        guard !ids.isEmpty, moved.count == ids.count else {
+            throw PasteOrderError.missingItem
+        }
+
         var result: [(id: Int64, order: Int64)] = []
         try database.transaction(.immediate) {
             let table = Table("Clip")
-            let rows = try Array(database.prepare(
-                table.select(Col.id, Col.sortOrder).order(Col.sortOrder.desc, Col.id.desc)
-            ))
-            let previous = rows.map { $0[Col.id] }
-            let moved = Set(ids)
-            guard !ids.isEmpty, moved.count == ids.count,
-                  moved.isSubset(of: Set(previous)) else { throw PasteOrderError.missingItem }
-            var reordered = previous.filter { !moved.contains($0) }
-            let destination: Int
-            if let before, let index = reordered.firstIndex(of: before) {
-                destination = index
-            } else if before == nil, let after, let index = reordered.firstIndex(of: after) {
-                destination = index + 1
-            } else {
+            // 校验所有待移动 ID 存在
+            let existingCount = try database.scalar(
+                table.filter(ids.contains(Col.id)).count
+            )
+            guard existingCount == ids.count else {
                 throw PasteOrderError.missingItem
             }
-            reordered.insert(contentsOf: ids, at: destination)
 
-            // 将原有序号分配给新顺序；区间外的记录不产生 UPDATE。
-            for index in reordered.indices where reordered[index] != previous[index] {
-                try database.run(table.filter(Col.id == reordered[index]).update(
-                    Col.sortOrder <- rows[index][Col.sortOrder]
-                ))
+            if let bounds = try resolveBounds(
+                moved: moved,
+                count: ids.count,
+                before: before,
+                after: after,
+                table: table,
+                on: database
+            ) {
+                let gap = bounds.upper - bounds.lower
+                if gap >= Int64(ids.count + 1) {
+                    for (idx, id) in ids.enumerated() {
+                        let newOrder = bounds.upper - (gap * Int64(idx + 1)) / Int64(ids.count + 1)
+                        try database.run(table.filter(Col.id == id).update(Col.sortOrder <- newOrder))
+                        result.append((id, newOrder))
+                    }
+                    return
+                }
             }
-            // 排序结果与 rows 一一对应：未变动的位置本来就持有该序号。
-            result = reordered.indices.map { (reordered[$0], rows[$0][Col.sortOrder]) }
+
+            // 间隙耗尽或锚点不可用时回退全表重整并分配步长 65536 的新序号
+            result = try rebalanceAndMove(ids, before: before, after: after, table: table, on: database)
+        }
+        return result
+    }
+
+    nonisolated private static func resolveBounds(
+        moved: Set<Int64>,
+        count: Int,
+        before: Int64?,
+        after: Int64?,
+        table: Table,
+        on database: Connection
+    ) throws -> (lower: Int64, upper: Int64)? {
+        let stepPad = Int64(count + 1) * Col.orderStep
+        if let before {
+            guard !moved.contains(before),
+                  let anchorRow = try database.pluck(table.select(Col.sortOrder).filter(Col.id == before)) else {
+                throw PasteOrderError.missingItem
+            }
+            let lower = anchorRow[Col.sortOrder]
+            let aboveQuery = table
+                .select(Col.sortOrder)
+                .filter(!moved.contains(Col.id) && (Col.sortOrder > lower || (Col.sortOrder == lower && Col.id > before)))
+                .order(Col.sortOrder.asc, Col.id.asc)
+                .limit(1)
+            let upper = (try database.pluck(aboveQuery))?[Col.sortOrder] ?? (lower + stepPad)
+            return (lower: lower, upper: upper)
+        }
+
+        if let after {
+            guard !moved.contains(after),
+                  let anchorRow = try database.pluck(table.select(Col.sortOrder).filter(Col.id == after)) else {
+                throw PasteOrderError.missingItem
+            }
+            let upper = anchorRow[Col.sortOrder]
+            let belowQuery = table
+                .select(Col.sortOrder)
+                .filter(!moved.contains(Col.id) && (Col.sortOrder < upper || (Col.sortOrder == upper && Col.id < after)))
+                .order(Col.sortOrder.desc, Col.id.desc)
+                .limit(1)
+            let lower = (try database.pluck(belowQuery))?[Col.sortOrder] ?? (upper - stepPad)
+            return (lower: lower, upper: upper)
+        }
+
+        throw PasteOrderError.missingItem
+    }
+
+    nonisolated private static func rebalanceAndMove(
+        _ ids: [Int64],
+        before: Int64?,
+        after: Int64?,
+        table: Table,
+        on database: Connection
+    ) throws -> [(id: Int64, order: Int64)] {
+        let rows = try Array(database.prepare(
+            table.select(Col.id, Col.sortOrder).order(Col.sortOrder.desc, Col.id.desc)
+        ))
+        let previous = rows.map { $0[Col.id] }
+        let moved = Set(ids)
+        var reordered = previous.filter { !moved.contains($0) }
+        let destination: Int
+        if let before, let index = reordered.firstIndex(of: before) {
+            destination = index
+        } else if before == nil, let after, let index = reordered.firstIndex(of: after) {
+            destination = index + 1
+        } else {
+            throw PasteOrderError.missingItem
+        }
+        reordered.insert(contentsOf: ids, at: destination)
+
+        let total = Int64(reordered.count)
+        var result: [(id: Int64, order: Int64)] = []
+        result.reserveCapacity(reordered.count)
+        for (index, id) in reordered.enumerated() {
+            let newOrder = (total - Int64(index)) * Col.orderStep
+            if rows[index][Col.id] != id || rows[index][Col.sortOrder] != newOrder {
+                try database.run(table.filter(Col.id == id).update(Col.sortOrder <- newOrder))
+            }
+            result.append((id, newOrder))
         }
         return result
     }

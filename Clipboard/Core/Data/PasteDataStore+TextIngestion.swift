@@ -12,7 +12,6 @@ extension PasteDataStore {
         let appName = app?.localizedName ?? ""
         let bundleID = app?.bundleIdentifier
         let timestamp = Int64(Date().timeIntervalSince1970)
-        let tag = PasteboardModel.calculateTag(type: .string, content: data)
         return Task {
             await previous?.value
             guard let content = await Task.detached(priority: .utility, operation: {
@@ -28,7 +27,7 @@ extension PasteDataStore {
                 searchText: content.searchText,
                 length: content.length,
                 group: chipId,
-                tag: tag,
+                tag: content.tag,
                 uniqueId: content.uniqueId,
                 sourceBundleID: bundleID
             )

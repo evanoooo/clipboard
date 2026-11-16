@@ -44,7 +44,11 @@ final class FileThumbnailService {
         }
 
         let task = Task<NSImage, Never> { [self] in
-            guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            let filePath = fileURL.path
+            let exists = await Task.detached(priority: .utility) {
+                FileManager.default.fileExists(atPath: filePath)
+            }.value
+            guard exists, !Task.isCancelled else {
                 return systemIcon(for: fileURL)
             }
 
@@ -58,8 +62,14 @@ final class FileThumbnailService {
             )
             request.iconMode = true
 
+            let rep = await withTaskCancellationHandler {
+                try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request)
+            } onCancel: {
+                QLThumbnailGenerator.shared.cancel(request)
+            }
+
             let image: NSImage
-            if let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
+            if let rep {
                 let nsImage = rep.nsImage
                 memoryCache.setObject(
                     nsImage,
@@ -70,11 +80,13 @@ final class FileThumbnailService {
             } else {
                 // 兜底系统图标同样写入缓存，避免不可预览文件重复发起跨进程请求
                 let fallback = systemIcon(for: fileURL)
-                memoryCache.setObject(
-                    fallback,
-                    forKey: key,
-                    cost: Int(maxThumbnailSize * scale * maxThumbnailSize * scale * 4)
-                )
+                if !Task.isCancelled {
+                    memoryCache.setObject(
+                        fallback,
+                        forKey: key,
+                        cost: Int(maxThumbnailSize * scale * maxThumbnailSize * scale * 4)
+                    )
+                }
                 image = fallback
             }
             return image

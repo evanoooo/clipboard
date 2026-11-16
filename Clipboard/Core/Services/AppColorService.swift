@@ -15,7 +15,9 @@ final class AppColorService {
     private static let fallbackHex = "#1765D9"
 
     private var colorDict: [String: String]
+    private var parsedColorCache: [String: NSColor] = [:]
     private var checkedColors: Set<String> = []
+    private var inFlightNames: Set<String> = []
     let changes = PassthroughSubject<String, Never>()
     private var fillingTask: Task<Void, Never>?
 
@@ -34,11 +36,14 @@ final class AppColorService {
 
     func updateColor(for model: PasteboardModel) {
         let name = model.appName
-        guard needsUpdate(for: name) else { return }
+        guard needsUpdate(for: name), inFlightNames.insert(name).inserted else { return }
+        let appID = model.appID
+        let appPath = model.appPath
         Task {
+            defer { inFlightNames.remove(name) }
             let icon = await AppIconCache.shared.loadIcon(
-                forAppID: model.appID,
-                path: model.appPath
+                forAppID: appID,
+                path: appPath
             )
             guard !Task.isCancelled else { return }
             storeColor(from: icon, name: name)
@@ -82,12 +87,12 @@ final class AppColorService {
     }
 
     private func storeColor(from icon: NSImage, name: String) {
-        guard needsUpdate(for: name),
-            let hex = AppIconColorExtractor.extract(from: icon)
-        else { return }
+        guard needsUpdate(for: name) else { return }
         checkedColors.insert(name)
+        guard let hex = AppIconColorExtractor.extract(from: icon) else { return }
         guard colorDict[name] != hex else { return }
         colorDict[name] = hex
+        parsedColorCache.removeValue(forKey: hex)
         PasteUserDefaults.appColorData = colorDict
         changes.send(name)
     }
@@ -97,7 +102,12 @@ final class AppColorService {
             return chip.displayNSColor
         }
         if let colorStr = colorDict[model.appName] {
-            return NSColor(hex: colorStr).withAlphaComponent(0.9)
+            if let cached = parsedColorCache[colorStr] {
+                return cached
+            }
+            let resolved = NSColor(hex: colorStr).withAlphaComponent(0.9)
+            parsedColorCache[colorStr] = resolved
+            return resolved
         }
         return NSColor(hex: Self.fallbackHex)
     }
