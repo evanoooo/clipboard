@@ -129,6 +129,17 @@ extension AppDelegate {
         syncLaunchAtLoginStatus()
 
         cleanupTempDirectories()
+
+        scheduleStartupIdleTrim()
+    }
+
+    private func scheduleStartupIdleTrim() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, !WindowManager.shared.isVisible else { return }
+            PasteDataStore.main.trimExcessMemory()
+            malloc_zone_pressure_relief(malloc_default_zone(), 0)
+        }
     }
 
     private func cleanupTempDirectories() {

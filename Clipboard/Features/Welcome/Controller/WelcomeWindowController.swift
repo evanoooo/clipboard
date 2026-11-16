@@ -11,12 +11,18 @@ import SwiftUI
 final class WelcomeWindowController: NSWindowController {
     private static var instance: WelcomeWindowController?
 
+    static var isWindowVisible: Bool {
+        instance?.window?.isVisible ?? false
+    }
+
     static var shared: WelcomeWindowController {
         if let instance { return instance }
         let newInstance = WelcomeWindowController()
         instance = newInstance
         return newInstance
     }
+
+    private var isContentAttached = false
 
     private init() {
         let window = WelcomeWindow(
@@ -50,18 +56,6 @@ final class WelcomeWindowController: NSWindowController {
         )
         window.maxSize = window.minSize
         window.standardWindowButton(.zoomButton)?.isEnabled = false
-        if #available(macOS 26.0, *) {
-            window.isOpaque = false
-            let glass = NSGlassEffectView()
-            glass.cornerRadius = Const.radius
-            let content = NSHostingView(rootView: WelcomeView(glass: true))
-            glass.contentView = content
-            content.snp.makeConstraints { $0.edges.equalToSuperview() }
-            window.contentView = glass
-        } else {
-            window.contentView = NSHostingView(rootView: WelcomeView())
-        }
-        window.center()
 
         super.init(window: window)
 
@@ -73,15 +67,34 @@ final class WelcomeWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    static func showIfNeeded() {
-        #if !DEBUG
-            guard !PasteUserDefaults.welcomeDone else { return }
-        #endif
+    private func ensureContentView() {
+        guard let window, !isContentAttached else { return }
+        if #available(macOS 26.0, *) {
+            window.isOpaque = false
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = Const.radius
+            let content = NSHostingView(rootView: WelcomeView(glass: true))
+            glass.contentView = content
+            content.snp.makeConstraints { $0.edges.equalToSuperview() }
+            window.contentView = glass
+        } else {
+            window.contentView = NSHostingView(rootView: WelcomeView())
+        }
+        isContentAttached = true
+    }
 
+    private func releaseContentView() {
+        window?.contentView = nil
+        isContentAttached = false
+    }
+
+    static func showIfNeeded() {
+        guard !PasteUserDefaults.welcomeDone else { return }
         shared.show()
     }
 
     func show() {
+        ensureContentView()
         NSApp.activate(ignoringOtherApps: true)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
@@ -97,13 +110,21 @@ final class WelcomeWindowController: NSWindowController {
 
     private func completeWelcome(showClipboard: Bool) {
         PasteUserDefaults.welcomeDone = true
-        window?.orderOut(nil)
-        window?.contentView = nil
-        Self.instance = nil
+        destroyWindow()
 
         if showClipboard {
             WindowManager.shared.toggleWindow(frame: NSScreen.main?.frame)
         }
+    }
+
+    private func destroyWindow() {
+        releaseContentView()
+        let win = window
+        win?.orderOut(nil)
+        win?.close()
+        window = nil
+        Self.instance = nil
+        malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }
 }
 
@@ -115,7 +136,6 @@ extension WelcomeWindowController: NSWindowDelegate {
 
     func windowWillClose(_: Notification) {
         PasteUserDefaults.welcomeDone = true
-        window?.contentView = nil
-        Self.instance = nil
+        destroyWindow()
     }
 }

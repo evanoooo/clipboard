@@ -9,7 +9,19 @@ import AppKit
 import SwiftUI
 
 class SettingWindowController: NSWindowController, NSWindowDelegate {
-    static let shared = SettingWindowController()
+    private static var instance: SettingWindowController?
+
+    static var isWindowVisible: Bool {
+        instance?.window?.isVisible ?? false
+    }
+
+    static var shared: SettingWindowController {
+        if let instance { return instance }
+        let newInstance = SettingWindowController()
+        instance = newInstance
+        return newInstance
+    }
+
     private let viewModel = SettingViewModel()
     private var isContentAttached = false
 

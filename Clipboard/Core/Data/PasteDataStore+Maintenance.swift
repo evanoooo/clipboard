@@ -386,7 +386,7 @@ extension PasteDataStore {
         guard let cutoff = timeUnit.cutoffTimestamp() else { return true }
         do {
             guard try await sqlManager.hasExpiredHistory(before: cutoff) else { return true }
-            guard let window = SettingWindowController.shared.window, window.isVisible else { return false }
+            guard SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window else { return false }
             let alert = NSAlert.appAlert()
             alert.alertStyle = .warning
             alert.messageText = String(localized: .generalHistoryLimitConfirmTitle)
@@ -401,7 +401,7 @@ extension PasteDataStore {
             return true
         } catch {
             log.error("应用历史保留期限失败：\(error)")
-            if let window = SettingWindowController.shared.window, window.isVisible {
+            if SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window {
                 let alert = NSAlert.appAlert()
                 alert.alertStyle = .warning
                 alert.messageText = String(localized: .generalHistoryLimitFailed)
@@ -465,7 +465,7 @@ extension PasteDataStore {
             }
 
             let response: NSApplication.ModalResponse
-            if let window = SettingWindowController.shared.window, window.isVisible {
+            if SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window {
                 response = await alert.beginSheetModal(for: window)
             } else {
                 response = alert.runModal()
@@ -508,7 +508,7 @@ extension PasteDataStore {
             alert.alertStyle = style
             alert.messageText = message
             alert.addButton(withTitle: String(localized: .commonConfirm))
-            if let window = SettingWindowController.shared.window, window.isVisible {
+            if SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window {
                 _ = await alert.beginSheetModal(for: window)
             } else {
                 alert.runModal()

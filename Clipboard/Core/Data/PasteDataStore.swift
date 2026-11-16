@@ -151,7 +151,6 @@ final class PasteDataStore {
         let count = await sqlManager.getTotalCount()
         totalCount = count
         filterState.filteredCount = count
-        SourceAppCache.shared.warmMissingIcons()
         malloc_zone_pressure_relief(malloc_default_zone(), 0)
         Task {
             await ColdArchiveManager.shared.scheduleIdleArchivingIfNeeded()
