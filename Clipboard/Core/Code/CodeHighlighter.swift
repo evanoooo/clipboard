@@ -53,9 +53,8 @@ enum CodeHighlighter {
             rules: rules
         )
 
-        let targetText = limitLength != nil ? String(scanSubstring) : text
         let attributedString = NSMutableAttributedString(
-            string: targetText,
+            string: text,
             attributes: theme.attributes(for: .plain)
         )
 
@@ -63,7 +62,7 @@ enum CodeHighlighter {
 
         // 叠加搜索关键字高亮
         if let keyword, !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            applySearchHighlight(to: attributedString, fullText: targetText, keyword: keyword)
+            applySearchHighlight(to: attributedString, fullText: text, keyword: keyword)
         }
 
         return attributedString
@@ -97,16 +96,15 @@ enum CodeHighlighter {
             )
         }.value
 
-        let targetText = limitLength != nil ? scanText : text
         let attributedString = NSMutableAttributedString(
-            string: targetText,
+            string: text,
             attributes: theme.attributes(for: .plain)
         )
 
         applySpans(spans, to: attributedString, theme: theme)
 
         if let keyword, !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            applySearchHighlight(to: attributedString, fullText: targetText, keyword: keyword)
+            applySearchHighlight(to: attributedString, fullText: text, keyword: keyword)
         }
 
         return attributedString

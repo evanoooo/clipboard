@@ -78,7 +78,10 @@ enum ClipContentRenderer {
             if let language = model.detectedCodeLanguage {
                 let limit = isCardSnippet ? cardHighlightLimit : nil
 
-                let codeSource = model.previewPlainText
+                let rawSource = model.previewPlainText
+                let codeSource = isCardSnippet && rawSource.count > cardHighlightLimit
+                    ? String(rawSource.prefix(cardHighlightLimit))
+                    : rawSource
                 if trimmedKeyword.isEmpty {
                     if let cached = model.cachedHighlightedCode {
                         return cached
