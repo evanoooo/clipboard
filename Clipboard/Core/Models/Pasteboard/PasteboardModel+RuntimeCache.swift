@@ -209,8 +209,8 @@ extension PasteboardModel {
                     return nil
                 }
             }
-            // 未载入 full data 时，优先用 attributeString 内存预览判定，杜绝列表渲染触发 50 次 SQLite 点查
-            if let lang = CodeLanguageDetector.detect(attributeString.string) {
+            // 未载入 full data 时，优先用 previewPlainText 内存预览判定，杜绝列表渲染触发富文本实例化与 SQLite 点查
+            if let lang = CodeLanguageDetector.detect(previewPlainText) {
                 runtimeCache.codeDetectionState = .detected(lang)
                 return lang
             } else {

@@ -137,6 +137,15 @@ extension PasteboardModel {
         if let cached = cachedPlainTextAttributedString {
             return cached
         }
+        if pasteboardType == .string {
+            let str = previewPlainText
+            let attr = NSAttributedString(
+                string: str,
+                attributes: [.foregroundColor: NSColor.labelColor]
+            )
+            cachedPlainTextAttributedString = attr
+            return attr
+        }
         let source = attributeString.string
         let mutable = NSMutableAttributedString(string: source)
         attributeString.enumerateAttributes(

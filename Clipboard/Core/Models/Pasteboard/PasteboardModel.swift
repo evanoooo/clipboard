@@ -209,8 +209,7 @@ final class PasteboardModel: Identifiable, Codable {
                 runtimeCache.plainText = str
                 return str
             }
-            let att = NSAttributedString(with: data, type: pasteboardType)
-            text = att?.string ?? (String(data: data, encoding: .utf8) ?? "")
+            text = String(data: data, encoding: .utf8) ?? ""
         } else if pasteboardType.isText() {
             let att = NSAttributedString(with: data, type: pasteboardType)
             text = att?.string ?? (String(data: data, encoding: .utf8) ?? "")
