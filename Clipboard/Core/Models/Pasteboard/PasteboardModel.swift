@@ -155,6 +155,12 @@ final class PasteboardModel: Identifiable, Codable {
             if let inline = _data, !inline.isEmpty, let str = String(data: inline, encoding: .utf8) {
                 return str.count > 300 ? String(str.prefix(300)) : str
             }
+            if length <= 4096 {
+                let raw = loadRawData(cache: false)
+                if !raw.isEmpty, let str = String(data: raw, encoding: .utf8) {
+                    return str.count > 300 ? String(str.prefix(300)) : str
+                }
+            }
             if !searchText.isEmpty {
                 return String(searchText.prefix(300))
             }

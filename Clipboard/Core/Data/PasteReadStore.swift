@@ -107,8 +107,7 @@ actor PasteReadStore {
         let sel =
             select ?? [
                 Col.id, Col.uniqueId, Col.type, Col.timestamp,
-                Col.appID,
-                Expression<String>(literal: "SUBSTR(search_text, 1, 2000) AS search_text"),
+                Col.appID, Col.searchText,
                 Col.showData, Col.length, Col.group,
                 Col.tag, Col.alias, Col.hidden, Col.sortOrder,
                 Col.inlineData
