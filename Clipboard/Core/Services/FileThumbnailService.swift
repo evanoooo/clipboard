@@ -59,7 +59,7 @@ final class FileThumbnailService {
 
             let scale = NSScreen.main?.backingScaleFactor ?? 1.0
             let size = NSSize(width: maxThumbnailSize, height: maxThumbnailSize)
-            let request = QLThumbnailGenerator.Request(
+            nonisolated(unsafe) let request = QLThumbnailGenerator.Request(
                 fileAt: fileURL,
                 size: size,
                 scale: scale,
