@@ -34,6 +34,7 @@ extension PasteDataStore {
             if list.count > pageSize {
                 list = Array(list.prefix(pageSize))
             }
+            resetPaginationForPromotion(visibleCount: list.count)
             updateData(with: list, changeType: .moveToFirst)
         }
     }
@@ -377,6 +378,7 @@ extension PasteDataStore {
         log.info("清理过期数据，截止时间戳：\(cutoff)")
         deleteItems(filter: Col.timestamp < cutoff && Col.group == -1)
         Task { @MainActor in
+            await awaitPendingMutations()
             await reloadHistory()
         }
     }

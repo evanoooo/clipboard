@@ -167,12 +167,19 @@ extension PasteSQLManager {
         let rawType = item.pasteboardType.rawValue
         let rawData = await item.data
         let externalized = Self.externalizeIfImage(typeRawValue: rawType, data: rawData)
+        // 纯文本 <= 4KB 已由 inlineData 完整带出，无需冗余落盘 show_data；> 4KB 保留 300 字符原样预览
+        let itemShowData = await item.showData
+        let persistedShowData: Data? = if item.pasteboardType == .string, rawData.count <= 4096 {
+            nil
+        } else {
+            itemShowData
+        }
         let insert = await table.insert(
             [
                 Col.uniqueId <- item.uniqueId,
                 Col.type <- rawType,
                 Col.data <- externalized.data,
-                Col.showData <- item.showData,
+                Col.showData <- persistedShowData,
                 Col.timestamp <- timestamp,
                 Col.sortOrder <- Col.nextSortOrder,
                 Col.appID <- appID,

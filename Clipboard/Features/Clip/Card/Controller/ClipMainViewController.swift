@@ -271,6 +271,7 @@ extension ClipMainViewController {
     func pauseObserving() {
         pauseTimerCancellable = nil
         presenter.pauseObserving()
+        releaseVisibleCellPayloads()
         var snapshot = NSDiffableDataSourceSnapshot<ClipSection, PasteboardModel>()
         snapshot.appendSections([.main])
         diffableDataSource?.apply(snapshot, animatingDifferences: false)
@@ -292,6 +293,7 @@ extension ClipMainViewController {
 
     override func viewDidDisappear() {
         super.viewDidDisappear()
+        closePreviewPopover()
         lastEscapeTime = 0
         pauseTimerCancellable = nil
         PasteDataStore.main.clearExpiredData()

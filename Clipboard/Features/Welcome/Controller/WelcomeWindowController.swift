@@ -120,20 +120,16 @@ final class WelcomeWindowController: NSWindowController {
     private func destroyWindow() {
         releaseContentView()
         let win = window
-        win?.orderOut(nil)
-        win?.close()
         window = nil
         Self.instance = nil
+        win?.delegate = nil
+        win?.orderOut(nil)
+        win?.close()
         malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }
 }
 
 extension WelcomeWindowController: NSWindowDelegate {
-    func windowShouldClose(_: NSWindow) -> Bool {
-        PasteUserDefaults.welcomeDone = true
-        return true
-    }
-
     func windowWillClose(_: Notification) {
         PasteUserDefaults.welcomeDone = true
         destroyWindow()

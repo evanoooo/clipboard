@@ -11,7 +11,8 @@ extension PasteSQLManager {
 
     func getTotalCount() async -> Int {
         do {
-            return try connection?.scalar(table.count) ?? 0
+            let hotCount = try connection?.scalar(table.count) ?? 0
+            return hotCount + ColdArchiveManager.archiveCount()
         } catch {
             log.error("获取总数失败：\(error)")
             return 0

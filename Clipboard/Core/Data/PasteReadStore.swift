@@ -42,6 +42,12 @@ actor PasteReadStore {
         return false
     }
 
+    /// 在写连接执行 VACUUM / wal_checkpoint 前临时关闭只读连接以解除 WAL 占用
+    func closeForMaintenance() {
+        connection = nil
+        archiveConnection = nil
+    }
+
     /// 在写连接执行 VACUUM 重整数据库后重置只读连接句柄与 mmap 映射
     @discardableResult
     func reopen() -> Bool {
@@ -101,7 +107,8 @@ actor PasteReadStore {
         let sel =
             select ?? [
                 Col.id, Col.uniqueId, Col.type, Col.timestamp,
-                Col.appID, Col.searchText,
+                Col.appID,
+                Expression<String>(literal: "SUBSTR(search_text, 1, 2000) AS search_text"),
                 Col.showData, Col.length, Col.group,
                 Col.tag, Col.alias, Col.hidden, Col.sortOrder,
                 Col.inlineData

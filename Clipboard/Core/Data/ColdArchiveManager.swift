@@ -97,14 +97,29 @@ actor ColdArchiveManager {
         return paths
     }
 
-    /// 当用户重新复制冷库中的记录时，将其从冷库移除以完成“回温”至热库
-    nonisolated static func removeFromArchiveIfPresent(uniqueId: String) {
+    /// 统计冷库可见条数（用于总条数与无缝冷分页）
+    nonisolated static func archiveCount() -> Int {
         guard archiveExists(),
-              let db = try? Connection(archiveDatabasePath) else {
+              let db = try? Connection(archiveDatabasePath, readonly: true) else {
+            return 0
+        }
+        db.busyTimeout = 1.0
+        return (try? db.scalar("SELECT COUNT(*) FROM Clip WHERE hidden = 0") as? Int64).map(Int.init) ?? 0
+    }
+
+    /// 当用户重新复制冷库中的记录时，将其从冷库移除以完成“回温”至热库（先只读存在性检查，避免每次拷贝开启读写事务）
+    nonisolated static func removeFromArchiveIfPresent(uniqueId: String) {
+        guard !uniqueId.isEmpty, archiveExists(),
+              let roDb = try? Connection(archiveDatabasePath, readonly: true) else {
             return
         }
-        db.busyTimeout = 2.0
-        _ = try? db.run("DELETE FROM Clip WHERE unique_id = ?", uniqueId)
+        roDb.busyTimeout = 1.0
+        let exists = (try? roDb.scalar("SELECT 1 FROM Clip WHERE unique_id = ? LIMIT 1", uniqueId)) != nil
+        guard exists, let rwDb = try? Connection(archiveDatabasePath) else {
+            return
+        }
+        rwDb.busyTimeout = 2.0
+        _ = try? rwDb.run("DELETE FROM Clip WHERE unique_id = ?", uniqueId)
     }
 
     /// 从冷库按 unique_id 点查完整二进制数据（支持外置 `.media/` 与库内 BLOB）

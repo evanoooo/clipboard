@@ -103,13 +103,20 @@ actor PasteSQLManager: ClipboardRepositoryProtocol {
         }
     }
 
-    /// 清理历史纯文本冗余的 `show_data`（列表已统一由原文或 search_text 切片）
+    /// 历史纯文本 show_data 瘦身：<= 4KB 的由 inlineData 带出可清空；> 4KB 必须保留 300 字符原样预览（一次性回填）
     nonisolated private static func clearRedundantPlainTextShowDataIfNeeded(on conn: Connection) throws {
-        let hasLegacy = try conn.scalar(
-            "SELECT 1 FROM Clip WHERE type = 'public.utf8-plain-text' AND show_data IS NOT NULL LIMIT 1"
-        ) != nil
-        guard hasLegacy else { return }
-        try conn.run("UPDATE Clip SET show_data = NULL WHERE type = 'public.utf8-plain-text' AND show_data IS NOT NULL")
+        let flagKey = "plainTextShowDataSlimmedV2"
+        guard !UserDefaults.standard.bool(forKey: flagKey) else { return }
+        try conn.run("""
+            UPDATE Clip
+            SET show_data = CASE
+                WHEN LENGTH(data) <= 4096 THEN NULL
+                ELSE CAST(SUBSTR(CAST(data AS TEXT), 1, 300) AS BLOB)
+            END
+            WHERE type = 'public.utf8-plain-text'
+              AND (LENGTH(data) > 4096 AND show_data IS NULL OR LENGTH(data) <= 4096 AND show_data IS NOT NULL)
+            """)
+        UserDefaults.standard.set(true, forKey: flagKey)
     }
 
     nonisolated static func createIndexes(on conn: Connection) {

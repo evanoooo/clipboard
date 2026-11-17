@@ -233,18 +233,22 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.pollTimer?.invalidate()
-            self?.pollTimer = nil
-            self?.currentPollInterval = 0
+            MainActor.assumeIsolated {
+                self?.pollTimer?.invalidate()
+                self?.pollTimer = nil
+                self?.currentPollInterval = 0
+            }
         }
         let sleep2 = wsCenter.addObserver(
             forName: NSWorkspace.screensDidSleepNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.pollTimer?.invalidate()
-            self?.pollTimer = nil
-            self?.currentPollInterval = 0
+            MainActor.assumeIsolated {
+                self?.pollTimer?.invalidate()
+                self?.pollTimer = nil
+                self?.currentPollInterval = 0
+            }
         }
 
         // 系统唤醒 / 亮屏：恢复轮询并同步计数值
@@ -253,14 +257,18 @@ final class PasteBoard: PasteboardMonitoringProtocol {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleSystemAwake()
+            MainActor.assumeIsolated {
+                self?.handleSystemAwake()
+            }
         }
         let wake2 = wsCenter.addObserver(
             forName: NSWorkspace.screensDidWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleSystemAwake()
+            MainActor.assumeIsolated {
+                self?.handleSystemAwake()
+            }
         }
 
         sleepObservers = [sleep1, sleep2, wake1, wake2]

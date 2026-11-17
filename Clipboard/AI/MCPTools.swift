@@ -95,7 +95,7 @@ struct MCPTools {
 
         let table = Table("Clip")
         var queryExpr = table
-            .select(Col.type, Col.data, Col.searchText, Col.timestamp, Col.tag, Col.alias)
+            .select(Col.type, Col.data, Col.searchText, Col.timestamp, Col.tag, Col.alias, Col.mediaRelPath)
             .filter(Col.hidden == 0)
             .order(Col.sortOrder.desc, Col.id.desc)
             .limit(limit)
@@ -180,8 +180,22 @@ struct MCPTools {
 
         if tag == "image" {
             blocks.append(["type": "text", "text": header])
-            if let data = try? row.get(Col.data) {
-                if let thumb = downsampleImageForMCP(data: data, maxPixelSize: 1024) {
+            let imageData: Data? = autoreleasepool {
+                if let relPath = try? row.get(Col.mediaRelPath), !relPath.isEmpty {
+                    let blobURL = URL(fileURLWithPath: ClipboardPaths.database)
+                        .deletingLastPathComponent()
+                        .appending(path: ".media/blobs/\(relPath)")
+                    if let external = try? Data(contentsOf: blobURL, options: .mappedIfSafe), !external.isEmpty {
+                        return external
+                    }
+                }
+                if let dbData = try? row.get(Col.data), !dbData.isEmpty {
+                    return dbData
+                }
+                return nil
+            }
+            if let data = imageData {
+                if let thumb = autoreleasepool(invoking: { downsampleImageForMCP(data: data, maxPixelSize: 1024) }) {
                     blocks.append([
                         "type": "image",
                         "data": thumb.base64EncodedString(),

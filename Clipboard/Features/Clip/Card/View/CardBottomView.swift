@@ -39,6 +39,7 @@ final class CardBottomView: NSView, PassthroughMouseEvents {
     func reset() {
         currentModel = nil
         currentKeyword = ""
+        (currentView as? CardCommonBottomView)?.reset()
     }
 
     private func observeLinkPreviewSetting() {
@@ -355,7 +356,14 @@ final class CardCommonBottomView: NSView, PassthroughMouseEvents {
 
     private var needsMask: Bool = false
     private var baseColor: NSColor = .controlBackgroundColor
-    private var model: PasteboardModel
+    private var model: PasteboardModel?
+
+    func reset() {
+        model = nil
+        label.stringValue = ""
+        iconView.image = nil
+        iconView.isHidden = true
+    }
 
     init(model: PasteboardModel) {
         self.model = model
@@ -424,6 +432,7 @@ final class CardCommonBottomView: NSView, PassthroughMouseEvents {
     }
 
     private func resolveContentMeta() -> (symbolName: String?, text: String) {
+        guard let model else { return (nil, "") }
         if let lang = model.detectedCodeLanguage {
             return ("chevron.left.forwardslash.chevron.right", "\(lang.displayName) · \(model.introString())")
         }
@@ -454,6 +463,7 @@ final class CardCommonBottomView: NSView, PassthroughMouseEvents {
     }
 
     private func updateColors() {
+        guard let model else { return }
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let (background, foreground) = model.colors()
             baseColor = background

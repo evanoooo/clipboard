@@ -85,6 +85,7 @@ final class StorageAnalysisService: ObservableObject {
     }
 
     func vacuumDatabase() async throws -> (beforeBytes: Int64, afterBytes: Int64) {
+        guard !isVacuuming else { return (0, 0) }
         isVacuuming = true
         defer { isVacuuming = false }
         let result = try await sqlManager.vacuumDatabase()
@@ -98,6 +99,7 @@ final class StorageAnalysisService: ObservableObject {
 
     /// 执行智能建议的一键瘦身
     func applyRecommendedEviction() async throws -> Int64 {
+        guard !isEvicting else { return 0 }
         isEvicting = true
         defer { isEvicting = false }
         let policyRaw = PasteUserDefaults.softQuotaAgingPolicy

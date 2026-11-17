@@ -25,6 +25,9 @@ final class FileThumbnailService {
     }
 
     func clearCache() {
+        for task in inFlightTasks.values {
+            task.cancel()
+        }
         inFlightTasks.removeAll()
         memoryCache.removeAllObjects()
         systemIconCache.removeAllObjects()
@@ -45,8 +48,10 @@ final class FileThumbnailService {
 
         let task = Task<NSImage, Never> { [self] in
             let filePath = fileURL.path
-            let exists = await Task.detached(priority: .utility) {
-                FileManager.default.fileExists(atPath: filePath)
+            let (exists, repTypes) = await Task.detached(priority: .utility) {
+                let exists = FileManager.default.fileExists(atPath: filePath)
+                let types = exists ? Self.representationTypes(for: fileURL) : .thumbnail
+                return (exists, types)
             }.value
             guard exists, !Task.isCancelled else {
                 return systemIcon(for: fileURL)
@@ -58,7 +63,7 @@ final class FileThumbnailService {
                 fileAt: fileURL,
                 size: size,
                 scale: scale,
-                representationTypes: representationTypes(for: fileURL)
+                representationTypes: repTypes
             )
             request.iconMode = true
 
@@ -69,7 +74,7 @@ final class FileThumbnailService {
             }
 
             let image: NSImage
-            if let rep {
+            if let rep, !Task.isCancelled {
                 let nsImage = rep.nsImage
                 memoryCache.setObject(
                     nsImage,
@@ -113,11 +118,11 @@ final class FileThumbnailService {
         if icon.size.width == maxThumbnailSize && icon.size.height == maxThumbnailSize {
             result = icon
         } else {
-            let resized = NSImage(size: NSSize(width: maxThumbnailSize, height: maxThumbnailSize))
-            resized.lockFocus()
-            icon.draw(in: NSRect(x: 0, y: 0, width: maxThumbnailSize, height: maxThumbnailSize))
-            resized.unlockFocus()
-            result = resized
+            let targetSize = NSSize(width: maxThumbnailSize, height: maxThumbnailSize)
+            result = NSImage(size: targetSize, flipped: false) { rect in
+                icon.draw(in: rect)
+                return true
+            }
         }
 
         systemIconCache.setObject(result, forKey: extKey)
@@ -126,7 +131,7 @@ final class FileThumbnailService {
 
     // MARK: - Private
 
-    private func representationTypes(for fileURL: URL) -> QLThumbnailGenerator.Request.RepresentationTypes {
+    nonisolated private static func representationTypes(for fileURL: URL) -> QLThumbnailGenerator.Request.RepresentationTypes {
         guard let contentType = try? fileURL.resourceValues(forKeys: [.contentTypeKey]).contentType else {
             return .thumbnail
         }

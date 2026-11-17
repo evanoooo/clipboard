@@ -207,6 +207,6 @@ extension ClipMainWindowController: NSWindowDelegate {
     func windowDidResignKey(_: Notification) {
         HotKeyManager.shared.resetPressedKeys()
         guard !AppEnvironment.shared.suppressResignKey else { return }
-        dismiss()
+        WindowManager.shared.dismiss()
     }
 }

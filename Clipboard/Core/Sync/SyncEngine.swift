@@ -225,6 +225,18 @@ final class SyncEngine: ObservableObject {
         }
     }
 
+    nonisolated private static func downloadItemData(id: String, client: WebDAVClient) async -> Data? {
+        let sharded = SyncIndex.shardedItemPath(for: id)
+        do {
+            return try await client.download(from: sharded)
+        } catch WebDAVError.notFound {
+            let legacy = SyncIndex.legacyItemPath(for: id)
+            return try? await client.download(from: legacy)
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - 静态纯函数：Diff 计算矩阵 (供测试与引擎共享)
 
     static func calculateDiff(
@@ -479,13 +491,7 @@ final class SyncEngine: ObservableObject {
                         group.addTask {
                             let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
                             defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                            let sharded = SyncIndex.shardedItemPath(for: id)
-                            let legacy = SyncIndex.legacyItemPath(for: id)
-                            let encData: Data? = if let d = try? await client.download(from: sharded) {
-                                d
-                            } else {
-                                try? await client.download(from: legacy)
-                            }
+                            let encData = await Self.downloadItemData(id: id, client: client)
                             guard let encData else { return nil }
                             guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                   let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
@@ -520,13 +526,7 @@ final class SyncEngine: ObservableObject {
                         group.addTask {
                             let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
                             defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                            let sharded = SyncIndex.shardedItemPath(for: nextId)
-                            let legacy = SyncIndex.legacyItemPath(for: nextId)
-                            let encData: Data? = if let d = try? await client.download(from: sharded) {
-                                d
-                            } else {
-                                try? await client.download(from: legacy)
-                            }
+                            let encData = await Self.downloadItemData(id: nextId, client: client)
                             guard let encData else { return nil }
                             guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                   let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
@@ -767,13 +767,7 @@ final class SyncEngine: ObservableObject {
                             group.addTask { [weak self] in
                                 let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
                                 defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                                let sharded = SyncIndex.shardedItemPath(for: id)
-                                let legacy = SyncIndex.legacyItemPath(for: id)
-                                let encData: Data? = if let d = try? await client.download(from: sharded) {
-                                    d
-                                } else {
-                                    try? await client.download(from: legacy)
-                                }
+                                let encData = await Self.downloadItemData(id: id, client: client)
                                 guard let encData else { return nil }
                                 guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                       let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
@@ -815,13 +809,7 @@ final class SyncEngine: ObservableObject {
                             group.addTask { [weak self] in
                                 let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
                                 defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                                let sharded = SyncIndex.shardedItemPath(for: nextId)
-                                let legacy = SyncIndex.legacyItemPath(for: nextId)
-                                let encData: Data? = if let d = try? await client.download(from: sharded) {
-                                    d
-                                } else {
-                                    try? await client.download(from: legacy)
-                                }
+                                let encData = await Self.downloadItemData(id: nextId, client: client)
                                 guard let encData else { return nil }
                                 guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
                                       let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {

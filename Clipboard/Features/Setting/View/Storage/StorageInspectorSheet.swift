@@ -11,7 +11,7 @@ import SwiftUI
 
 struct StorageInspectorSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var service = StorageAnalysisService.shared
+    @ObservedObject private var service = StorageAnalysisService.shared
 
     @State private var selectedFilter: StoragePresetFilter = .all
     @State private var selectedIds: Set<Int64> = []

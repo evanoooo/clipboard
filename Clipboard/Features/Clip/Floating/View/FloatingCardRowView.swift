@@ -131,6 +131,7 @@ final class FloatingCardRowView: NSView {
         }
         contentSubview?.removeFromSuperview()
         contentSubview = nil
+        appIconView.reset()
         quickPasteIndex = nil
         showPlainTextIndicator = false
         currentModel = nil
@@ -242,12 +243,16 @@ final class FloatingCardRowView: NSView {
         updateShadow()
     }
 
-    private func updateShadow() {
+    private static let cardShadow: NSShadow = {
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.shadowColor.withAlphaComponent(0.12)
         shadow.shadowBlurRadius = 2
         shadow.shadowOffset = CGSize(width: 0, height: -1)
-        selectionBorderView.shadow = shadow
+        return shadow
+    }()
+
+    private func updateShadow() {
+        selectionBorderView.shadow = Self.cardShadow
         let bounds = selectionBorderView.bounds
         if bounds.width > 0, bounds.height > 0 {
             let radius = displayMode.cardRadius + FloatConst.floatSelectionBorderWidth

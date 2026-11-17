@@ -327,7 +327,7 @@ extension ClipFloatingWindowController: NSWindowDelegate {
                 return
             }
         }
-        dismiss()
+        WindowManager.shared.dismiss()
     }
 
     func windowDidBecomeKey(_: Notification) {

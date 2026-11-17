@@ -259,7 +259,7 @@ private final class CardAttributedTextView: NSView {
 
 final class CardRichContentView: NSView, PassthroughMouseEvents {
     private lazy var textView: CardAttributedTextView = makeCardTextView()
-    private var model: PasteboardModel
+    private var model: PasteboardModel?
 
     init(model: PasteboardModel, keyword: String) {
         self.model = model
@@ -277,6 +277,7 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
     }
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
+        self.model = model
         textView.attributedText = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: true)
     }
 
@@ -287,7 +288,9 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
     }
 
     func reset() {
+        model = nil
         textView.attributedText = NSAttributedString()
+        textView.backgroundColor = nil
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -296,6 +299,7 @@ final class CardRichContentView: NSView, PassthroughMouseEvents {
     }
 
     private func updateBackground() {
+        guard let model else { return }
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let background = model.richBackground(on: .textBackgroundColor)
             textView.backgroundColor = background

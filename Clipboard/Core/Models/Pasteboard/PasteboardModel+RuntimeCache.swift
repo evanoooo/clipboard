@@ -125,7 +125,7 @@ extension PasteboardModel {
                 return paths
             }
             if pasteboardType == .fileURL {
-                if let urlString = String(data: data, encoding: .utf8) {
+                if let urlString = String(data: loadRawData(cache: false), encoding: .utf8) {
                     let paths = urlString.components(separatedBy: "\n").filter { !$0.isEmpty }
                     runtimeCache.filePaths = paths
                     return paths

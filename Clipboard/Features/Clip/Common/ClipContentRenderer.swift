@@ -23,6 +23,7 @@ enum ClipContentRenderer {
     private static let keywordHighlightCache: NSCache<NSString, NSAttributedString> = {
         let cache = NSCache<NSString, NSAttributedString>()
         cache.countLimit = 64
+        cache.totalCostLimit = 2 * 1024 * 1024
         return cache
     }()
 
@@ -113,7 +114,7 @@ enum ClipContentRenderer {
 
         if !trimmedKeyword.isEmpty {
             let cacheKey = "\(model.uniqueId):\(trimmedKeyword):\(isRich):\(isCardSnippet)" as NSString
-            keywordHighlightCache.setObject(result, forKey: cacheKey)
+            keywordHighlightCache.setObject(result, forKey: cacheKey, cost: max(result.length * 16, 256))
         }
 
         return result

@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 
 struct StorageSettingView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @StateObject private var storageService = StorageAnalysisService.shared
+    @ObservedObject private var storageService = StorageAnalysisService.shared
 
     @State private var totalCount: Int = 0
     @State private var isExporting = false

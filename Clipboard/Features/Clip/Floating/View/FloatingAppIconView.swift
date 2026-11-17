@@ -38,4 +38,10 @@ final class FloatingAppIconView: NSView {
             }
         }
     }
+
+    func reset() {
+        loadTask?.cancel()
+        loadTask = nil
+        imageView.image = nil
+    }
 }

@@ -68,7 +68,17 @@ nonisolated final class MediaBlobStore: @unchecked Sendable {
             if fm.fileExists(atPath: targetURL.path) {
                 try? fm.removeItem(at: tmpURL)
             } else {
-                try fm.moveItem(at: tmpURL, to: targetURL)
+                do {
+                    try fm.moveItem(at: tmpURL, to: targetURL)
+                } catch {
+                    try? fm.removeItem(at: tmpURL)
+                    if let attrs = try? fm.attributesOfItem(atPath: targetURL.path),
+                       let existingSize = attrs[.size] as? Int64,
+                       existingSize == expectedSize {
+                        return (relPath, expectedSize)
+                    }
+                    throw error
+                }
             }
             return (relPath, expectedSize)
         } catch {

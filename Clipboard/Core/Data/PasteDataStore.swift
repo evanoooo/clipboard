@@ -53,6 +53,10 @@ final class PasteDataStore {
             ClipUndoStore.shared.removeAll()
             PasteDataPointReader.closeConnection()
             WindowManager.shared.releaseHiddenWindowPayloads()
+        } else {
+            for model in dataList.value {
+                model.evictRawData()
+            }
         }
         AppIconCache.shared.trimMemory()
         FileThumbnailService.shared.clearCache()
@@ -160,6 +164,18 @@ final class PasteDataStore {
 
     func notifyCategoryChipsChanged() {
         chipsVersion &+= 1
+    }
+
+    func resetPaginationForPromotion(visibleCount: Int) {
+        loadPageTask?.cancel()
+        loadPageTask = nil
+        isLoadingPage = false
+        pageIndex = 0
+        lastRequestedPage = 0
+        let effectiveTotal = isInFilterMode ? filteredCount : totalCount
+        hasMoreData = isInFilterMode
+            ? (isFilteredCountCapped || effectiveTotal > visibleCount)
+            : (effectiveTotal > visibleCount)
     }
 
     func updateData(

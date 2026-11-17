@@ -54,8 +54,8 @@ extension PasteboardModel {
         if type.isText() {
             guard let text = Self.prepareText(content, type: type) else { return nil }
             length = text.source.length
-            // 纯文本不落盘冗余 show_data，列表加载时直接由原文或 search_text 切片
-            showData = type == .string ? nil : text.showData
+            // 内存模型始终保留 300 字符原样预览；落库时由 SQL 层按需决定是否持久化（<=4KB 已由 inlineData 覆盖）
+            showData = text.showData
             let rawString = text.source.string
             extractedTextString = rawString
             searchText = Self.normalizeSearchText(rawString)

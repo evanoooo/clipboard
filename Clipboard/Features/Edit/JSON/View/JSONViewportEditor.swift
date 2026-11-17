@@ -58,6 +58,11 @@ final class JSONViewportEditor: NSView {
         NotificationCenter.default.removeObserver(self)
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        scheduleHighlight()
+    }
+
     override func layout() {
         super.layout()
         guard !textView.isHandlingInput, !textView.hasMarkedText() else { return }

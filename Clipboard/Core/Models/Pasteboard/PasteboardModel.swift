@@ -242,12 +242,15 @@ final class PasteboardModel: Identifiable, Codable {
                 runtimeCache.plainText = str
                 return str
             }
-            text = String(data: data, encoding: .utf8) ?? ""
+            let rawData = loadRawData(cache: false)
+            text = String(data: rawData, encoding: .utf8) ?? ""
         } else if pasteboardType.isText() {
-            let att = NSAttributedString(with: data, type: pasteboardType)
-            text = att?.string ?? (String(data: data, encoding: .utf8) ?? "")
+            let rawData = loadRawData(cache: false)
+            let att = NSAttributedString(with: rawData, type: pasteboardType)
+            text = att?.string ?? (String(data: rawData, encoding: .utf8) ?? "")
         } else {
-            text = String(data: data, encoding: .utf8) ?? ""
+            let rawData = loadRawData(cache: false)
+            text = String(data: rawData, encoding: .utf8) ?? ""
         }
         runtimeCache.plainText = text
         return text

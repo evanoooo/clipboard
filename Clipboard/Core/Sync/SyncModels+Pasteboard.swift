@@ -23,14 +23,22 @@ extension SyncItemBlob {
         )
     }
 
-    func toPasteboardModel() -> PasteboardModel {
-        let textSource: String = if let payloadData, let str = String(data: payloadData, encoding: .utf8), !str.isEmpty {
-            str
-        } else if let showData, let str = String(data: showData, encoding: .utf8) {
-            str
-        } else {
-            ""
+    private var resolvedTextSourceForSearch: String {
+        let pType = PasteboardType(rawValue: pasteboardType)
+        if pType.isText() || pType == .fileURL,
+           let payloadData,
+           let str = String(data: payloadData, encoding: .utf8),
+           !str.isEmpty {
+            return str
         }
+        if let showData, !pType.isImage(), let str = String(data: showData, encoding: .utf8) {
+            return str
+        }
+        return ""
+    }
+
+    func toPasteboardModel() -> PasteboardModel {
+        let textSource = resolvedTextSourceForSearch
         return PasteboardModel(
             pasteboardType: PasteboardType(rawValue: pasteboardType),
             data: payloadData,
@@ -51,13 +59,7 @@ extension SyncItemBlob {
     }
 
     func toIngestionRecord(appID: Int64) -> SyncIngestionRecord {
-        let textSource: String = if let payloadData, let str = String(data: payloadData, encoding: .utf8), !str.isEmpty {
-            str
-        } else if let showData, let str = String(data: showData, encoding: .utf8) {
-            str
-        } else {
-            ""
-        }
+        let textSource = resolvedTextSourceForSearch
         return SyncIngestionRecord(
             uniqueId: uniqueId,
             type: pasteboardType,

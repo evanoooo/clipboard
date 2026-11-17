@@ -203,12 +203,15 @@ final class DeferredOCRCoordinator {
             return .emptyOrSkipped
         }
 
-        // 2. 独立只读原子单点点查（一次性获取 searchText, uniqueId，若未识别再取 data）
-        guard let target = await Task.detached(priority: priority, operation: {
-            PasteDataPointReader.loadOCRTarget(id: id)
+        // 2. 独立只读原子单点点查（一次性获取 searchText, uniqueId，若未识别再取 mediaURL 或 data）
+        guard let loaded = await Task.detached(priority: priority, operation: { () -> (searchText: String, uniqueId: String, data: Data?, mediaURL: URL?)? in
+            guard let t = PasteDataPointReader.loadOCRTarget(id: id) else { return nil }
+            let url = t.searchText.isEmpty ? PasteDataPointReader.loadMediaURL(id: id, uniqueId: t.uniqueId) : nil
+            return (t.searchText, t.uniqueId, t.data, url)
         }).value else {
             return .emptyOrSkipped // 记录已被删除或不存在
         }
+        let target = (searchText: loaded.searchText, uniqueId: loaded.uniqueId, data: loaded.data)
 
         // 3. 数据库已有识别结果（真实文字或无字哨兵标记），直接出队跳过
         if !target.searchText.isEmpty {
@@ -219,7 +222,7 @@ final class DeferredOCRCoordinator {
         let rawText: String
         if let cached = ocrTextCache[target.uniqueId] {
             rawText = cached
-        } else if let mediaURL = PasteDataPointReader.loadMediaURL(id: id, uniqueId: target.uniqueId) {
+        } else if let mediaURL = loaded.mediaURL {
             rawText = await OCRViewService.shared.recognizeText(at: mediaURL, priority: priority)
             if ocrTextCache.count >= 100 {
                 ocrTextCache.removeAll(keepingCapacity: true)

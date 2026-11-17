@@ -210,6 +210,8 @@ extension JSONViewportEditor {
         let revision = revision
         let textLength = text.utf16.count
         highlightTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(60))
+            guard !Task.isCancelled else { return }
             let worker = Task.detached(priority: .utility) { JSONSyntaxHighlighter.spans(in: text, offset: 0) }
             let spans = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
             guard let self, !Task.isCancelled, revision == self.revision,

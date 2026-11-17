@@ -203,25 +203,36 @@ extension PasteSQLManager {
     func deleteStorageItems(ids: [Int64]) async -> Int64 {
         guard let connection, !ids.isEmpty else { return 0 }
         var totalFreedBytes: Int64 = 0
+        var allUids: [String] = []
 
         do {
-            let idList = ids.map(String.init).joined(separator: ",")
-            let sumSql = "SELECT COALESCE(SUM(LENGTH(data)), 0) FROM Clip WHERE id IN (\(idList))"
-            if let sumStmt = try? connection.prepare(sumSql), let row = sumStmt.makeIterator().next() {
-                totalFreedBytes = (row[0] as? Int64) ?? 0
-            }
+            for chunkStart in stride(from: 0, to: ids.count, by: 500) {
+                let chunk = Array(ids[chunkStart..<min(chunkStart + 500, ids.count)])
+                let idList = chunk.map(String.init).joined(separator: ",")
+                let sumSql = """
+                    SELECT COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0)
+                    FROM Clip WHERE id IN (\(idList))
+                    """
+                if let sumStmt = try? connection.prepare(sumSql), let row = sumStmt.makeIterator().next() {
+                    totalFreedBytes += (row[0] as? Int64) ?? 0
+                }
 
-            let uidSql = "SELECT unique_id FROM Clip WHERE id IN (\(idList))"
-            var uids: [String] = []
-            if let uidStmt = try? connection.prepare(uidSql) {
-                for row in uidStmt {
-                    if let uid = row[0] as? String {
-                        uids.append(uid)
+                let uidSql = "SELECT unique_id FROM Clip WHERE id IN (\(idList))"
+                if let uidStmt = try? connection.prepare(uidSql) {
+                    for row in uidStmt {
+                        if let uid = row[0] as? String {
+                            allUids.append(uid)
+                        }
                     }
                 }
+
+                try connection.transaction {
+                    try connection.execute("DELETE FROM Clip WHERE id IN (\(idList))")
+                }
             }
-            if !uids.isEmpty {
-                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uids)
+
+            if !allUids.isEmpty {
+                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: allUids)
                 Task { @MainActor in
                     DeferredOCRCoordinator.shared.remove(ids: ids)
                     SyncEngine.shared.markDirtyAndSchedule()
@@ -232,9 +243,7 @@ extension PasteSQLManager {
                 }
             }
 
-            try connection.transaction {
-                try connection.execute("DELETE FROM Clip WHERE id IN (\(idList))")
-            }
+            _ = purgeOrphanMediaBlobs()
             await refreshAppCache()
         } catch {
             log.error("Failed to delete storage items: \(error)")
@@ -254,7 +263,8 @@ extension PasteSQLManager {
         let beforeBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
             + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
 
-        // 维护挂起点查双通道连接，彻底解除只读锁并杜绝并发重开，确保 VACUUM 与 WAL 截断无阻碍执行
+        // 维护挂起点查双通道与只读连接，彻底解除只读锁并确保 VACUUM 与 WAL 截断无阻碍执行
+        await PasteReadStore.shared.closeForMaintenance()
         try PasteDataPointReader.withMaintenanceSuspension {
             // 1. 将 WAL 日志 checkpoint 归档入主库
             try? connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")

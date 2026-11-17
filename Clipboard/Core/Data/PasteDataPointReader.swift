@@ -73,7 +73,63 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
         }
 
         func loadData(id: Int64?, uniqueId: String, parent: PersistentPointReader) -> Data? {
-            lock.withLock {
+            enum LookupResult {
+                case external(String)
+                case inline(Data)
+                case none
+            }
+            let result: LookupResult = lock.withLock {
+                guard ensureOpen(parent: parent) else { return .none }
+                let stmt: OpaquePointer?
+                if let id {
+                    stmt = stmtById
+                    guard let stmt else { return .none }
+                    sqlite3_reset(stmt)
+                    sqlite3_clear_bindings(stmt)
+                    sqlite3_bind_int64(stmt, 1, id)
+                } else {
+                    stmt = stmtByUniqueId
+                    guard let stmt else { return .none }
+                    sqlite3_reset(stmt)
+                    sqlite3_clear_bindings(stmt)
+                    sqlite3_bind_text(stmt, 1, uniqueId, -1, SQLITE_TRANSIENT)
+                }
+                defer {
+                    sqlite3_reset(stmt)
+                    sqlite3_clear_bindings(stmt)
+                }
+
+                if sqlite3_step(stmt) == SQLITE_ROW {
+                    if !uniqueId.isEmpty,
+                       let uidPtr = sqlite3_column_text(stmt, 2),
+                       String(cString: uidPtr) != uniqueId {
+                        return .none
+                    }
+                    if let relPtr = sqlite3_column_text(stmt, 1) {
+                        let relPath = String(cString: relPtr)
+                        if !relPath.isEmpty {
+                            return .external(relPath)
+                        }
+                    }
+                    if let bytes = sqlite3_column_blob(stmt, 0) {
+                        let count = sqlite3_column_bytes(stmt, 0)
+                        return .inline(Data(bytes: bytes, count: Int(count)))
+                    }
+                }
+                return .none
+            }
+            switch result {
+            case let .external(relPath):
+                return MediaBlobStore.shared.readBlob(relPath: relPath)
+            case let .inline(data):
+                return data
+            case .none:
+                return nil
+            }
+        }
+
+        func loadMediaURL(id: Int64?, uniqueId: String, parent: PersistentPointReader) -> URL? {
+            let relPath: String? = lock.withLock {
                 guard ensureOpen(parent: parent) else { return nil }
                 let stmt: OpaquePointer?
                 if let id {
@@ -101,49 +157,14 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
                         return nil
                     }
                     if let relPtr = sqlite3_column_text(stmt, 1) {
-                        let relPath = String(cString: relPtr)
-                        if !relPath.isEmpty, let external = MediaBlobStore.shared.readBlob(relPath: relPath) {
-                            return external
-                        }
-                    }
-                    if let bytes = sqlite3_column_blob(stmt, 0) {
-                        let count = sqlite3_column_bytes(stmt, 0)
-                        return Data(bytes: bytes, count: Int(count))
+                        let path = String(cString: relPtr)
+                        return path.isEmpty ? nil : path
                     }
                 }
                 return nil
             }
-        }
-
-        func loadMediaURL(id: Int64?, uniqueId: String, parent: PersistentPointReader) -> URL? {
-            lock.withLock {
-                guard ensureOpen(parent: parent) else { return nil }
-                let stmt: OpaquePointer?
-                if let id {
-                    stmt = stmtById
-                    guard let stmt else { return nil }
-                    sqlite3_reset(stmt)
-                    sqlite3_clear_bindings(stmt)
-                    sqlite3_bind_int64(stmt, 1, id)
-                } else {
-                    stmt = stmtByUniqueId
-                    guard let stmt else { return nil }
-                    sqlite3_reset(stmt)
-                    sqlite3_clear_bindings(stmt)
-                    sqlite3_bind_text(stmt, 1, uniqueId, -1, SQLITE_TRANSIENT)
-                }
-                defer {
-                    sqlite3_reset(stmt)
-                    sqlite3_clear_bindings(stmt)
-                }
-
-                if sqlite3_step(stmt) == SQLITE_ROW,
-                   let relPtr = sqlite3_column_text(stmt, 1) {
-                    let relPath = String(cString: relPtr)
-                    return MediaBlobStore.shared.blobURL(for: relPath)
-                }
-                return nil
-            }
+            guard let relPath else { return nil }
+            return MediaBlobStore.shared.blobURL(for: relPath)
         }
 
         func loadShowData(id: Int64, parent: PersistentPointReader) -> Data? {

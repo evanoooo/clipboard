@@ -116,8 +116,9 @@ actor OCRWorkerClient {
 
     private var process: Process?
     private var stdinHandle: FileHandle?
+    private var stdoutHandle: FileHandle?
+    private var readerTask: Task<Void, Never>?
     private var pending: [String: CheckedContinuation<String, Never>] = [:]
-    private var readBuffer = Data()
 
     private init() {}
 
@@ -166,15 +167,8 @@ actor OCRWorkerClient {
         proc.standardOutput = outPipe
         proc.standardError = FileHandle.nullDevice
 
-        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            Task {
-                await self?.handleStdoutChunk(chunk)
-            }
-        }
-
+        let readerHandle = outPipe.fileHandleForReading
         proc.terminationHandler = { [weak self] _ in
-            outPipe.fileHandleForReading.readabilityHandler = nil
             Task {
                 await self?.handleWorkerTerminated()
             }
@@ -184,30 +178,34 @@ actor OCRWorkerClient {
             try proc.run()
             process = proc
             stdinHandle = inPipe.fileHandleForWriting
+            stdoutHandle = readerHandle
+            readerTask = Task.detached(priority: .utility) { [weak self] in
+                let decoder = JSONDecoder()
+                do {
+                    for try await line in readerHandle.bytes.lines {
+                        guard !Task.isCancelled else { break }
+                        guard let lineData = line.data(using: .utf8),
+                              let resp = try? decoder.decode(OCRWorkerProcess.Response.self, from: lineData) else {
+                            continue
+                        }
+                        await self?.fulfillResponse(id: resp.id, text: resp.text)
+                    }
+                } catch {
+                    // 管道关闭或子进程退出
+                }
+                await self?.handleWorkerTerminated()
+            }
             return true
         } catch {
-            outPipe.fileHandleForReading.readabilityHandler = nil
+            try? readerHandle.close()
+            try? inPipe.fileHandleForWriting.close()
             return false
         }
     }
 
-    private func handleStdoutChunk(_ chunk: Data) {
-        guard !chunk.isEmpty else {
-            handleWorkerTerminated()
-            return
-        }
-        readBuffer.append(chunk)
-        let decoder = JSONDecoder()
-
-        while let newlineIndex = readBuffer.firstIndex(of: 0x0A) {
-            let lineData = readBuffer[..<newlineIndex]
-            readBuffer.removeSubrange(...newlineIndex)
-            guard !lineData.isEmpty,
-                  let resp = try? decoder.decode(OCRWorkerProcess.Response.self, from: lineData),
-                  let continuation = pending.removeValue(forKey: resp.id) else {
-                continue
-            }
-            continuation.resume(returning: resp.text)
+    private func fulfillResponse(id: String, text: String) {
+        if let continuation = pending.removeValue(forKey: id) {
+            continuation.resume(returning: text)
         }
     }
 
@@ -216,13 +214,16 @@ actor OCRWorkerClient {
     }
 
     private func teardownWorker() {
+        readerTask?.cancel()
+        readerTask = nil
         if let proc = process, proc.isRunning {
             proc.terminate()
         }
         try? stdinHandle?.close()
+        try? stdoutHandle?.close()
         process = nil
         stdinHandle = nil
-        readBuffer.removeAll(keepingCapacity: false)
+        stdoutHandle = nil
 
         let orphaned = pending
         pending.removeAll()
