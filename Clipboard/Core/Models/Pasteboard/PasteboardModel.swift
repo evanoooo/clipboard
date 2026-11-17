@@ -82,7 +82,7 @@ final class PasteboardModel: Identifiable, Codable {
             return _showData
         }
         guard let id else { return nil }
-        if let loaded = PasteDataPointReader.loadShowData(id: id) {
+        if let loaded = PasteDataPointReader.loadShowData(id: id, uniqueId: uniqueId) {
             if cache {
                 _showData = loaded
             }

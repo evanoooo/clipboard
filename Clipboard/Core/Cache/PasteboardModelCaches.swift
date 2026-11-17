@@ -118,23 +118,23 @@ final class ModelLinkMetadataCache: @unchecked Sendable {
 /// 有界 `showData` 缩略数据 LRU 缓存（上限 200 条 / 4MB），避免重复点查与长列表常驻膨胀
 nonisolated final class ModelShowDataCache: @unchecked Sendable {
     static let shared = ModelShowDataCache()
-    private let cache = NSCache<NSNumber, NSData>()
+    private let cache = NSCache<NSString, NSData>()
 
     private init() {
         cache.countLimit = 100
         cache.totalCostLimit = 2 * 1024 * 1024 // 2 MB
     }
 
-    func data(for id: Int64) -> Data? {
-        cache.object(forKey: NSNumber(value: id)) as Data?
+    func data(for key: String) -> Data? {
+        cache.object(forKey: key as NSString) as Data?
     }
 
-    func setData(_ data: Data, for id: Int64) {
-        cache.setObject(data as NSData, forKey: NSNumber(value: id), cost: max(data.count, 256))
+    func setData(_ data: Data, for key: String) {
+        cache.setObject(data as NSData, forKey: key as NSString, cost: max(data.count, 256))
     }
 
-    func remove(for id: Int64) {
-        cache.removeObject(forKey: NSNumber(value: id))
+    func remove(for key: String) {
+        cache.removeObject(forKey: key as NSString)
     }
 
     func removeAll() {

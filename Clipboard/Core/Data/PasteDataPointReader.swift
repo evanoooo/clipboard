@@ -56,7 +56,7 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
             let sqlOCR = "SELECT search_text, unique_id, data, media_rel_path FROM Clip WHERE id = ? LIMIT 1"
             sqlite3_prepare_v2(db, sqlOCR, -1, &stmtOCR, nil)
 
-            let sqlShowData = "SELECT show_data FROM Clip WHERE id = ? LIMIT 1"
+            let sqlShowData = "SELECT show_data, unique_id FROM Clip WHERE id = ? LIMIT 1"
             sqlite3_prepare_v2(db, sqlShowData, -1, &stmtShowData, nil)
 
             return true
@@ -167,7 +167,7 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
             return MediaBlobStore.shared.blobURL(for: relPath)
         }
 
-        func loadShowData(id: Int64, parent: PersistentPointReader) -> Data? {
+        func loadShowData(id: Int64, uniqueId: String = "", parent: PersistentPointReader) -> Data? {
             lock.withLock {
                 guard ensureOpen(parent: parent), let stmt = stmtShowData else { return nil }
                 sqlite3_reset(stmt)
@@ -178,6 +178,11 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
                     sqlite3_clear_bindings(stmt)
                 }
                 if sqlite3_step(stmt) == SQLITE_ROW {
+                    if !uniqueId.isEmpty,
+                       let uidPtr = sqlite3_column_text(stmt, 1),
+                       String(cString: uidPtr) != uniqueId {
+                        return nil
+                    }
                     if let bytes = sqlite3_column_blob(stmt, 0) {
                         let count = sqlite3_column_bytes(stmt, 0)
                         return Data(bytes: bytes, count: Int(count))
@@ -271,8 +276,8 @@ nonisolated final class PersistentPointReader: @unchecked Sendable {
         }
     }
 
-    func loadShowData(id: Int64) -> Data? {
-        uiChannel.loadShowData(id: id, parent: self)
+    func loadShowData(id: Int64, uniqueId: String = "") -> Data? {
+        uiChannel.loadShowData(id: id, uniqueId: uniqueId, parent: self)
     }
 
     func loadMediaURL(id: Int64?, uniqueId: String) -> URL? {
@@ -313,15 +318,18 @@ nonisolated enum PasteDataPointReader {
         return ColdArchiveManager.loadMediaURL(uniqueId: uniqueId)
     }
 
-    /// 点查单条记录的轻量 showData 缩略数据（命中 4MB 有界 LRU 缓存时零磁盘 I/O）
-    nonisolated static func loadShowData(id: Int64) -> Data? {
-        if let cached = ModelShowDataCache.shared.data(for: id) {
+    /// 点查单条记录的轻量 showData 缩略数据（命中 2MB 有界 LRU 缓存时零磁盘 I/O，支持冷库回退）
+    nonisolated static func loadShowData(id: Int64, uniqueId: String = "") -> Data? {
+        let cacheKey = uniqueId.isEmpty ? "\(id)" : uniqueId
+        if let cached = ModelShowDataCache.shared.data(for: cacheKey) {
             return cached
         }
-        guard let loaded = PersistentPointReader.shared.loadShowData(id: id) else {
+        let loaded = PersistentPointReader.shared.loadShowData(id: id, uniqueId: uniqueId)
+            ?? (uniqueId.isEmpty ? nil : ColdArchiveManager.loadShowData(uniqueId: uniqueId))
+        guard let loaded else {
             return nil
         }
-        ModelShowDataCache.shared.setData(loaded, for: id)
+        ModelShowDataCache.shared.setData(loaded, for: cacheKey)
         return loaded
     }
 

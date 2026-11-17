@@ -164,6 +164,24 @@ actor ColdArchiveManager {
         }
         return MediaBlobStore.shared.blobURL(for: relPath)
     }
+
+    /// 从冷库按 unique_id 点查轻量 showData 缩略数据
+    nonisolated static func loadShowData(uniqueId: String) -> Data? {
+        guard !uniqueId.isEmpty,
+              archiveExists(),
+              let db = try? Connection(archiveDatabasePath, readonly: true) else {
+            return nil
+        }
+        db.busyTimeout = 1.0
+        guard let row = try? db.prepare(
+            "SELECT show_data FROM Clip WHERE unique_id = ? LIMIT 1",
+            uniqueId
+        ).makeIterator().next(),
+              let blob = row[0] as? Blob else {
+            return nil
+        }
+        return Data(blob.bytes)
+    }
 }
 
 extension PasteSQLManager {
