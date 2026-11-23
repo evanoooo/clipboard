@@ -94,8 +94,8 @@ final class CardLinkPreviewContentView: NSView, PassthroughMouseEvents, Cancella
     // MARK: - Public
 
     func configure(with model: PasteboardModel, keyword: String) {
-        let urlString = model.attributeString.string
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawText = model.length <= 300 ? model.previewPlainText : model.plainText
+        let urlString = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         let url = urlString.asCompleteURL()
 
         titleLabel.stringValue = Self.singleLineTitle(model.cachedLinkMetadata?.title)

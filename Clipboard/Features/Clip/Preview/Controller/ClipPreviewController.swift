@@ -174,8 +174,9 @@ final class ClipPreviewController: NSViewController {
             NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
         }
         footerView.onOpenInBrowser = { [weak self] in
-            guard let url = self?.model?.attributeString.string.asCompleteURL()
-            else { return }
+            guard let model = self?.model else { return }
+            let raw = model.length <= 300 ? model.previewPlainText : model.plainText
+            guard let url = raw.asCompleteURL() else { return }
             NSWorkspace.shared.open(url)
         }
     }

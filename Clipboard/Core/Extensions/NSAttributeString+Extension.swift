@@ -8,7 +8,7 @@
 import AppKit
 
 extension NSAttributedString {
-    convenience init?(with data: Data?, type: PasteboardType) {
+    nonisolated convenience init?(with data: Data?, type: PasteboardType) {
         guard let data else { return nil }
         switch type {
         case .rtfd:
@@ -40,7 +40,7 @@ extension NSAttributedString {
         }
     }
 
-    func toData(with type: PasteboardType) -> Data? {
+    nonisolated func toData(with type: PasteboardType) -> Data? {
         switch type {
         case .rtf:
             rtf(from: NSMakeRange(0, length))

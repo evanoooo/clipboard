@@ -12,15 +12,20 @@ extension PasteboardModel {
     convenience init?(
         with pasteboard: NSPasteboard,
         sourceApp: NSRunningApplication? = nil,
-        preloadedData: Data? = nil
+        preloadedData: Data? = nil,
+        preloadedFilePaths: [String]? = nil
     ) {
         guard let items = pasteboard.pasteboardItems, let item = items.first
         else { return nil }
 
         let type: PasteboardType
         var extractedPaths: [String]?
-        if let paths = Self.extractFilePaths(from: pasteboard, item: item),
-           !paths.isEmpty {
+        let resolvedPaths: [String]? = if let preloadedFilePaths {
+            preloadedFilePaths.isEmpty ? nil : preloadedFilePaths
+        } else {
+            Self.extractFilePaths(from: pasteboard, item: item)
+        }
+        if let paths = resolvedPaths, !paths.isEmpty {
             type = .fileURL
             extractedPaths = paths
         } else if let matched = item.availableType(from: PasteboardType.supportTypes) {
@@ -95,7 +100,7 @@ extension PasteboardModel {
         )
     }
 
-    private static func prepareText(
+    nonisolated static func prepareText(
         _ content: Data?, type: PasteboardType
     ) -> (source: NSAttributedString, showData: Data?)? {
         guard let content, !content.isEmpty else { return nil }
@@ -127,7 +132,7 @@ extension PasteboardModel {
     }
 
     /// 对超大 RTF/RTFD 进行轻量纯文本提取，避免全量反序列化富文本或将原始 RTF 控制字当作正文。
-    private static func extractPlainTextFromLargeRichText(_ data: Data, type: PasteboardType) -> String {
+    nonisolated private static func extractPlainTextFromLargeRichText(_ data: Data, type: PasteboardType) -> String {
         let rtfData: Data
         if type == .rtfd {
             guard let wrapper = FileWrapper(serializedRepresentation: data),
@@ -151,7 +156,7 @@ extension PasteboardModel {
         return stripRTFControlWords(raw)
     }
 
-    private static func stripRTFControlWords(_ rtf: String) -> String {
+    nonisolated private static func stripRTFControlWords(_ rtf: String) -> String {
         let skippedDestinations: Set<String> = [
             "fonttbl", "colortbl", "stylesheet", "info", "pict", "object",
             "fldinst", "header", "footer", "headerl", "headerr", "headerf",
@@ -329,7 +334,7 @@ extension PasteboardModel {
         return "string"
     }
 
-    static func calculateTag(type: PasteboardType, content: Data, extractedText: String? = nil) -> String {
+    nonisolated static func calculateTag(type: PasteboardType, content: Data, extractedText: String? = nil) -> String {
         switch type {
         case .rtf, .rtfd:
             let str = extractedText ?? NSAttributedString(with: content, type: type)?.string

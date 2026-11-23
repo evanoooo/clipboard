@@ -139,9 +139,15 @@ extension PasteboardModel {
         }
         if pasteboardType == .string {
             let str = previewPlainText
+            let font: NSFont = detectedCodeLanguage != nil
+                ? CodeTheme().monospacedFont
+                : .preferredFont(forTextStyle: .body)
             let attr = NSAttributedString(
                 string: str,
-                attributes: [.foregroundColor: NSColor.labelColor]
+                attributes: [
+                    .foregroundColor: NSColor.labelColor,
+                    .font: font,
+                ]
             )
             cachedPlainTextAttributedString = attr
             return attr

@@ -606,21 +606,41 @@ extension PasteDataStore {
         chipId: Int = -1,
         preloadedStringData: Data? = nil
     ) -> Bool {
-        if let first = item.pasteboardItems?.first,
-           PasteboardModel.extractFilePaths(from: item, item: first) == nil,
-           let matchedType = first.availableType(from: PasteboardType.supportTypes) {
-            if matchedType == .string {
-                let data = preloadedStringData ?? first.data(forType: .string)
-                if let data, data.count > 1_048_576 {
-                    ingestionTask = ingestText(data, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
+        var preloadedFilePaths: [String]?
+        if let first = item.pasteboardItems?.first {
+            let extractedPaths = PasteboardModel.extractFilePaths(from: item, item: first)
+            preloadedFilePaths = extractedPaths ?? []
+            if extractedPaths == nil,
+               let matchedType = first.availableType(from: PasteboardType.supportTypes) {
+                if matchedType == .string {
+                    let data = preloadedStringData ?? first.data(forType: .string)
+                    if let data, data.count > 16_384 {
+                        ingestionTask = ingestText(data, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
+                        return true
+                    }
+                } else if matchedType == .rtf || matchedType == .rtfd {
+                    if let richData = first.data(forType: matchedType), !richData.isEmpty {
+                        ingestionTask = ingestRichText(
+                            richData,
+                            type: matchedType,
+                            sourceApp: sourceApp,
+                            chipId: chipId,
+                            after: ingestionTask
+                        )
+                        return true
+                    }
+                } else if matchedType.isImage(), let imageData = first.data(forType: matchedType), !imageData.isEmpty {
+                    ingestionTask = ingestImage(imageData, type: matchedType, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
                     return true
                 }
-            } else if matchedType.isImage(), let imageData = first.data(forType: matchedType), !imageData.isEmpty {
-                ingestionTask = ingestImage(imageData, type: matchedType, sourceApp: sourceApp, chipId: chipId, after: ingestionTask)
-                return true
             }
         }
-        guard let model = PasteboardModel(with: item, sourceApp: sourceApp, preloadedData: preloadedStringData) else { return false }
+        guard let model = PasteboardModel(
+            with: item,
+            sourceApp: sourceApp,
+            preloadedData: preloadedStringData,
+            preloadedFilePaths: preloadedFilePaths
+        ) else { return false }
 
         if chipId != -1 {
             model.updateGroup(val: chipId)

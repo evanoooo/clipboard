@@ -599,7 +599,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
         for (index, item) in items.enumerated() {
             if let attr = NSAttributedString(
-                with: item.data,
+                with: item.loadRawData(cache: false),
                 type: item.pasteboardType
             ) {
                 let mutable = NSMutableAttributedString(attributedString: attr)
@@ -639,7 +639,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         var allURLs: [URL] = []
 
         for item in items {
-            guard let filePaths = String(data: item.data, encoding: .utf8)
+            guard let filePaths = String(data: item.loadRawData(cache: false), encoding: .utf8)
             else {
                 continue
             }
@@ -670,12 +670,17 @@ final class PasteBoard: PasteboardMonitoringProtocol {
         )
 
         var fileURLs: [URL] = []
+        let fileManager = FileManager.default
         for (index, item) in items.enumerated() {
             let ext = item.pasteboardType == .png ? "png" : "tiff"
             let fileName = "image_\(index + 1).\(ext)"
             let fileURL = sessionDir.appending(path: fileName)
             do {
-                try item.data.write(to: fileURL)
+                if let mediaURL = item.mediaFileURL {
+                    try fileManager.copyItem(at: mediaURL, to: fileURL)
+                } else {
+                    try item.loadRawData(cache: false).write(to: fileURL)
+                }
                 fileURLs.append(fileURL)
             } catch {
                 log.error("写入临时图片文件失败: \(error)")
@@ -726,7 +731,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
     /// 写入文件 URL
     /// - Returns: 是否有有效文件写入
     private func writeFileURLs(_ data: PasteboardModel) -> Bool {
-        guard let filePaths = String(data: data.data, encoding: .utf8) else {
+        guard let filePaths = String(data: data.loadRawData(cache: false), encoding: .utf8) else {
             return false
         }
 
@@ -748,7 +753,7 @@ final class PasteBoard: PasteboardMonitoringProtocol {
 
     /// 写入原始数据（富文本、图片等）
     private func writeRawData(_ data: PasteboardModel) {
-        let payload = data.data
+        let payload = data.loadRawData(cache: false)
         guard !payload.isEmpty else {
             Log.pasteboard.warn("写入剪贴板跳过：二进制数据为空 (id: \(data.id ?? -1), uniqueId: \(data.uniqueId))")
             return

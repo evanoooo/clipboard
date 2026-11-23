@@ -200,21 +200,12 @@ final class CardStringContentView: NSView, PassthroughMouseEvents {
     }
 
     func updateKeyword(_ keyword: String, model: PasteboardModel) {
-        let attributed = ClipContentRenderer.resolveText(for: model, keyword: keyword, isRich: false, isCardSnippet: true)
-        if model.pasteboardType == .string {
-            let font: NSFont = model.detectedCodeLanguage != nil
-                ? CodeTheme().monospacedFont
-                : .preferredFont(forTextStyle: .body)
-            let mutable = NSMutableAttributedString(attributedString: attributed)
-            mutable.enumerateAttribute(.font, in: NSRange(location: 0, length: mutable.length)) { value, range, _ in
-                if value == nil {
-                    mutable.addAttribute(.font, value: font, range: range)
-                }
-            }
-            textView.attributedText = mutable
-        } else {
-            textView.attributedText = attributed
-        }
+        textView.attributedText = ClipContentRenderer.resolveText(
+            for: model,
+            keyword: keyword,
+            isRich: false,
+            isCardSnippet: true
+        )
     }
 
     func reset() {

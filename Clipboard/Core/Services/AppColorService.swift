@@ -78,6 +78,10 @@ final class AppColorService {
         PasteUserDefaults.appColorData = [:]
     }
 
+    func shouldSubscribeColorChange(for model: PasteboardModel) -> Bool {
+        model.getGroupChip() == nil && needsUpdate(for: model.appName)
+    }
+
     private func needsUpdate(for name: String) -> Bool {
         guard !checkedColors.contains(name) else { return false }
         guard let hex = colorDict[name] else { return true }

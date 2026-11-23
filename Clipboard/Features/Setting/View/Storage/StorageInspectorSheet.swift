@@ -604,40 +604,61 @@ struct StorageItemPreviewView: View {
         let itemType = item.type
 
         let worker = Task.detached(priority: .userInitiated) { () -> PreviewResult? in
-            guard !Task.isCancelled,
-                  let data = PasteDataPointReader.loadData(id: currentId, uniqueId: uniqueId),
+            guard !Task.isCancelled else { return nil }
+
+            let lower = itemType.lowercased()
+            if lower.contains("png") || lower.contains("tiff") || lower.contains("jpeg") || lower.contains("image") {
+                if let mediaURL = PasteDataPointReader.loadMediaURL(id: currentId, uniqueId: uniqueId) {
+                    var dims: CGSize?
+                    let propsOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+                    if let source = CGImageSourceCreateWithURL(mediaURL as CFURL, propsOptions),
+                       let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                       let w = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+                       let h = properties[kCGImagePropertyPixelHeight] as? CGFloat {
+                        dims = CGSize(width: w, height: h)
+                    }
+                    if let img = ImageDownsampler.downsampleNSImage(from: mediaURL, maxPixelSize: 2048) {
+                        return PreviewResult(
+                            image: img,
+                            imageDimensions: dims ?? img.size,
+                            textContent: nil,
+                            totalCharCount: nil,
+                            isTruncated: false
+                        )
+                    }
+                }
+
+                guard !Task.isCancelled,
+                      let data = PasteDataPointReader.loadData(id: currentId, uniqueId: uniqueId),
+                      !Task.isCancelled else {
+                    return nil
+                }
+
+                var dims: CGSize?
+                if let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+                   let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                   let w = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+                   let h = properties[kCGImagePropertyPixelHeight] as? CGFloat {
+                    dims = CGSize(width: w, height: h)
+                }
+                if let img = ImageDownsampler.downsampleNSImage(from: data, maxPixelSize: 2048) {
+                    return PreviewResult(
+                        image: img,
+                        imageDimensions: dims ?? img.size,
+                        textContent: nil,
+                        totalCharCount: nil,
+                        isTruncated: false
+                    )
+                }
+                return nil
+            }
+
+            guard let data = PasteDataPointReader.loadData(id: currentId, uniqueId: uniqueId),
                   !Task.isCancelled else {
                 return nil
             }
 
-            let lower = itemType.lowercased()
-            if lower.contains("png") || lower.contains("tiff") || lower.contains("jpeg") || lower.contains("image") {
-                if let source = CGImageSourceCreateWithData(data as CFData, nil) {
-                    var dims: CGSize? = nil
-                    if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
-                        if let w = properties[kCGImagePropertyPixelWidth] as? CGFloat,
-                           let h = properties[kCGImagePropertyPixelHeight] as? CGFloat {
-                            dims = CGSize(width: w, height: h)
-                        }
-                    }
-                    let maxDimension: CGFloat = 2048
-                    let thumbnailOptions: [CFString: Any] = [
-                        kCGImageSourceCreateThumbnailFromImageAlways: true,
-                        kCGImageSourceShouldCacheImmediately: true,
-                        kCGImageSourceCreateThumbnailWithTransform: true,
-                        kCGImageSourceThumbnailMaxPixelSize: maxDimension
-                    ]
-                    if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary) {
-                        let img = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                        return PreviewResult(image: img, imageDimensions: dims ?? img.size, textContent: nil, totalCharCount: nil, isTruncated: false)
-                    }
-                }
-                if let img = NSImage(data: data) {
-                    let dims = img.representations.first.map { CGSize(width: $0.pixelsWide, height: $0.pixelsHigh) } ?? img.size
-                    return PreviewResult(image: img, imageDimensions: dims, textContent: nil, totalCharCount: nil, isTruncated: false)
-                }
-                return nil
-            } else if lower.contains("rtf") {
+            if lower.contains("rtf") {
                 let text: String?
                 if let attr = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil) {
                     text = attr.string
@@ -651,11 +672,18 @@ struct StorageItemPreviewView: View {
                 let preview = truncated ? String(fullText.prefix(maxChars)) : fullText
                 return PreviewResult(image: nil, imageDimensions: nil, textContent: preview, totalCharCount: total, isTruncated: truncated)
             } else {
+                let maxDecodeBytes = 80_000
+                let maxChars = 20_000
+                if data.count > maxDecodeBytes {
+                    let slice = data.prefix(maxDecodeBytes)
+                    let decoded = String(decoding: slice, as: UTF8.self)
+                    let preview = String(decoded.prefix(maxChars))
+                    return PreviewResult(image: nil, imageDimensions: nil, textContent: preview, totalCharCount: nil, isTruncated: true)
+                }
                 guard let fullText = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) else {
                     return nil
                 }
                 let total = fullText.count
-                let maxChars = 20_000
                 let truncated = total > maxChars
                 let preview = truncated ? String(fullText.prefix(maxChars)) : fullText
                 return PreviewResult(image: nil, imageDimensions: nil, textContent: preview, totalCharCount: total, isTruncated: truncated)

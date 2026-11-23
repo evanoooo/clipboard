@@ -72,7 +72,7 @@ final class ClipPreviewContentView: NSView {
             return Const.maxContentHeight
         case .link:
             if PasteUserDefaults.enableLinkPreview, model.isLink,
-               model.attributeString.string.isSimpleWebPageURL {
+               model.previewPlainText.isSimpleWebPageURL {
                 return Const.maxContentHeight
             }
             return textContentHeight(for: model, width: width, measuredText: measuredText)
@@ -141,7 +141,7 @@ final class ClipPreviewContentView: NSView {
             PreviewFileView(model: model)
         case .link:
             if PasteUserDefaults.enableLinkPreview, model.isLink,
-               let url = model.attributeString.string.asCompleteURL(),
+               let url = (model.length <= 300 ? model.previewPlainText : model.plainText).asCompleteURL(),
                url.isLikelySimpleWebPage {
                 PreviewWebView(url: url)
             } else {

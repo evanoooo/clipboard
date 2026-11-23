@@ -344,22 +344,23 @@ final class PasteboardModel: Identifiable, Codable {
 
         let task = Task.detached(priority: .userInitiated) { [weak self] () -> NSImage? in
             guard !Task.isCancelled else { return nil }
-            // 性能极致优化：数据读取与解码完全在后台线程，杜绝主线程 I/O 阻塞
-            let sourceData: Data
+            // 性能极致优化：优先复用 300px show_data 或直接通过 .media/ URL 流式下采样，杜绝整张大图读入内存
+            let image: NSImage?
             if let sData, !sData.isEmpty {
-                sourceData = sData
+                image = Self.downsampledImage(from: sData, maxPixelSize: 400) ?? NSImage(data: sData)
             } else if let loadedData {
-                sourceData = loadedData
+                image = Self.downsampledImage(from: loadedData, maxPixelSize: 400) ?? NSImage(data: loadedData)
+            } else if let mediaURL = PasteDataPointReader.loadMediaURL(id: modelId, uniqueId: uId) {
+                image = ImageDownsampler.downsampleNSImage(from: mediaURL, maxPixelSize: 400)
             } else if let diskData = PasteDataPointReader.loadData(id: modelId, uniqueId: uId) {
-                sourceData = diskData
+                image = Self.downsampledImage(from: diskData, maxPixelSize: 400) ?? NSImage(data: diskData)
             } else {
                 return nil
             }
 
             guard !Task.isCancelled else { return nil }
-            let image = Self.downsampledImage(from: sourceData, maxPixelSize: 400) ?? NSImage(data: sourceData)
 
-            guard !Task.isCancelled, let self else { return image }
+            guard let self else { return image }
             await MainActor.run {
                 self.cachedThumbnail = image
                 self.thumbnailLoadTask = nil

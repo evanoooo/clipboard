@@ -39,6 +39,69 @@ extension PasteDataStore {
         }
     }
 
+    func ingestRichText(
+        _ data: Data,
+        type: PasteboardType,
+        sourceApp: NSRunningApplication?,
+        chipId: Int,
+        after previous: Task<Void, Never>?
+    ) -> Task<Void, Never> {
+        struct PreparedRichText: Sendable {
+            let showData: Data
+            let searchText: String
+            let length: Int
+            let tag: String
+            let uniqueId: String
+        }
+
+        let app = sourceApp ?? NSWorkspace.shared.frontmostApplication
+        let appPath = app?.bundleURL?.path ?? ""
+        let appName = app?.localizedName ?? ""
+        let bundleID = app?.bundleIdentifier
+        let timestamp = Int64(Date().timeIntervalSince1970)
+
+        return Task {
+            await previous?.value
+            guard let prepared = await Task.detached(priority: .utility, operation: { () -> PreparedRichText? in
+                guard let parsed = PasteboardModel.prepareText(data, type: type) else {
+                    return nil
+                }
+                let rawString = parsed.source.string
+                let length = parsed.source.length
+                let searchText = PasteboardModel.normalizeSearchText(rawString)
+                let tag = PasteboardModel.calculateTag(type: type, content: data, extractedText: rawString)
+                let uniqueId = PasteboardModel.generateUniqueId(for: type, data: data)
+                return PreparedRichText(
+                    showData: parsed.showData ?? Data(),
+                    searchText: searchText,
+                    length: length,
+                    tag: tag,
+                    uniqueId: uniqueId
+                )
+            }).value else { return }
+
+            let model = PasteboardModel(
+                pasteboardType: type,
+                data: data,
+                showData: prepared.showData,
+                timestamp: timestamp,
+                appPath: appPath,
+                appName: appName,
+                searchText: prepared.searchText,
+                length: prepared.length,
+                group: chipId,
+                tag: prepared.tag,
+                uniqueId: prepared.uniqueId,
+                sourceBundleID: bundleID
+            )
+            await insertModel(model)
+            SyncEngine.shared.markDirtyAndSchedule()
+            await MainActor.run {
+                model.evictRawData()
+            }
+        }
+    }
+
     func ingestImage(
         _ data: Data,
         type: PasteboardType,

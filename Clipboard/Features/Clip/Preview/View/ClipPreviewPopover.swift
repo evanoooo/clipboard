@@ -138,7 +138,7 @@ final class ClipPreviewPopover: NSPopover {
             return Const.maxPreviewWidth
         case .link:
             if PasteUserDefaults.enableLinkPreview, model.isLink,
-               model.attributeString.string.isSimpleWebPageURL {
+               model.previewPlainText.isSimpleWebPageURL {
                 return Const.maxPreviewWidth
             }
             let textWidth = estimatedTextWidth(for: model, measuredText: measuredText)
@@ -194,7 +194,7 @@ final class ClipPreviewPopover: NSPopover {
         case .string, .rich:
             return ClipPreviewContentView.measuringAttributedString(for: model)
         case .link:
-            let isSimpleWeb = model.attributeString.string.isSimpleWebPageURL
+            let isSimpleWeb = model.previewPlainText.isSimpleWebPageURL
             if !PasteUserDefaults.enableLinkPreview || !model.isLink || !isSimpleWeb {
                 return ClipPreviewContentView.measuringAttributedString(for: model)
             }

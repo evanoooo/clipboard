@@ -16,7 +16,7 @@ final class PasteboardWritingItem: NSObject {
     private weak var model: PasteboardModel?
 
     private var data: Data {
-        providedData ?? model?.data ?? Data()
+        providedData ?? model?.loadRawData(cache: false) ?? Data()
     }
 
     init(
@@ -121,11 +121,20 @@ extension PasteboardWritingItem: NSPasteboardWriting {
             .appending(path: "ClipboardDrag")
             .appending(path: fileName)
 
+        let fileManager = FileManager.default
         let dir = tempURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(
+        try? fileManager.createDirectory(
             at: dir,
             withIntermediateDirectories: true
         )
+        if providedData == nil, let mediaURL = model?.mediaFileURL {
+            if fileManager.fileExists(atPath: tempURL.path) {
+                try? fileManager.removeItem(at: tempURL)
+            }
+            if (try? fileManager.copyItem(at: mediaURL, to: tempURL)) != nil {
+                return tempURL.absoluteString as NSString
+            }
+        }
         try? data.write(to: tempURL)
 
         return tempURL.absoluteString as NSString

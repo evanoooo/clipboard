@@ -87,9 +87,13 @@ final class CardHeadView: NSView {
 
         let color = AppColorService.shared.color(for: model)
         backgroundView.layer?.backgroundColor = color.cgColor
-        colorSubscription = AppColorService.shared.changes.sink { [weak self, weak model] name in
-            guard let self, let model, model.appName == name else { return }
-            backgroundView.layer?.backgroundColor = AppColorService.shared.color(for: model).cgColor
+        if AppColorService.shared.shouldSubscribeColorChange(for: model) {
+            colorSubscription = AppColorService.shared.changes.sink { [weak self, weak model] name in
+                guard let self, let model, model.appName == name else { return }
+                backgroundView.layer?.backgroundColor = AppColorService.shared.color(for: model).cgColor
+            }
+        } else {
+            colorSubscription = nil
         }
 
         if !isEditingAlias {
