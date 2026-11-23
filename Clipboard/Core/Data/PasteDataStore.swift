@@ -141,12 +141,14 @@ final class PasteDataStore {
     private var orderRevision = 0
     private var ingestionTask: Task<Void, Never>?
     private var onDemandOCRTask: Task<Void, Never>?
+    private var hasRegisteredStoreEvents = false
     /// 撤销进行中时忽略重复 ⌘Z，避免两次恢复交叉。
     var isUndoing = false
     /// 串行登记尚未落库的写操作（删除/移组/隐藏），撤销前只需等待队尾。
     private var mutationTail: Task<Void, Never>?
 
     func setup() async -> Bool {
+        registerStoreEventSubscribersIfNeeded()
         guard await sqlManager.setup() else { return false }
         // 写入侧完成建表/迁移后再开只读连接，避免读到旧 schema。
         guard await PasteReadStore.shared.setup() else { return false }
@@ -160,6 +162,40 @@ final class PasteDataStore {
             await ColdArchiveManager.shared.scheduleIdleArchivingIfNeeded()
         }
         return true
+    }
+
+    private func registerStoreEventSubscribersIfNeeded() {
+        guard !hasRegisteredStoreEvents else { return }
+        hasRegisteredStoreEvents = true
+
+        ClipStoreEventBus.shared.subscribe { event in
+            switch event {
+            case let .itemsDeleted(uniqueIds, hotIds):
+                if !uniqueIds.isEmpty {
+                    SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uniqueIds)
+                    Task { @MainActor in
+                        SyncEngine.shared.markDirtyAndSchedule()
+                    }
+                }
+                if !hotIds.isEmpty {
+                    Task { @MainActor in
+                        DeferredOCRCoordinator.shared.remove(ids: hotIds)
+                    }
+                }
+
+            case let .itemGroupUpdated(uniqueId, groupId):
+                let onlySyncPinned = UserDefaults.standard.object(forKey: "sync_only_pinned") == nil
+                    ? true
+                    : UserDefaults.standard.bool(forKey: "sync_only_pinned")
+                if groupId == -1 {
+                    if onlySyncPinned {
+                        SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [uniqueId])
+                    }
+                } else {
+                    SyncPendingDeletionsStore.shared.removeDeletions(uniqueIds: [uniqueId])
+                }
+            }
+        }
     }
 
     func notifyCategoryChipsChanged() {

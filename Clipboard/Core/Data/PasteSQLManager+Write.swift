@@ -248,10 +248,7 @@ extension PasteSQLManager {
             let archiveUids = ColdArchiveManager.deleteFromArchive(filter: filter)
             let uids = hotUids + archiveUids
             if !uids.isEmpty {
-                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uids)
-                Task { @MainActor in
-                    SyncEngine.shared.markDirtyAndSchedule()
-                }
+                ClipStoreEventBus.shared.publish(.itemsDeleted(uniqueIds: uids, hotIds: []))
             }
             await refreshAppCache(debounce: true)
             Log.database.info("删除条目成功，热库影响行数：\(count ?? 0)，冷库影响行数：\(archiveUids.count)")
@@ -264,11 +261,8 @@ extension PasteSQLManager {
         let idFilter = table.filter(Col.id == id)
         do {
             if let uid = try? connection?.pluck(idFilter.select(Col.uniqueId))?[Col.uniqueId] {
-                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [uid])
                 ColdArchiveManager.deleteFromArchive(uniqueIds: [uid])
-                Task { @MainActor in
-                    SyncEngine.shared.markDirtyAndSchedule()
-                }
+                ClipStoreEventBus.shared.publish(.itemsDeleted(uniqueIds: [uid], hotIds: []))
             }
             try connection?.run(idFilter.delete())
             await refreshAppCache(debounce: true)
@@ -452,16 +446,9 @@ extension PasteSQLManager {
             let resolvedUniqueId = try connection.pluck(query.select(Col.uniqueId))?[Col.uniqueId]
             let count = try connection.run(update)
             if count > 0, let resolvedUniqueId {
-                let onlySyncPinned = UserDefaults.standard.object(forKey: "sync_only_pinned") == nil
-                    ? true
-                    : UserDefaults.standard.bool(forKey: "sync_only_pinned")
-                if groupId == -1 {
-                    if onlySyncPinned {
-                        SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [resolvedUniqueId])
-                    }
-                } else {
-                    SyncPendingDeletionsStore.shared.removeDeletions(uniqueIds: [resolvedUniqueId])
-                }
+                ClipStoreEventBus.shared.publish(
+                    .itemGroupUpdated(uniqueId: resolvedUniqueId, groupId: groupId)
+                )
             }
             Log.database.info("更新条目分组成功，影响行数：\(count)")
             return count > 0

@@ -204,18 +204,10 @@ extension PasteSQLManager {
                 allUids.append(contentsOf: archiveUniqueIds)
             }
 
-            if !allUids.isEmpty {
-                SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: allUids)
-                Task { @MainActor in
-                    if !ids.isEmpty {
-                        DeferredOCRCoordinator.shared.remove(ids: ids)
-                    }
-                    SyncEngine.shared.markDirtyAndSchedule()
-                }
-            } else if !ids.isEmpty {
-                Task { @MainActor in
-                    DeferredOCRCoordinator.shared.remove(ids: ids)
-                }
+            if !allUids.isEmpty || !ids.isEmpty {
+                ClipStoreEventBus.shared.publish(
+                    .itemsDeleted(uniqueIds: allUids, hotIds: ids)
+                )
             }
 
             _ = purgeOrphanMediaBlobs()
