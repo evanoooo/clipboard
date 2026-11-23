@@ -2,7 +2,7 @@
 //  SyncEngine.swift
 //  Clipboard
 //
-//  WebDAV 增量同步调度引擎：Diff 比对、LWW 冲突裁决、动态能耗感知防抖与受控滑动窗口并发流水线
+//  WebDAV 增量同步核心调度器：持有同步状态、凭据/密钥缓存，并编排增量同步主流程
 //
 
 import AppKit
@@ -60,14 +60,24 @@ final class SyncEngine: ObservableObject {
     @Published private(set) var syncProgress: String?
     @Published private(set) var syncLogs: [SyncLogItem] = []
 
-    private var lastRemoteETag: String?
-    private var isDirty = false
-    private var isCancelled = false
-    private var dirtyGeneration: UInt64 = 0
-    private var activeSyncTask: Task<SyncState, Never>?
-    private var debounceTask: Task<Void, Never>?
-    private var periodicSyncTimer: Timer?
-    private var powerObservers: [NSObjectProtocol] = []
+    var lastRemoteETag: String?
+    var isDirty = false
+    var isCancelled = false
+    var dirtyGeneration: UInt64 = 0
+    var activeSyncTask: Task<SyncState, Never>?
+    var debounceTask: Task<Void, Never>?
+    var periodicSyncTimer: Timer?
+    var powerObservers: [NSObjectProtocol] = []
+
+    // MARK: - 性能优化缓存（密钥派生与连接池复用）
+
+    private var cachedMasterKey: SymmetricKey?
+    private var cachedKeySignature: String?
+    private var cachedClient: WebDAVClient?
+    private var cachedClientSignature: String?
+    private var hasValidatedDirectoryStructure = false
+    /// 损坏条目黑名单（解密/反序列化失败的坏数据，避免增量同步无限重试循环下载）
+    private var corruptItemIDs = Set<String>()
 
     var isOnlySyncPinned: Bool {
         if UserDefaults.standard.object(forKey: "sync_only_pinned") == nil {
@@ -75,6 +85,42 @@ final class SyncEngine: ObservableObject {
         }
         return UserDefaults.standard.bool(forKey: "sync_only_pinned")
     }
+
+    private init() {
+        loadCachedSummary()
+        setupPowerAndSleepObservers()
+        updateSyncSchedule()
+    }
+
+    // MARK: - 跨文件状态写入封装
+
+    func setFetchingSummary(_ value: Bool) {
+        isFetchingSummary = value
+    }
+
+    func setRestoring(_ restoring: Bool, message: String?) {
+        isRestoring = restoring
+        restoreMessage = message
+    }
+
+    func setRestoreMessage(_ message: String?) {
+        restoreMessage = message
+    }
+
+    func setProgress(_ value: String?) {
+        syncProgress = value
+    }
+
+    func applySummary(_ summary: SyncSummary) {
+        syncSummary = summary
+        saveSummaryCache(summary)
+    }
+
+    func recordCorruptItem(id: String) {
+        corruptItemIDs.insert(id)
+    }
+
+    // MARK: - 任务入口
 
     /// 外部启动后台同步任务的规范入口（绑定 Task 句柄以支持安全取消）
     func startSyncTask() {
@@ -96,16 +142,6 @@ final class SyncEngine: ObservableObject {
         addLog("已手动取消当前同步任务")
     }
 
-    // MARK: - 性能优化缓存（密钥派生与连接池复用）
-
-    private var cachedMasterKey: SymmetricKey?
-    private var cachedKeySignature: String?
-    private var cachedClient: WebDAVClient?
-    private var cachedClientSignature: String?
-    private var hasValidatedDirectoryStructure = false
-    /// 损坏条目黑名单（解密/反序列化失败的坏数据，避免增量同步无限重试循环下载）
-    private var corruptItemIDs = Set<String>()
-
     func invalidateClientAndKeyCache() {
         cachedMasterKey = nil
         cachedKeySignature = nil
@@ -115,7 +151,7 @@ final class SyncEngine: ObservableObject {
         corruptItemIDs.removeAll()
     }
 
-    private func getCachedClient(serverURL: URL, username: String?, password: String?) -> WebDAVClient {
+    func getCachedClient(serverURL: URL, username: String?, password: String?) -> WebDAVClient {
         let sig = "\(serverURL.absoluteString)|\(username ?? "")|\(password ?? "")"
         if let cachedClient, cachedClientSignature == sig {
             return cachedClient
@@ -126,7 +162,7 @@ final class SyncEngine: ObservableObject {
         return client
     }
 
-    private func getCachedMasterKey(passphrase: String, salt: Data) throws -> SymmetricKey {
+    func getCachedMasterKey(passphrase: String, salt: Data) throws -> SymmetricKey {
         let sig = "\(passphrase)|\(salt.base64EncodedString())"
         if let cachedMasterKey, cachedKeySignature == sig {
             return cachedMasterKey
@@ -135,55 +171,6 @@ final class SyncEngine: ObservableObject {
         self.cachedMasterKey = key
         self.cachedKeySignature = sig
         return key
-    }
-
-    private init() {
-        loadCachedSummary()
-        setupPowerAndSleepObservers()
-        updateSyncSchedule()
-    }
-
-    // MARK: - 系统功耗与睡眠感知生命周期
-
-    private func setupPowerAndSleepObservers() {
-        let center = NSWorkspace.shared.notificationCenter
-
-        // 系统即将休眠：优雅中断正在进行的同步传输，防止在休眠中挂起导致唤醒后超时
-        let obsSleep = center.addObserver(
-            forName: NSWorkspace.willSleepNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.currentState == .syncing {
-                    self.addLog("系统即将进入休眠，优雅中止后台同步任务")
-                    self.cancelSync()
-                }
-                self.periodicSyncTimer?.invalidate()
-                self.periodicSyncTimer = nil
-            }
-        }
-
-        // 系统唤醒恢复：延迟 5 秒待 Wi-Fi 重连稳定后，如有脏数据自动触发增量同步
-        let obsWake = center.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                self.updateSyncSchedule()
-                if UserDefaults.standard.bool(forKey: "sync_enabled"), self.isDirty {
-                    self.addLog("系统唤醒网络已恢复，自动执行增量同步")
-                    self.startSyncTask()
-                }
-            }
-        }
-
-        powerObservers = [obsSleep, obsWake]
     }
 
     // MARK: - 日志记录
@@ -210,7 +197,7 @@ final class SyncEngine: ObservableObject {
         syncLogs.removeAll()
     }
 
-    // MARK: - 缓存概要
+    // MARK: - 缓存与下载助手
 
     private func loadCachedSummary() {
         if let data = UserDefaults.standard.data(forKey: "sync_summary_cache"),
@@ -225,7 +212,7 @@ final class SyncEngine: ObservableObject {
         }
     }
 
-    nonisolated private static func downloadItemData(id: String, client: WebDAVClient) async -> Data? {
+    nonisolated static func downloadItemData(id: String, client: WebDAVClient) async -> Data? {
         let sharded = SyncIndex.shardedItemPath(for: id)
         do {
             return try await client.download(from: sharded)
@@ -253,323 +240,6 @@ final class SyncEngine: ObservableObject {
         )
     }
 
-    // MARK: - 从 SQLite 全量加载待同步数据（彻底脱离 UI 分页 50 条限制）
-
-    private func fetchLocalBlobsForSync(onlySyncPinned: Bool) async -> [SyncItemBlob] {
-        await SyncWorker.shared.fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
-    }
-
-    // MARK: - 增量同步调度与周期调度 (支持关闭、实时防抖与周期轮询)
-
-    func markDirtyAndSchedule() {
-        guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
-        isDirty = true
-        dirtyGeneration &+= 1
-        debounceTask?.cancel()
-
-        let freq = SyncFrequency.current
-        guard freq != .off else { return }
-
-        if freq == .realtime {
-            let isPowerSaving = ProcessInfo.processInfo.isLowPowerModeEnabled
-            let delayNanoseconds: UInt64 = isPowerSaving ? 60_000_000_000 : 15_000_000_000
-
-            debounceTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: delayNanoseconds)
-                guard !Task.isCancelled else { return }
-                self?.startSyncTask()
-            }
-        } else {
-            if periodicSyncTimer == nil {
-                updateSyncSchedule()
-            }
-        }
-    }
-
-    func updateSyncSchedule() {
-        periodicSyncTimer?.invalidate()
-        periodicSyncTimer = nil
-        debounceTask?.cancel()
-        debounceTask = nil
-
-        guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
-        let freq = SyncFrequency.current
-        guard freq != .off else { return }
-
-        if freq != .realtime {
-            let interval = TimeInterval(freq.rawValue)
-            let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return }
-                    self.addLog("触发周期自动同步 (\(freq.title))")
-                    self.startSyncTask()
-                }
-            }
-            // 遵循 Apple 能耗规范：设置 10% 容差，允许 macOS 内核进行定时器聚合，显著降低电池唤醒能耗
-            timer.tolerance = interval * 0.1
-            RunLoop.main.add(timer, forMode: .common)
-            periodicSyncTimer = timer
-        }
-    }
-
-    // MARK: - 仅刷新云端资产看板概要
-
-    @discardableResult
-    func fetchCloudSummary() async -> SyncSummary? {
-        guard UserDefaults.standard.bool(forKey: "sync_enabled") else { return nil }
-        guard !isFetchingSummary else { return syncSummary }
-        isFetchingSummary = true
-        addLog("正在从云端读取资产看板索引...")
-        defer { isFetchingSummary = false }
-
-        do {
-            guard let serverURLString = UserDefaults.standard.string(forKey: "sync_webdav_url"),
-                  let serverURL = URL(string: serverURLString),
-                  let username = UserDefaults.standard.string(forKey: "sync_webdav_username"),
-                  let password = SyncKeychainManager.shared.loadWebDAVPassword(),
-                  let passphrase = SyncKeychainManager.shared.loadSyncPassphrase(),
-                  !passphrase.isEmpty else {
-                addLog("获取看板失败: 配置未完整设置", isError: true)
-                return nil
-            }
-
-            let client = getCachedClient(serverURL: serverURL, username: username, password: password)
-            let saltPath = "ClipboardSync/vault.meta.enc"
-            let salt: Data
-            do {
-                salt = try await client.download(from: saltPath)
-            } catch {
-                addLog("获取云端密钥元数据失败: \(error.localizedDescription)", isError: true)
-                return syncSummary
-            }
-
-            let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
-
-            let indexPath = "ClipboardSync/index.json.enc"
-            do {
-                let encIndexData = try await client.download(from: indexPath)
-                guard let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
-                      let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
-                    addLog("云端索引存在但解密失败，请检查同步主密码", isError: true)
-                    return syncSummary
-                }
-
-                let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
-                self.syncSummary = summary
-                saveSummaryCache(summary)
-                addLog("云端资产概览更新完成: 共 \(summary.totalCount) 条记录")
-                return summary
-            } catch {
-                addLog("读取云端索引失败: \(error.localizedDescription)", isError: true)
-                return syncSummary
-            }
-        } catch {
-            addLog("获取看板异常: \(error.localizedDescription)", isError: true)
-            return nil
-        }
-    }
-
-    // MARK: - 从云端还原
-
-    @discardableResult
-    func restoreFromCloud(overwriteLocal: Bool = false) async -> (success: Bool, message: String) {
-        guard UserDefaults.standard.bool(forKey: "sync_enabled") else {
-            return (false, "请先启用云端同步")
-        }
-        guard !isRestoring, currentState != .syncing else {
-            return (false, "同步或还原正在进行中")
-        }
-
-        isRestoring = true
-        restoreMessage = nil
-        addLog("开始从云端拉取还原数据 (模式: \(overwriteLocal ? "完全覆盖" : "智能安全合并"))...")
-        defer {
-            isRestoring = false
-            syncProgress = nil
-        }
-
-        do {
-            guard let serverURLString = UserDefaults.standard.string(forKey: "sync_webdav_url"),
-                  let serverURL = URL(string: serverURLString),
-                  let username = UserDefaults.standard.string(forKey: "sync_webdav_username"),
-                  let password = SyncKeychainManager.shared.loadWebDAVPassword(),
-                  let passphrase = SyncKeychainManager.shared.loadSyncPassphrase(),
-                  !passphrase.isEmpty else {
-                let msg = "WebDAV 账号或同步密码未配置完整"
-                restoreMessage = msg
-                addLog(msg, isError: true)
-                return (false, msg)
-            }
-
-            let client = getCachedClient(serverURL: serverURL, username: username, password: password)
-
-            let saltPath = "ClipboardSync/vault.meta.enc"
-            let salt: Data
-            do {
-                salt = try await client.download(from: saltPath)
-            } catch {
-                let msg = "未找到或无法读取云端密钥元数据: \(error.localizedDescription)"
-                restoreMessage = msg
-                addLog(msg, isError: true)
-                return (false, msg)
-            }
-            let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
-
-            let indexPath = "ClipboardSync/index.json.enc"
-            let encIndexData: Data
-            do {
-                encIndexData = try await client.download(from: indexPath)
-            } catch {
-                let msg = "下载云端索引清单失败: \(error.localizedDescription)"
-                restoreMessage = msg
-                addLog(msg, isError: true)
-                return (false, msg)
-            }
-
-            guard let rawIndexData = try? SyncCryptoEngine.decrypt(data: encIndexData, using: masterKey),
-                  let remoteIndex = try? JSONDecoder().decode(SyncIndex.self, from: rawIndexData) else {
-                let msg = "解密云端索引失败，请检查同步主密码是否正确"
-                restoreMessage = msg
-                addLog(msg, isError: true)
-                return (false, msg)
-            }
-
-            let activeEntries = remoteIndex.entries.values.filter { !$0.isDeleted }
-            var toDownloadIds: [String] = []
-
-            if overwriteLocal {
-                addLog("清空本地所有记录以准备完全覆盖...")
-                _ = try await PasteSQLManager.manager.clearHistory(includePinnedAndGrouped: true)
-                toDownloadIds = activeEntries.map(\.uniqueId)
-            } else {
-                addLog("查询本地数据库全量条目以执行差集比对...")
-                let localRows = await PasteReadStore.shared.search(
-                    select: [Col.uniqueId, Col.timestamp],
-                    limit: nil
-                )
-                var localMap: [String: Int64] = [:]
-                for r in localRows {
-                    if let uid = try? r.get(Col.uniqueId), let ts = try? r.get(Col.timestamp) {
-                        localMap[uid] = ts
-                    }
-                }
-
-                for entry in activeEntries {
-                    if let localTs = localMap[entry.uniqueId] {
-                        if entry.updatedAt > localTs {
-                            toDownloadIds.append(entry.uniqueId)
-                        }
-                    } else {
-                        toDownloadIds.append(entry.uniqueId)
-                    }
-                }
-            }
-
-            if toDownloadIds.isEmpty {
-                let msg = overwriteLocal ? "云端暂无可覆盖还原的数据。" : "本地数据已是最新，无需拉取更新。"
-                self.restoreMessage = msg
-                addLog(msg)
-                return (true, msg)
-            }
-
-            addLog("待拉取条目: \(toDownloadIds.count) 条，启动并发流水线...")
-            let maxConcurrency = 3
-            let budgetLimiter = SyncByteBudgetLimiter(maxBudgetBytes: 24 * 1024 * 1024)
-            let remoteEntriesSnapshot = remoteIndex.entries
-            var restoredCount = 0
-            let total = toDownloadIds.count
-            var batchBuffer: [SyncItemBlob] = []
-            var batchBufferBytes = 0
-
-            try await withThrowingTaskGroup(of: SyncItemBlob?.self) { group in
-                var iterator = toDownloadIds.makeIterator()
-
-                for _ in 0..<maxConcurrency {
-                    if let id = iterator.next() {
-                        let estBytes = Self.estimatedDownloadBytes(id: id, entry: remoteEntriesSnapshot[id])
-                        group.addTask {
-                            let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
-                            defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                            let encData = await Self.downloadItemData(id: id, client: client)
-                            guard let encData else { return nil }
-                            guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
-                                  let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
-                                Log.sync.warn("云端条目 [\(id)] 解密或解码失败，可能已损坏")
-                                return nil
-                            }
-                            return blob
-                        }
-                    }
-                }
-
-                while let blob = try await group.next() {
-                    if let blob {
-                        batchBuffer.append(blob)
-                        batchBufferBytes += blob.payloadData?.count ?? 0
-                        restoredCount += 1
-
-                        if batchBuffer.count >= 50 || batchBufferBytes >= 16 * 1024 * 1024 {
-                            await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
-                            batchBuffer.removeAll(keepingCapacity: true)
-                            batchBufferBytes = 0
-                        }
-
-                        syncProgress = "正在还原 (\(restoredCount)/\(total))..."
-                        if restoredCount % 25 == 0 || restoredCount == total {
-                            addLog("还原进度: \(restoredCount)/\(total)")
-                        }
-                    }
-
-                    if !Task.isCancelled, let nextId = iterator.next() {
-                        let estBytes = Self.estimatedDownloadBytes(id: nextId, entry: remoteEntriesSnapshot[nextId])
-                        group.addTask {
-                            let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
-                            defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                            let encData = await Self.downloadItemData(id: nextId, client: client)
-                            guard let encData else { return nil }
-                            guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
-                                  let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
-                                Log.sync.warn("云端条目 [\(nextId)] 解密或解码失败，可能已损坏")
-                                return nil
-                            }
-                            return blob
-                        }
-                    }
-                }
-            }
-
-            if !batchBuffer.isEmpty {
-                await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
-                batchBuffer.removeAll()
-                batchBufferBytes = 0
-            }
-
-            await PasteDataStore.main.reloadHistory()
-            let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
-            self.syncSummary = summary
-            saveSummaryCache(summary)
-
-            let allPending = Array(SyncPendingDeletionsStore.shared.getAllDeletions())
-            if !allPending.isEmpty {
-                SyncPendingDeletionsStore.shared.clear(uniqueIds: allPending)
-            }
-
-            let msg = overwriteLocal
-                ? "完全覆盖完成：已从云端拉取 \(restoredCount) 条记录并完全覆盖本地。"
-                : "智能合并完成：已拉取恢复 \(restoredCount) 条云端记录，本地现有数据均已完好保留。"
-            self.restoreMessage = msg
-            addLog(msg)
-            return (true, msg)
-
-        } catch {
-            let errorMsg = "还原失败: \(error.localizedDescription)"
-            self.restoreMessage = errorMsg
-            addLog(errorMsg, isError: true)
-            return (false, errorMsg)
-        }
-    }
-
     // MARK: - 手动或定时触发增量同步
 
     @discardableResult
@@ -592,13 +262,7 @@ final class SyncEngine: ObservableObject {
         }
 
         do {
-            // 1. 检查凭据配置
-            guard let serverURLString = UserDefaults.standard.string(forKey: "sync_webdav_url"),
-                  let serverURL = URL(string: serverURLString),
-                  let username = UserDefaults.standard.string(forKey: "sync_webdav_username"),
-                  let password = SyncKeychainManager.shared.loadWebDAVPassword(),
-                  let passphrase = SyncKeychainManager.shared.loadSyncPassphrase(),
-                  !passphrase.isEmpty else {
+            guard let creds = resolveCredentials() else {
                 let state: SyncState = .failed(message: "同步配置或密码未完整设置")
                 currentState = state
                 addLog("同步配置或主密码未完整设置", isError: true)
@@ -611,9 +275,12 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            let client = getCachedClient(serverURL: serverURL, username: username, password: password)
+            let client = getCachedClient(
+                serverURL: creds.serverURL,
+                username: creds.username,
+                password: creds.password
+            )
 
-            // 2. 首次或配置变动后验证目录结构
             if !hasValidatedDirectoryStructure {
                 syncProgress = "验证云端目录结构..."
                 let (_, latency) = try await client.testConnection()
@@ -629,23 +296,13 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 3. 读取或生成加密 Salt 与复用/派生主密钥
-            let saltPath = "ClipboardSync/vault.meta.enc"
-            var salt: Data
+            let masterKey: SymmetricKey
             do {
-                salt = try await client.download(from: saltPath)
-            } catch let error as WebDAVError {
-                if case .notFound = error {
-                    salt = SyncCryptoEngine.generateSalt()
-                    try await client.upload(data: salt, to: saltPath)
-                    addLog("为全新云端空间初始化加密 Salt 元数据")
-                } else {
-                    let msg = "读取云端安全元数据失败: \(error.localizedDescription)"
-                    addLog(msg, isError: true)
-                    let state: SyncState = .failed(message: msg)
-                    currentState = state
-                    return state
-                }
+                masterKey = try await loadSaltAndMasterKey(
+                    client: client,
+                    passphrase: creds.passphrase,
+                    createIfMissing: true
+                )
             } catch {
                 let msg = "读取云端安全元数据失败: \(error.localizedDescription)"
                 addLog(msg, isError: true)
@@ -654,15 +311,12 @@ final class SyncEngine: ObservableObject {
                 return state
             }
 
-            let masterKey = try getCachedMasterKey(passphrase: passphrase, salt: salt)
-
             if isCancelled || Task.isCancelled {
                 currentState = .idle
                 addLog("增量同步已取消")
                 return .idle
             }
 
-            // 5. ETag 极速预检
             let indexPath = "ClipboardSync/index.json.enc"
             let currentETag = try? await client.getETag(path: indexPath)
             if !isDirty, let currentETag, let lastRemoteETag, currentETag == lastRemoteETag {
@@ -679,7 +333,6 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 6. 下载远端索引 (严密区分 404 与网络超时/解密失败)
             syncProgress = "获取云端索引清单..."
             var remoteIndex = SyncIndex()
             do {
@@ -724,7 +377,6 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 7. 在后台 SyncWorker Actor 中收集本地元数据并执行 3-Way Diff（彻底脱离 @MainActor）
             syncProgress = "扫描本地数据库并比对差异..."
             let onlySyncPinned = self.isOnlySyncPinned
             let localBlobs = await SyncWorker.shared.fetchLocalBlobsForSync(onlySyncPinned: onlySyncPinned)
@@ -745,92 +397,20 @@ final class SyncEngine: ObservableObject {
                 pendingDeletions: pendingDeletions,
                 corruptItemIDs: corruptItemIDs
             )
-            addLog("Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, 待清理本地 \(diff.toDeleteLocal.count) 条, 待清理远端 \(diff.toDeleteRemote.count) 条")
+            addLog(
+                "Diff 计算完成: 待上传 \(diff.toUpload.count) 条, 待下载 \(diff.toDownload.count) 条, "
+                    + "待清理本地 \(diff.toDeleteLocal.count) 条, 待清理远端 \(diff.toDeleteRemote.count) 条"
+            )
 
-            // 8. 受控滑动窗口并发流水线：下载需拉取条目 (限制并发为 3，在途字节上限 24MB)
-            if !diff.toDownload.isEmpty {
-                let maxConcurrency = 3
-                let budgetLimiter = SyncByteBudgetLimiter(maxBudgetBytes: 24 * 1024 * 1024)
-                let remoteEntriesSnapshot = remoteIndex.entries
-                var downloadedCount = 0
-                let totalDownloads = diff.toDownload.count
-                var batchBuffer: [SyncItemBlob] = []
-                var batchBufferBytes = 0
-
-                try await withThrowingTaskGroup(of: SyncItemBlob?.self) { group in
-                    var iterator = diff.toDownload.makeIterator()
-
-                    for _ in 0..<maxConcurrency {
-                        if isCancelled || Task.isCancelled { break }
-                        if let id = iterator.next() {
-                            let estBytes = Self.estimatedDownloadBytes(id: id, entry: remoteEntriesSnapshot[id])
-                            group.addTask { [weak self] in
-                                let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
-                                defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                                let encData = await Self.downloadItemData(id: id, client: client)
-                                guard let encData else { return nil }
-                                guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
-                                      let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
-                                    Log.sync.warn("云端条目 [\(id)] 解密或解码失败，已记录黑名单跳过循环重试")
-                                    await MainActor.run {
-                                        self?.corruptItemIDs.insert(id)
-                                    }
-                                    return nil
-                                }
-                                return blob
-                            }
-                        }
-                    }
-
-                    while let blob = try await group.next() {
-                        if isCancelled || Task.isCancelled {
-                            group.cancelAll()
-                            break
-                        }
-                        if let blob {
-                            batchBuffer.append(blob)
-                            batchBufferBytes += blob.payloadData?.count ?? 0
-                            downloadedCount += 1
-
-                            if batchBuffer.count >= 50 || batchBufferBytes >= 16 * 1024 * 1024 {
-                                await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
-                                batchBuffer.removeAll(keepingCapacity: true)
-                                batchBufferBytes = 0
-                            }
-
-                            syncProgress = "正在下载云端条目 (\(downloadedCount)/\(totalDownloads))..."
-                            if downloadedCount % 25 == 0 || downloadedCount == totalDownloads {
-                                addLog("下载进度: \(downloadedCount)/\(totalDownloads)")
-                            }
-                        }
-
-                        if !isCancelled && !Task.isCancelled, let nextId = iterator.next() {
-                            let estBytes = Self.estimatedDownloadBytes(id: nextId, entry: remoteEntriesSnapshot[nextId])
-                            group.addTask { [weak self] in
-                                let acquired = await budgetLimiter.acquire(estimatedBytes: estBytes)
-                                defer { Task { await budgetLimiter.release(acquiredBytes: acquired) } }
-                                let encData = await Self.downloadItemData(id: nextId, client: client)
-                                guard let encData else { return nil }
-                                guard let rawData = try? SyncCryptoEngine.decrypt(data: encData, using: masterKey),
-                                      let blob = try? JSONDecoder().decode(SyncItemBlob.self, from: rawData) else {
-                                    Log.sync.warn("云端条目 [\(nextId)] 解密或解码失败，已记录黑名单跳过循环重试")
-                                    await MainActor.run {
-                                        self?.corruptItemIDs.insert(nextId)
-                                    }
-                                    return nil
-                                }
-                                return blob
-                            }
-                        }
-                    }
-                }
-
-                if !batchBuffer.isEmpty {
-                    await PasteDataStore.main.ingestSyncedBlobs(batchBuffer)
-                    batchBuffer.removeAll()
-                    batchBufferBytes = 0
-                }
-            }
+            _ = try await downloadAndIngestBatches(
+                ids: diff.toDownload,
+                remoteEntries: remoteIndex.entries,
+                client: client,
+                masterKey: masterKey,
+                progressVerb: "正在下载云端条目",
+                logVerb: "下载进度",
+                trackCorrupt: true
+            )
 
             if isCancelled || Task.isCancelled {
                 currentState = .idle
@@ -838,13 +418,11 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 8.1 同步清理远端墓碑删除条目（保证多端一致性）
             if !diff.toDeleteLocal.isEmpty {
                 addLog("检测到远端已标记删除 \(diff.toDeleteLocal.count) 条记录，正在同步清理本地 SQLite...")
                 await PasteDataStore.main.deleteSyncedBatch(uniqueIds: diff.toDeleteLocal)
             }
 
-            // 若有本地新增入库或删除清理，统一重载一次主列表
             if !diff.toDownload.isEmpty || !diff.toDeleteLocal.isEmpty {
                 await PasteDataStore.main.reloadHistory()
             }
@@ -855,132 +433,13 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 9. 受控滑动窗口并发流水线：加密上传本地条目 (限制并发为 3，在途字节上限 24MB，Payload 延迟按需加载)
-            if !diff.toUpload.isEmpty {
-                let maxConcurrency = 3
-                let uploadBudgetLimiter = SyncByteBudgetLimiter(maxBudgetBytes: 24 * 1024 * 1024)
-                var uploadedCount = 0
-                let totalUploads = diff.toUpload.count
-                var ensuredDirectories = Set<String>()
-                var lastUIUpdateTime = ContinuousClock.now
-
-                try await withThrowingTaskGroup(of: (String, SyncIndexEntry)?.self) { group in
-                    var iterator = diff.toUpload.makeIterator()
-
-                    for _ in 0..<maxConcurrency {
-                        if isCancelled || Task.isCancelled { break }
-                        if let blob = iterator.next() {
-                            let prefix = blob.uniqueId.count >= 2 ? String(blob.uniqueId.prefix(2)) : "misc"
-                            let dir = "ClipboardSync/items/\(prefix)"
-                            if !ensuredDirectories.contains(dir) {
-                                try? await client.makeDirectory(path: dir)
-                                ensuredDirectories.insert(dir)
-                            }
-                            let estBytes = Self.estimatedUploadBytes(for: blob)
-                            group.addTask {
-                                let acquired = await uploadBudgetLimiter.acquire(estimatedBytes: estBytes)
-                                defer { Task { await uploadBudgetLimiter.release(acquiredBytes: acquired) } }
-                                var uploadBlob = blob
-                                // 关键内存优化：延迟点查 Payload 与 showData，走 Bulk 通道避免阻塞 UI 点查，随 task 结束即刻释放
-                                if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId, channel: .bulk)
-                                }
-                                if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId, uniqueId: uploadBlob.uniqueId)
-                                }
-                                guard let rawData = try? JSONEncoder().encode(uploadBlob),
-                                      let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
-                                    return nil
-                                }
-                                let targetPath = SyncIndex.shardedItemPath(for: uploadBlob.uniqueId)
-                                try await client.upload(data: encData, to: targetPath)
-                                let checksum = SyncCryptoEngine.checksum(for: uploadBlob.payloadData ?? Data())
-                                let estimatedSize = (uploadBlob.payloadData?.count ?? 0) + (uploadBlob.showData?.count ?? 0)
-                                let entry = SyncIndexEntry(
-                                    uniqueId: uploadBlob.uniqueId,
-                                    updatedAt: uploadBlob.timestamp,
-                                    checksum: checksum,
-                                    isDeleted: false,
-                                    group: uploadBlob.group,
-                                    type: uploadBlob.pasteboardType,
-                                    tag: uploadBlob.tag,
-                                    size: estimatedSize
-                                )
-                                return (uploadBlob.uniqueId, entry)
-                            }
-                        }
-                    }
-
-                    while let result = try await group.next() {
-                        if isCancelled || Task.isCancelled {
-                            group.cancelAll()
-                            break
-                        }
-                        if let (id, entry) = result {
-                            remoteIndex.entries[id] = entry
-                            uploadedCount += 1
-
-                            // UI 节流：每上传 25 条或每 400ms 刷新一次主线程
-                            let now = ContinuousClock.now
-                            if uploadedCount == totalUploads || uploadedCount % 25 == 0 || now - lastUIUpdateTime >= .milliseconds(400) {
-                                lastUIUpdateTime = now
-                                syncProgress = "正在加密上传 (\(uploadedCount)/\(totalUploads))..."
-                                addLog("上传进度: \(uploadedCount)/\(totalUploads)")
-                            }
-
-                            // 每上传 500 条进行检查点保存，保障大批量同步中途意外中断时无需从头重传
-                            if uploadedCount > 0 && uploadedCount % 500 == 0 {
-                                remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
-                                if let updatedIndexData = try? JSONEncoder().encode(remoteIndex),
-                                   let encUpdatedIndex = try? SyncCryptoEngine.encrypt(data: updatedIndexData, using: masterKey) {
-                                    try? await client.upload(data: encUpdatedIndex, to: indexPath)
-                                    addLog("已保存阶段性同步索引清单 (\(uploadedCount)/\(totalUploads))")
-                                }
-                            }
-                        }
-
-                        if !isCancelled && !Task.isCancelled, let nextBlob = iterator.next() {
-                            let prefix = nextBlob.uniqueId.count >= 2 ? String(nextBlob.uniqueId.prefix(2)) : "misc"
-                            let dir = "ClipboardSync/items/\(prefix)"
-                            if !ensuredDirectories.contains(dir) {
-                                try? await client.makeDirectory(path: dir)
-                                ensuredDirectories.insert(dir)
-                            }
-                            let estBytes = Self.estimatedUploadBytes(for: nextBlob)
-                            group.addTask {
-                                let acquired = await uploadBudgetLimiter.acquire(estimatedBytes: estBytes)
-                                defer { Task { await uploadBudgetLimiter.release(acquiredBytes: acquired) } }
-                                var uploadBlob = nextBlob
-                                if uploadBlob.payloadData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId, channel: .bulk)
-                                }
-                                if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId, uniqueId: uploadBlob.uniqueId)
-                                }
-                                guard let rawData = try? JSONEncoder().encode(uploadBlob),
-                                      let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
-                                    return nil
-                                }
-                                let targetPath = SyncIndex.shardedItemPath(for: uploadBlob.uniqueId)
-                                try await client.upload(data: encData, to: targetPath)
-                                let checksum = SyncCryptoEngine.checksum(for: uploadBlob.payloadData ?? Data())
-                                let estimatedSize = (uploadBlob.payloadData?.count ?? 0) + (uploadBlob.showData?.count ?? 0)
-                                let entry = SyncIndexEntry(
-                                    uniqueId: uploadBlob.uniqueId,
-                                    updatedAt: uploadBlob.timestamp,
-                                    checksum: checksum,
-                                    isDeleted: false,
-                                    group: uploadBlob.group,
-                                    type: uploadBlob.pasteboardType,
-                                    tag: uploadBlob.tag,
-                                    size: estimatedSize
-                                )
-                                return (uploadBlob.uniqueId, entry)
-                            }
-                        }
-                    }
-                }
-            }
+            try await uploadBatches(
+                blobs: diff.toUpload,
+                remoteIndex: &remoteIndex,
+                client: client,
+                masterKey: masterKey,
+                indexPath: indexPath
+            )
 
             if isCancelled || Task.isCancelled {
                 currentState = .idle
@@ -988,7 +447,6 @@ final class SyncEngine: ObservableObject {
                 return .idle
             }
 
-            // 10. 远端删除实体文件并写入墓碑
             for id in diff.toDeleteRemote {
                 if isCancelled || Task.isCancelled { break }
                 try? await client.delete(path: SyncIndex.shardedItemPath(for: id))
@@ -1009,15 +467,16 @@ final class SyncEngine: ObservableObject {
                 SyncPendingDeletionsStore.shared.clear(uniqueIds: diff.toDeleteRemote)
             }
 
-            // 10.1 自动修剪 30 天超期墓碑（保持云端索引清单极简轻量，控制内存与网络传输）
             let prunedCount = remoteIndex.pruneExpiredTombstones()
             if prunedCount > 0 {
                 addLog("已自动修剪 30 天超期墓碑 \(prunedCount) 条，云端索引保持轻量")
             }
 
-            // 11. 智能元数据回填：补全历史条目的类型（不覆盖刚从云端下载更新的条目）
             let downloadedSet = Set(diff.toDownload)
-            let localBlobMap = Dictionary(localBlobs.map { ($0.uniqueId, $0) }, uniquingKeysWith: { first, _ in first })
+            let localBlobMap = Dictionary(
+                localBlobs.map { ($0.uniqueId, $0) },
+                uniquingKeysWith: { first, _ in first }
+            )
             for (id, var entry) in remoteIndex.entries where !entry.isDeleted && !downloadedSet.contains(id) {
                 var modified = false
                 if let local = localBlobMap[id] {
@@ -1035,7 +494,6 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
-            // 12. 加密上传最新索引清单并更新状态与资产看板
             syncProgress = "保存云端索引清单..."
             remoteIndex.lastModified = Int64(Date().timeIntervalSince1970 * 1000)
             let updatedIndexData = try JSONEncoder().encode(remoteIndex)
@@ -1050,17 +508,14 @@ final class SyncEngine: ObservableObject {
                 self.markDirtyAndSchedule()
             }
 
-            // 统计并缓存资产看板
             let summary = remoteIndex.generateSummary(chips: CategoryChipStore.shared.chips)
-            self.syncSummary = summary
-            saveSummaryCache(summary)
+            applySummary(summary)
 
             let finishTime = Int64(Date().timeIntervalSince1970 * 1000)
             let state: SyncState = .success(lastSyncTime: finishTime)
             self.currentState = state
             addLog("====== 同步圆满成功 (云端总条目: \(summary.totalCount)) ======")
             return state
-
         } catch is CancellationError {
             let state: SyncState = .idle
             self.currentState = state
@@ -1071,71 +526,6 @@ final class SyncEngine: ObservableObject {
             self.currentState = state
             addLog("同步失败: \(error.localizedDescription)", isError: true)
             return state
-        }
-    }
-
-    // MARK: - 在途字节估算
-
-    nonisolated private static func estimatedDownloadBytes(id: String, entry: SyncIndexEntry?) -> Int {
-        if let size = entry?.size, size > 0 {
-            return size
-        }
-        if id.contains("-"), let tail = id.split(separator: "-").last, let exactBytes = Int(tail), exactBytes > 0 {
-            return exactBytes
-        }
-        return 512 * 1024
-    }
-
-    nonisolated private static func estimatedUploadBytes(for blob: SyncItemBlob) -> Int {
-        if let payloadCount = blob.payloadData?.count, payloadCount > 0 {
-            return payloadCount + (blob.showData?.count ?? 0)
-        }
-        if blob.uniqueId.contains("-"), let tail = blob.uniqueId.split(separator: "-").last, let exactBytes = Int(tail), exactBytes > 0 {
-            return exactBytes
-        }
-        return 512 * 1024
-    }
-}
-
-/// 云同步在途字节预算限流器：控制在途并发内存占用上限（默认 24MB），单条超大对象自动退化为独占串行处理
-actor SyncByteBudgetLimiter {
-    private let maxBudgetBytes: Int
-    private var inFlightBytes: Int = 0
-    private var inFlightCount: Int = 0
-    private var waiters: [(requestedBytes: Int, continuation: CheckedContinuation<Int, Never>)] = []
-
-    init(maxBudgetBytes: Int = 24 * 1024 * 1024) {
-        self.maxBudgetBytes = maxBudgetBytes
-    }
-
-    func acquire(estimatedBytes: Int) async -> Int {
-        let cost = max(estimatedBytes, 64 * 1024)
-        if inFlightCount == 0 || (inFlightBytes + cost <= maxBudgetBytes) {
-            inFlightBytes += cost
-            inFlightCount += 1
-            return cost
-        }
-        return await withCheckedContinuation { continuation in
-            waiters.append((cost, continuation))
-        }
-    }
-
-    func release(acquiredBytes: Int) {
-        inFlightBytes = max(0, inFlightBytes - acquiredBytes)
-        inFlightCount = max(0, inFlightCount - 1)
-        drainWaiters()
-    }
-
-    private func drainWaiters() {
-        while let first = waiters.first {
-            if inFlightCount == 0 || (inFlightBytes + first.requestedBytes <= maxBudgetBytes) {
-                waiters.removeFirst()
-                inFlightBytes += first.requestedBytes
-                inFlightCount += 1
-                first.continuation.resume(returning: first.requestedBytes)
-            } else {
-                break
-            }
         }
     }
 }
