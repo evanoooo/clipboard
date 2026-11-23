@@ -18,21 +18,22 @@ extension PasteSQLManager {
         return db
     }
 
-    /// 统计 SQLite 与 `.media/` 物理磁盘占用与碎片状态（只读连接，不阻塞写 Actor）
+    /// 统计 SQLite（含热库与冷归档库）及 `.media/` 物理磁盘占用与碎片状态（只读连接，不阻塞写 Actor）
     nonisolated func getStorageDiskUsage() -> StorageDiskUsage {
         let fm = FileManager.default
         let dbPath = Self.databasePath
         let walPath = dbPath + "-wal"
         let shmPath = dbPath + "-shm"
 
-        let mainDbBytes = (try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0
-        let walBytes = (try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0
-        let shmBytes = (try? fm.attributesOfItem(atPath: shmPath)[.size] as? Int64) ?? 0
+        let archiveSummary = ColdArchiveManager.archiveDiskFilesSummary()
+        let mainDbBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0) + archiveSummary.mainBytes
+        let walBytes = ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0) + archiveSummary.walBytes
+        let shmBytes = ((try? fm.attributesOfItem(atPath: shmPath)[.size] as? Int64) ?? 0) + archiveSummary.shmBytes
         let mediaBytes = MediaBlobStore.shared.totalMediaDiskBytes()
         let totalDiskBytes = mainDbBytes + walBytes + shmBytes + mediaBytes
 
-        var reclaimableFreeBytes: Int64 = 0
-        var totalItemCount: Int = 0
+        var reclaimableFreeBytes = archiveSummary.reclaimableBytes
+        var totalItemCount = archiveSummary.itemCount
 
         guard let readConn = Self.openReadOnlyConnection() else {
             return StorageDiskUsage(
@@ -40,14 +41,14 @@ extension PasteSQLManager {
                 walBytes: walBytes,
                 shmBytes: shmBytes,
                 totalDiskBytes: totalDiskBytes,
-                reclaimableFreeBytes: 0,
-                totalItemCount: 0
+                reclaimableFreeBytes: reclaimableFreeBytes,
+                totalItemCount: totalItemCount
             )
         }
 
-        reclaimableFreeBytes = ((try? readConn.scalar("PRAGMA freelist_count") as? Int64) ?? 0)
+        reclaimableFreeBytes += ((try? readConn.scalar("PRAGMA freelist_count") as? Int64) ?? 0)
             * ((try? readConn.scalar("PRAGMA page_size") as? Int64) ?? 4096)
-        totalItemCount = (try? readConn.scalar(Table("Clip").count)) ?? 0
+        totalItemCount += (try? readConn.scalar(Table("Clip").count)) ?? 0
 
         return StorageDiskUsage(
             mainDbBytes: mainDbBytes,
@@ -59,40 +60,46 @@ extension PasteSQLManager {
         )
     }
 
-    /// 获取按数据类型的占用空间分布（只读连接，不阻塞写 Actor）
+    /// 获取按数据类型的占用空间分布（合并热库与冷归档库，只读连接不阻塞写 Actor）
     nonisolated func getStorageTypeProportions() -> [StorageTypeProportion] {
-        guard let readConn = Self.openReadOnlyConnection() else { return [] }
-        var proportions: [StorageTypeProportion] = []
+        var bucketByType: [String: (count: Int, totalBytes: Int64)] = [:]
 
-        let sql = """
-            SELECT type, COUNT(*) AS count, COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) AS total_bytes
-            FROM Clip
-            GROUP BY type
-            ORDER BY total_bytes DESC
-        """
-
-        do {
-            let stmt = try readConn.prepare(sql)
-            for row in stmt {
-                guard let rawType = row[0] as? String else { continue }
-                let count = Int((row[1] as? Int64) ?? 0)
-                let totalBytes = (row[2] as? Int64) ?? 0
-
-                let (displayName, color) = Self.metadataForType(rawType)
-
-                proportions.append(StorageTypeProportion(
-                    typeName: rawType,
-                    displayName: displayName,
-                    count: count,
-                    totalBytes: totalBytes,
-                    color: color
-                ))
+        if let readConn = Self.openReadOnlyConnection() {
+            let sql = """
+                SELECT type, COUNT(*) AS count, COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) AS total_bytes
+                FROM Clip
+                GROUP BY type
+            """
+            do {
+                let stmt = try readConn.prepare(sql)
+                for row in stmt {
+                    guard let rawType = row[0] as? String else { continue }
+                    let count = Int((row[1] as? Int64) ?? 0)
+                    let totalBytes = (row[2] as? Int64) ?? 0
+                    let existing = bucketByType[rawType] ?? (0, 0)
+                    bucketByType[rawType] = (existing.count + count, existing.totalBytes + totalBytes)
+                }
+            } catch {
+                Log.storage.error("Failed to query storage type proportions: \(error)")
             }
-        } catch {
-            Log.storage.error("Failed to query storage type proportions: \(error)")
         }
 
-        return proportions
+        for (rawType, count, bytes) in ColdArchiveManager.archiveTypeProportions() {
+            let existing = bucketByType[rawType] ?? (0, 0)
+            bucketByType[rawType] = (existing.count + count, existing.totalBytes + bytes)
+        }
+
+        return bucketByType.map { rawType, stats in
+            let (displayName, color) = Self.metadataForType(rawType)
+            return StorageTypeProportion(
+                typeName: rawType,
+                displayName: displayName,
+                count: stats.count,
+                totalBytes: stats.totalBytes,
+                color: color
+            )
+        }
+        .sorted { $0.totalBytes > $1.totalBytes }
     }
 
     nonisolated private static func metadataForType(_ typeStr: String) -> (displayName: String, color: NSColor) {
@@ -196,12 +203,17 @@ extension PasteSQLManager {
         } catch {
             Log.storage.error("Failed to query top storage items: \(error)")
         }
-        return list
+
+        let archiveItems = ColdArchiveManager.archiveTopStorageItems(limit: limit, whereClause: whereClause)
+        if archiveItems.isEmpty {
+            return list
+        }
+        return Array((list + archiveItems).sorted { $0.byteSize > $1.byteSize }.prefix(limit))
     }
 
-    /// 用户主动勾选批量删除选中的大体积条目
-    func deleteStorageItems(ids: [Int64]) async -> Int64 {
-        guard let connection, !ids.isEmpty else { return 0 }
+    /// 用户主动勾选批量删除选中的大体积条目（同时支持热库主键与冷归档库 unique_id）
+    func deleteStorageItems(ids: [Int64], archiveUniqueIds: [String] = []) async -> Int64 {
+        guard let connection, !ids.isEmpty || !archiveUniqueIds.isEmpty else { return 0 }
         var totalFreedBytes: Int64 = 0
         var allUids: [String] = []
 
@@ -231,13 +243,20 @@ extension PasteSQLManager {
                 }
             }
 
+            if !archiveUniqueIds.isEmpty {
+                totalFreedBytes += ColdArchiveManager.deleteStorageItemsFromArchive(uniqueIds: archiveUniqueIds)
+                allUids.append(contentsOf: archiveUniqueIds)
+            }
+
             if !allUids.isEmpty {
                 SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: allUids)
                 Task { @MainActor in
-                    DeferredOCRCoordinator.shared.remove(ids: ids)
+                    if !ids.isEmpty {
+                        DeferredOCRCoordinator.shared.remove(ids: ids)
+                    }
                     SyncEngine.shared.markDirtyAndSchedule()
                 }
-            } else {
+            } else if !ids.isEmpty {
                 Task { @MainActor in
                     DeferredOCRCoordinator.shared.remove(ids: ids)
                 }
@@ -251,7 +270,7 @@ extension PasteSQLManager {
         return totalFreedBytes
     }
 
-    /// 压缩并整理数据库碎片（VACUUM），真正将磁盘空间释放归还给 macOS
+    /// 压缩并整理数据库碎片（VACUUM），真正将磁盘空间释放归还给 macOS（覆盖热库与冷归档库）
     func vacuumDatabase() async throws -> (beforeBytes: Int64, afterBytes: Int64) {
         guard let connection else {
             return (0, 0)
@@ -263,6 +282,9 @@ extension PasteSQLManager {
         let beforeBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
             + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
 
+        var archiveBefore: Int64 = 0
+        var archiveAfter: Int64 = 0
+
         // 维护挂起点查双通道与只读连接，彻底解除只读锁并确保 VACUUM 与 WAL 截断无阻碍执行
         await PasteReadStore.shared.closeForMaintenance()
         try PasteDataPointReader.withMaintenanceSuspension {
@@ -272,23 +294,32 @@ extension PasteSQLManager {
             try connection.execute("VACUUM")
             // 3. 再次将 VACUUM 产生的日志刷入并截断
             try? connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            let archiveResult = ColdArchiveManager.vacuumArchive()
+            archiveBefore = archiveResult.beforeBytes
+            archiveAfter = archiveResult.afterBytes
         }
 
         let afterBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
             + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
+        let totalBefore = beforeBytes + archiveBefore
+        let totalAfter = afterBytes + archiveAfter
 
         await PasteReadStore.shared.reopen()
-        Log.storage.info("数据库压缩整理(VACUUM)完成：释放物理碎片空间 \(beforeBytes - afterBytes) 字节 (从 \(beforeBytes) 压缩至 \(afterBytes))")
-        return (beforeBytes, afterBytes)
+        Log.storage.info("数据库压缩整理(VACUUM)完成：释放物理碎片空间 \(totalBefore - totalAfter) 字节 (从 \(totalBefore) 压缩至 \(totalAfter))")
+        return (totalBefore, totalAfter)
     }
 
     // MARK: - 软配额老化与智能淘汰引擎
 
-    /// 统计符合当前软配额老化策略的待淘汰条目数与预估释放字节数（只读连接，不阻塞写 Actor）
+    /// 统计符合当前软配额老化策略的待淘汰条目数与预估释放字节数（合并热库与冷归档库）
     nonisolated func getEvictionCandidates(policy: SoftQuotaAgingPolicy) -> (count: Int, bytes: Int64) {
-        guard let readConn = Self.openReadOnlyConnection() else { return (0, 0) }
         let nowSec = Int64(Date().timeIntervalSince1970)
         let cutoffSec = nowSec - Int64(policy.days * 86400)
+        let archiveStats = ColdArchiveManager.archiveEvictionCandidates(cutoffSec: cutoffSec)
+
+        guard let readConn = Self.openReadOnlyConnection() else {
+            return archiveStats
+        }
 
         let sql = """
             SELECT COUNT(*), COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) FROM Clip
@@ -302,52 +333,84 @@ extension PasteSQLManager {
             if let row = stmt.makeIterator().next() {
                 let count = Int((row[0] as? Int64) ?? 0)
                 let bytes = (row[1] as? Int64) ?? 0
-                return (count, bytes)
+                return (count + archiveStats.count, bytes + archiveStats.bytes)
             }
         } catch {
             Log.storage.error("Failed to calculate eviction candidates: \(error)")
         }
-        return (0, 0)
+        return archiveStats
     }
 
-    /// 执行智能淘汰瘦身：安全删除符合老化条件的未收藏旧图，并自动整理碎片
+    /// 执行智能淘汰瘦身：安全删除符合老化条件的未收藏旧图（覆盖热库与冷归档库），并自动整理碎片
     func performAutoEviction(policy: SoftQuotaAgingPolicy, maxBytesToFree: Int64? = nil) async -> Int64 {
         guard let connection else { return 0 }
         let nowSec = Int64(Date().timeIntervalSince1970)
         let cutoffSec = nowSec - Int64(policy.days * 86400)
 
+        struct EvictionCandidate {
+            let hotId: Int64?
+            let archiveUniqueId: String?
+            let bytes: Int64
+            let timestampSec: Int64
+        }
+
         let querySql = """
-            SELECT id, (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) FROM Clip
+            SELECT id,
+                   (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END),
+                   (CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) AS ts_sec
+            FROM Clip
             WHERE (`group` IS NULL OR `group` = -1)
               AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
               AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
-            ORDER BY timestamp ASC
+            ORDER BY ts_sec ASC
         """
 
-        var idsToDelete: [Int64] = []
-        var totalBytesFreed: Int64 = 0
-
+        var candidates: [EvictionCandidate] = []
         do {
             let stmt = try connection.prepare(querySql)
             for row in stmt {
                 guard let id = row[0] as? Int64 else { continue }
                 let bytes = (row[1] as? Int64) ?? 0
-                idsToDelete.append(id)
-                totalBytesFreed += bytes
-
-                if let maxBytes = maxBytesToFree, totalBytesFreed >= maxBytes {
-                    break
-                }
-            }
-
-            if !idsToDelete.isEmpty {
-                _ = await deleteStorageItems(ids: idsToDelete)
-                _ = purgeOrphanMediaBlobs()
-                _ = try? await vacuumDatabase()
-                Log.storage.info("自动淘汰完成：已清理 \(idsToDelete.count) 项未收藏旧图，释放 \(totalBytesFreed) 字节，已执行 VACUUM 回收磁盘")
+                let ts = (row[2] as? Int64) ?? 0
+                candidates.append(EvictionCandidate(hotId: id, archiveUniqueId: nil, bytes: bytes, timestampSec: ts))
             }
         } catch {
-            log.error("Failed to perform auto eviction: \(error)")
+            log.error("Failed to query hot eviction candidates: \(error)")
+        }
+
+        for archiveItem in ColdArchiveManager.fetchArchiveEvictionItems(cutoffSec: cutoffSec) {
+            candidates.append(EvictionCandidate(
+                hotId: nil,
+                archiveUniqueId: archiveItem.uniqueId,
+                bytes: archiveItem.byteSize,
+                timestampSec: archiveItem.timestamp
+            ))
+        }
+
+        candidates.sort { $0.timestampSec < $1.timestampSec }
+
+        var hotIdsToDelete: [Int64] = []
+        var archiveUidsToDelete: [String] = []
+        var totalBytesFreed: Int64 = 0
+
+        for candidate in candidates {
+            if let hotId = candidate.hotId {
+                hotIdsToDelete.append(hotId)
+            } else if let uid = candidate.archiveUniqueId {
+                archiveUidsToDelete.append(uid)
+            }
+            totalBytesFreed += candidate.bytes
+
+            if let maxBytes = maxBytesToFree, totalBytesFreed >= maxBytes {
+                break
+            }
+        }
+
+        if !hotIdsToDelete.isEmpty || !archiveUidsToDelete.isEmpty {
+            _ = await deleteStorageItems(ids: hotIdsToDelete, archiveUniqueIds: archiveUidsToDelete)
+            _ = purgeOrphanMediaBlobs()
+            _ = try? await vacuumDatabase()
+            Log.storage.info("自动淘汰完成：已清理热库 \(hotIdsToDelete.count) 项与冷库 \(archiveUidsToDelete.count) 项未收藏旧图，释放 \(totalBytesFreed) 字节，已执行 VACUUM 回收磁盘")
         }
 
         return totalBytesFreed

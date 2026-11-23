@@ -64,13 +64,25 @@ extension PasteSQLManager {
     private func readIdentities() async throws -> [PasteIdentity] {
         guard let connection else { return [] }
         var infos: [PasteIdentity] = []
-        let query = table.select(Col.id, Col.uniqueId, Col.type, Col.data, Col.timestamp, Col.group)
+        let query = table.select(
+            Col.id, Col.uniqueId, Col.type, Col.data, Col.mediaRelPath, Col.timestamp, Col.group
+        )
         for row in try connection.prepare(query) {
             let type = PasteboardType(row[Col.type])
-            let correct = await PasteboardModel.generateUniqueId(for: type, data: row[Col.data])
+            var payload = row[Col.data]
+            if payload.isEmpty,
+               let relPath = row[Col.mediaRelPath],
+               !relPath.isEmpty,
+               let external = MediaBlobStore.shared.readBlob(relPath: relPath) {
+                payload = external
+            }
+            let storedUniqueId = row[Col.uniqueId]
+            let correct = payload.isEmpty
+                ? storedUniqueId
+                : PasteboardModel.generateUniqueId(for: type, data: payload)
             infos.append(PasteIdentity(
                 id: row[Col.id],
-                storedUniqueId: row[Col.uniqueId],
+                storedUniqueId: storedUniqueId,
                 correctUniqueId: correct,
                 timestamp: row[Col.timestamp],
                 group: row[Col.group]

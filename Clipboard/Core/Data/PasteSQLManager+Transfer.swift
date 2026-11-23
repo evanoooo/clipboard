@@ -30,6 +30,24 @@ extension PasteSQLManager {
                 let backup = try sourceDb.backup(usingConnection: destDb)
                 try backup.step()
 
+                // 将外置在 .media/blobs/ 中的图片回填进备份库 data 列，确保导出备份完全自包含
+                let externalRows = try destDb.prepare(
+                    "SELECT id, media_rel_path FROM Clip WHERE media_rel_path IS NOT NULL AND media_rel_path != ''"
+                )
+                let backfillStmt = try destDb.prepare(
+                    "UPDATE Clip SET data = ?, media_rel_path = NULL, media_size = 0 WHERE id = ?"
+                )
+                try destDb.transaction(.immediate) {
+                    for row in externalRows {
+                        guard let rowId = row[0] as? Int64,
+                              let relPath = row[1] as? String,
+                              let blobData = MediaBlobStore.shared.readBlob(relPath: relPath) else {
+                            continue
+                        }
+                        try backfillStmt.run(blobData.datatypeValue, rowId)
+                    }
+                }
+
                 if let data = userChipsData, let json = String(data: data, encoding: .utf8) {
                     try destDb.execute(
                         "CREATE TABLE IF NOT EXISTS \(Self.metaTable) (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
@@ -174,11 +192,17 @@ extension PasteSQLManager {
     ) async throws -> Bool {
         let destTable = Table("Clip")
         let typeRaw = try row.get(Col.type)
-        let data = try row.get(Col.data)
-        let uniqueId = await PasteboardModel.generateUniqueId(
-            for: PasteboardType(typeRaw),
-            data: data
-        )
+        var data = (try? row.get(Col.data)) ?? Data()
+        if data.isEmpty,
+           let relPath = try? row.get(Col.mediaRelPath),
+           !relPath.isEmpty,
+           let external = MediaBlobStore.shared.readBlob(relPath: relPath) {
+            data = external
+        }
+        let storedUniqueId = (try? row.get(Col.uniqueId)) ?? ""
+        let uniqueId = data.isEmpty && !storedUniqueId.isEmpty
+            ? storedUniqueId
+            : PasteboardModel.generateUniqueId(for: PasteboardType(typeRaw), data: data)
         let existingQuery = destTable.filter(Col.uniqueId == uniqueId)
         let existingCount = try database.scalar(existingQuery.count)
 
@@ -188,12 +212,13 @@ extension PasteSQLManager {
         let importSortOrder = SQLite.Expression<Int64>(
             literal: "(SELECT COALESCE(MIN(sort_order), 0) - 1 FROM Clip)"
         )
+        let externalized = PasteSQLManager.externalizeIfImage(typeRawValue: typeRaw, data: data)
 
         // 旧备份可能没有 show_data / alias 列，或 alias_search 已过期，均按缺失处理。
         var setters: [Setter] = [
             Col.uniqueId <- uniqueId,
             Col.type <- typeRaw,
-            Col.data <- data,
+            Col.data <- externalized.data,
             Col.showData <- (try? row.get(Col.showData)),
             Col.timestamp <- try row.get(Col.timestamp),
             Col.sortOrder <- importSortOrder,
@@ -203,6 +228,8 @@ extension PasteSQLManager {
             Col.group <- group,
             Col.hidden <- (try? row.get(Col.hidden)) ?? 0,
             Col.tag <- try? row.get(Col.tag),
+            Col.mediaRelPath <- externalized.relPath,
+            Col.mediaSize <- externalized.size,
         ]
         // 别名与归一化检索列由 alias 原文推导，保证导入后别名搜索可用。
         setters += Self.aliasSetters((try? row.get(Col.alias)) ?? "")

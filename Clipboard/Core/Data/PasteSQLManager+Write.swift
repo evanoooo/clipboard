@@ -23,6 +23,7 @@ extension PasteSQLManager {
         guard let connection else { throw CocoaError(.fileWriteUnknown) }
         let query = table.filter(Col.timestamp < cutoff && Col.group == -1)
         try connection.run(query.delete())
+        ColdArchiveManager.deleteExpiredFromArchive(before: cutoff)
         await refreshAppCache()
     }
 
@@ -63,6 +64,12 @@ extension PasteSQLManager {
                 }
 
                 for r in records {
+                    let externalized = Self.externalizeIfImage(typeRawValue: r.type, data: r.data)
+                    let slimShowData = Self.slimShowData(
+                        typeRawValue: r.type,
+                        rawData: r.data,
+                        showData: r.showData
+                    )
                     if let existing = existingMap[r.uniqueId] {
                         let existingId = existing.id
                         let existingGroup = existing.group
@@ -70,10 +77,12 @@ extension PasteSQLManager {
                             Col.timestamp <- r.timestamp,
                             Col.hidden <- 0,
                             Col.sortOrder <- Col.nextSortOrder,
-                            Col.data <- r.data,
-                            Col.showData <- r.showData,
+                            Col.data <- externalized.data,
+                            Col.showData <- slimShowData,
                             Col.searchText <- r.searchText,
-                            Col.length <- r.length
+                            Col.length <- r.length,
+                            Col.mediaRelPath <- externalized.relPath,
+                            Col.mediaSize <- externalized.size,
                         ]
                         if r.group != -1, r.group != existingGroup {
                             updates.append(Col.group <- r.group)
@@ -85,8 +94,8 @@ extension PasteSQLManager {
                             [
                                 Col.uniqueId <- r.uniqueId,
                                 Col.type <- r.type,
-                                Col.data <- r.data,
-                                Col.showData <- r.showData,
+                                Col.data <- externalized.data,
+                                Col.showData <- slimShowData,
                                 Col.timestamp <- r.timestamp,
                                 Col.sortOrder <- Col.nextSortOrder,
                                 Col.appID <- r.appID,
@@ -95,10 +104,13 @@ extension PasteSQLManager {
                                 Col.group <- r.group,
                                 Col.tag <- r.tag,
                                 Col.hidden <- r.hidden ? 1 : 0,
+                                Col.mediaRelPath <- externalized.relPath,
+                                Col.mediaSize <- externalized.size,
                             ] + Self.aliasSetters(r.alias)
                         )
                         _ = try connection.run(insert)
                     }
+                    ColdArchiveManager.removeFromArchiveIfPresent(uniqueId: r.uniqueId)
                 }
             }
             await refreshAppCache()
@@ -120,6 +132,7 @@ extension PasteSQLManager {
                     _ = try connection.run(query.delete())
                 }
             }
+            ColdArchiveManager.deleteFromArchive(uniqueIds: uniqueIds)
             await refreshAppCache()
             log.info("批量同步删除本地条目成功，共 \(uniqueIds.count) 条")
         } catch {
@@ -167,13 +180,12 @@ extension PasteSQLManager {
         let rawType = item.pasteboardType.rawValue
         let rawData = await item.data
         let externalized = Self.externalizeIfImage(typeRawValue: rawType, data: rawData)
-        // 纯文本 <= 4KB 已由 inlineData 完整带出，无需冗余落盘 show_data；> 4KB 保留 300 字符原样预览
         let itemShowData = await item.showData
-        let persistedShowData: Data? = if item.pasteboardType == .string, rawData.count <= 4096 {
-            nil
-        } else {
-            itemShowData
-        }
+        let persistedShowData = Self.slimShowData(
+            typeRawValue: rawType,
+            rawData: rawData,
+            showData: itemShowData
+        )
         let insert = await table.insert(
             [
                 Col.uniqueId <- item.uniqueId,
@@ -212,19 +224,37 @@ extension PasteSQLManager {
         return .failed
     }
 
+    /// 按热库主键与全局 unique_id 精确删除（热库按 id、冷库按 unique_id，避免自增主键碰撞）
+    func delete(ids: [Int64], uniqueIds: [String]) async {
+        do {
+            if !ids.isEmpty {
+                let count = try connection?.run(table.filter(ids.contains(Col.id)).delete())
+                Log.database.info("删除热库条目成功，影响行数：\(count ?? 0)")
+            }
+            if !uniqueIds.isEmpty {
+                ColdArchiveManager.deleteFromArchive(uniqueIds: uniqueIds)
+            }
+            await refreshAppCache(debounce: true)
+        } catch {
+            log.error("批量删除失败：\(error)")
+        }
+    }
+
     func delete(filter: Expression<Bool>) async {
         let query = table.filter(filter)
         do {
-            let uids = (try? connection?.prepare(query.select(Col.uniqueId)).map { $0[Col.uniqueId] }) ?? []
+            let hotUids = (try? connection?.prepare(query.select(Col.uniqueId)).map { $0[Col.uniqueId] }) ?? []
+            let count = try connection?.run(query.delete())
+            let archiveUids = ColdArchiveManager.deleteFromArchive(filter: filter)
+            let uids = hotUids + archiveUids
             if !uids.isEmpty {
                 SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: uids)
                 Task { @MainActor in
                     SyncEngine.shared.markDirtyAndSchedule()
                 }
             }
-            let count = try connection?.run(query.delete())
             await refreshAppCache(debounce: true)
-            Log.database.info("删除条目成功，影响行数：\(count ?? 0)")
+            Log.database.info("删除条目成功，热库影响行数：\(count ?? 0)，冷库影响行数：\(archiveUids.count)")
         } catch {
             log.error("删除失败：\(error)")
         }
@@ -235,6 +265,7 @@ extension PasteSQLManager {
         do {
             if let uid = try? connection?.pluck(idFilter.select(Col.uniqueId))?[Col.uniqueId] {
                 SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [uid])
+                ColdArchiveManager.deleteFromArchive(uniqueIds: [uid])
                 Task { @MainActor in
                     SyncEngine.shared.markDirtyAndSchedule()
                 }
@@ -322,6 +353,7 @@ extension PasteSQLManager {
                 try connection.run("DELETE FROM App WHERE id NOT IN (SELECT app_id FROM Clip WHERE app_id IS NOT NULL)")
             }
         }
+        ColdArchiveManager.clearArchive(includePinnedAndGrouped: includePinnedAndGrouped)
         if includePinnedAndGrouped {
             apps.removeAll()
             appIdentities.removeAll()
@@ -332,6 +364,7 @@ extension PasteSQLManager {
             return try PasteDataPointReader.withMaintenanceSuspension {
                 try connection.execute("VACUUM")
                 let busy = try connection.scalar("PRAGMA wal_checkpoint(TRUNCATE)") as? Int64
+                _ = ColdArchiveManager.vacuumArchive()
                 let backup = URL(filePath: Self.databasePath).deletingLastPathComponent()
                     .appending(path: "Clip.before-app-migration.sqlite3")
                 if FileManager.default.fileExists(atPath: backup.path) { try FileManager.default.removeItem(at: backup) }
@@ -454,6 +487,18 @@ extension PasteSQLManager {
             return (data, nil, 0)
         }
         return (Data(), stored.relPath, stored.size)
+    }
+
+    /// 纯文本 <= 4KB 已由 inlineData 完整带出，无需冗余落盘 show_data；> 4KB 保留 300 字符原样预览。
+    nonisolated private static func slimShowData(
+        typeRawValue: String,
+        rawData: Data,
+        showData: Data?
+    ) -> Data? {
+        if typeRawValue == PasteboardType.string.rawValue, rawData.count <= 4096 {
+            return nil
+        }
+        return showData
     }
 
     /// 别名原文入库，归一化文本单独存一列供检索。

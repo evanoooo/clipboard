@@ -8,7 +8,7 @@
 import AppKit
 
 extension PasteboardModel {
-    static func generateUniqueId(
+    nonisolated static func generateUniqueId(
         for type: PasteboardType,
         data: Data
     ) -> String {

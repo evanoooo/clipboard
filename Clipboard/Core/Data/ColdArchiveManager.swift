@@ -9,10 +9,13 @@
 
 import Darwin
 import Foundation
+import os
 import SQLite
 
 actor ColdArchiveManager {
     static let shared = ColdArchiveManager()
+
+    private nonisolated static let archiveCountLock = OSAllocatedUnfairLock<Int?>(initialState: nil)
 
     private var archiveTask: Task<Void, Never>?
     private var hasCompletedThisSession = false
@@ -97,14 +100,24 @@ actor ColdArchiveManager {
         return paths
     }
 
-    /// 统计冷库可见条数（用于总条数与无缝冷分页）
+    nonisolated static func invalidateCountCache() {
+        archiveCountLock.withLock { $0 = nil }
+    }
+
+    /// 统计冷库可见条数（带内存缓存，写操作时显式失效）
     nonisolated static func archiveCount() -> Int {
+        if let cached = archiveCountLock.withLock({ $0 }) {
+            return cached
+        }
         guard archiveExists(),
               let db = try? Connection(archiveDatabasePath, readonly: true) else {
+            archiveCountLock.withLock { $0 = 0 }
             return 0
         }
         db.busyTimeout = 1.0
-        return (try? db.scalar("SELECT COUNT(*) FROM Clip WHERE hidden = 0") as? Int64).map(Int.init) ?? 0
+        let count = (try? db.scalar("SELECT COUNT(*) FROM Clip WHERE hidden = 0") as? Int64).map(Int.init) ?? 0
+        archiveCountLock.withLock { $0 = count }
+        return count
     }
 
     /// 当用户重新复制冷库中的记录时，将其从冷库移除以完成“回温”至热库（先只读存在性检查，避免每次拷贝开启读写事务）
@@ -120,6 +133,293 @@ actor ColdArchiveManager {
         }
         rwDb.busyTimeout = 2.0
         _ = try? rwDb.run("DELETE FROM Clip WHERE unique_id = ?", uniqueId)
+        invalidateCountCache()
+    }
+
+    /// 按 unique_id 批量删除冷库记录（绝不使用 id，避免热冷库自增主键碰撞）
+    nonisolated static func deleteFromArchive(uniqueIds: [String]) {
+        guard !uniqueIds.isEmpty, archiveExists(),
+              let rwDb = try? Connection(archiveDatabasePath) else {
+            return
+        }
+        rwDb.busyTimeout = 2.0
+        do {
+            try rwDb.transaction(.immediate) {
+                let chunkSize = 500
+                for start in stride(from: 0, to: uniqueIds.count, by: chunkSize) {
+                    let end = Swift.min(start + chunkSize, uniqueIds.count)
+                    let chunk = Array(uniqueIds[start..<end])
+                    let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                    let bindings: [Binding?] = chunk.map { $0 }
+                    try rwDb.run("DELETE FROM Clip WHERE unique_id IN (\(placeholders))", bindings)
+                }
+            }
+            invalidateCountCache()
+        } catch {
+            Log.database.error("删除冷库指定条目失败：\(error)")
+        }
+    }
+
+    /// 按表达式条件删除冷库记录（仅用于非 id 列过滤，返回被删条目的 unique_id 列表）
+    nonisolated static func deleteFromArchive(filter: SQLite.Expression<Bool>) -> [String] {
+        guard archiveExists(),
+              let rwDb = try? Connection(archiveDatabasePath) else {
+            return []
+        }
+        rwDb.busyTimeout = 2.0
+        let filtered = Table("Clip").filter(filter)
+        let uids = (try? rwDb.prepare(filtered.select(Col.uniqueId)).map { $0[Col.uniqueId] }) ?? []
+        guard !uids.isEmpty else { return [] }
+        do {
+            try rwDb.run(filtered.delete())
+            invalidateCountCache()
+        } catch {
+            Log.database.error("按条件删除冷库条目失败：\(error)")
+        }
+        return uids
+    }
+
+    /// 按过期截止时间戳清理冷库未分组历史记录
+    nonisolated static func deleteExpiredFromArchive(before cutoff: Int64) {
+        guard archiveExists(),
+              let rwDb = try? Connection(archiveDatabasePath) else {
+            return
+        }
+        rwDb.busyTimeout = 2.0
+        do {
+            try rwDb.run(
+                "DELETE FROM Clip WHERE timestamp < ? AND (\"group\" IS NULL OR \"group\" = -1)",
+                cutoff
+            )
+            invalidateCountCache()
+        } catch {
+            Log.database.error("清理冷库过期历史失败：\(error)")
+        }
+    }
+
+    /// 清空冷库记录（与热库 `clearHistory` 语义保持一致）
+    nonisolated static func clearArchive(includePinnedAndGrouped: Bool) {
+        guard archiveExists(),
+              let rwDb = try? Connection(archiveDatabasePath) else {
+            return
+        }
+        rwDb.busyTimeout = 5.0
+        do {
+            try rwDb.transaction(.immediate) {
+                if includePinnedAndGrouped {
+                    try rwDb.run("DELETE FROM Clip")
+                    try rwDb.run("DELETE FROM App")
+                } else {
+                    try rwDb.run("DELETE FROM Clip WHERE \"group\" IS NULL OR \"group\" = -1")
+                    try rwDb.run("DELETE FROM App WHERE id NOT IN (SELECT app_id FROM Clip WHERE app_id IS NOT NULL)")
+                }
+            }
+            invalidateCountCache()
+        } catch {
+            Log.database.error("清空冷库失败：\(error)")
+        }
+    }
+
+    /// 统计冷库文件物理占用、可见条数与可回收空闲页字节数
+    nonisolated static func archiveDiskFilesSummary() -> (
+        mainBytes: Int64,
+        walBytes: Int64,
+        shmBytes: Int64,
+        itemCount: Int,
+        reclaimableBytes: Int64
+    ) {
+        guard archiveExists() else { return (0, 0, 0, 0, 0) }
+        let fm = FileManager.default
+        let dbPath = archiveDatabasePath
+        let mainBytes = (try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0
+        let walBytes = (try? fm.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int64) ?? 0
+        let shmBytes = (try? fm.attributesOfItem(atPath: dbPath + "-shm")[.size] as? Int64) ?? 0
+
+        guard let roDb = try? Connection(dbPath, readonly: true) else {
+            return (mainBytes, walBytes, shmBytes, 0, 0)
+        }
+        roDb.busyTimeout = 2.0
+        let count = (try? roDb.scalar("SELECT COUNT(*) FROM Clip") as? Int64).map(Int.init) ?? 0
+        let freelist = (try? roDb.scalar("PRAGMA freelist_count") as? Int64) ?? 0
+        let pageSize = (try? roDb.scalar("PRAGMA page_size") as? Int64) ?? 4096
+        return (mainBytes, walBytes, shmBytes, count, freelist * pageSize)
+    }
+
+    /// 统计冷库按数据类型的空间分布
+    nonisolated static func archiveTypeProportions() -> [(rawType: String, count: Int, totalBytes: Int64)] {
+        guard archiveExists(),
+              let roDb = try? Connection(archiveDatabasePath, readonly: true) else {
+            return []
+        }
+        roDb.busyTimeout = 2.0
+        let sql = """
+            SELECT type, COUNT(*) AS count, COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) AS total_bytes
+            FROM Clip
+            GROUP BY type
+        """
+        var result: [(String, Int, Int64)] = []
+        if let stmt = try? roDb.prepare(sql) {
+            for row in stmt {
+                guard let rawType = row[0] as? String else { continue }
+                let count = Int((row[1] as? Int64) ?? 0)
+                let bytes = (row[2] as? Int64) ?? 0
+                result.append((rawType, count, bytes))
+            }
+        }
+        return result
+    }
+
+    /// 查询冷库占用空间最大的 Top N 条目（使用负数 ID 避免与热库行主键在 UI 选择集中碰撞）
+    nonisolated static func archiveTopStorageItems(limit: Int, whereClause: String) -> [StorageItemSummary] {
+        guard archiveExists(),
+              let roDb = try? Connection(archiveDatabasePath, readonly: true) else {
+            return []
+        }
+        roDb.busyTimeout = 2.0
+        let sql = """
+            SELECT id, unique_id, type, timestamp, app_id, tag, `group`,
+                   (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) AS byte_size,
+                   SUBSTR(search_text, 1, 100)
+            FROM Clip
+            \(whereClause)
+            ORDER BY byte_size DESC
+            LIMIT \(limit)
+        """
+        var items: [StorageItemSummary] = []
+        let appNames = Dictionary(
+            uniqueKeysWithValues: ((try? SourceAppSQL.readAll(on: roDb)) ?? []).map { ($0.id, $0.name) }
+        )
+        if let stmt = try? roDb.prepare(sql) {
+            for row in stmt {
+                guard let rawId = row[0] as? Int64 else { continue }
+                let uniqueId = (row[1] as? String) ?? ""
+                let type = (row[2] as? String) ?? "string"
+                let timestamp = (row[3] as? Int64) ?? 0
+                let appId = (row[4] as? Int64) ?? 0
+                let tag = row[5] as? String
+                let group = Int((row[6] as? Int64) ?? -1)
+                let byteSize = (row[7] as? Int64) ?? 0
+                let summary = (row[8] as? String) ?? ""
+
+                items.append(StorageItemSummary(
+                    id: -rawId,
+                    uniqueId: uniqueId,
+                    type: type,
+                    timestamp: timestamp,
+                    appID: appId,
+                    appName: appNames[appId],
+                    tag: tag,
+                    group: group,
+                    byteSize: byteSize,
+                    summary: summary.trimmingCharacters(in: .whitespacesAndNewlines)
+                ))
+            }
+        }
+        return items
+    }
+
+    /// 统计冷库中符合软配额老化条件的待淘汰条数与字节数
+    nonisolated static func archiveEvictionCandidates(cutoffSec: Int64) -> (count: Int, bytes: Int64) {
+        guard archiveExists(),
+              let roDb = try? Connection(archiveDatabasePath, readonly: true) else {
+            return (0, 0)
+        }
+        roDb.busyTimeout = 2.0
+        let sql = """
+            SELECT COUNT(*), COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0)
+            FROM Clip
+            WHERE (`group` IS NULL OR `group` = -1)
+              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
+              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
+        """
+        if let stmt = try? roDb.prepare(sql), let row = stmt.makeIterator().next() {
+            let count = Int((row[0] as? Int64) ?? 0)
+            let bytes = (row[1] as? Int64) ?? 0
+            return (count, bytes)
+        }
+        return (0, 0)
+    }
+
+    /// 按时间从旧到新列出冷库待淘汰记录，用于混合淘汰与精确配额释放
+    nonisolated static func fetchArchiveEvictionItems(
+        cutoffSec: Int64
+    ) -> [(uniqueId: String, byteSize: Int64, timestamp: Int64)] {
+        guard archiveExists(),
+              let roDb = try? Connection(archiveDatabasePath, readonly: true) else {
+            return []
+        }
+        roDb.busyTimeout = 2.0
+        let sql = """
+            SELECT unique_id,
+                   (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END),
+                   (CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) AS ts_sec
+            FROM Clip
+            WHERE (`group` IS NULL OR `group` = -1)
+              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
+              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
+            ORDER BY ts_sec ASC
+        """
+        var items: [(String, Int64, Int64)] = []
+        if let stmt = try? roDb.prepare(sql) {
+            for row in stmt {
+                guard let uid = row[0] as? String, !uid.isEmpty else { continue }
+                let bytes = (row[1] as? Int64) ?? 0
+                let ts = (row[2] as? Int64) ?? 0
+                items.append((uid, bytes, ts))
+            }
+        }
+        return items
+    }
+
+    /// 按 unique_id 删除冷库存储条目并返回释放字节数
+    nonisolated static func deleteStorageItemsFromArchive(uniqueIds: [String]) -> Int64 {
+        guard !uniqueIds.isEmpty, archiveExists(),
+              let rwDb = try? Connection(archiveDatabasePath) else {
+            return 0
+        }
+        rwDb.busyTimeout = 2.0
+        var freedBytes: Int64 = 0
+        do {
+            for start in stride(from: 0, to: uniqueIds.count, by: 500) {
+                let end = Swift.min(start + 500, uniqueIds.count)
+                let chunk = Array(uniqueIds[start..<end])
+                let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                let bindings: [Binding?] = chunk.map { $0 }
+                let sumSql = """
+                    SELECT COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0)
+                    FROM Clip WHERE unique_id IN (\(placeholders))
+                """
+                if let stmt = try? rwDb.prepare(sumSql, bindings),
+                   let row = stmt.makeIterator().next() {
+                    freedBytes += (row[0] as? Int64) ?? 0
+                }
+                try rwDb.transaction(.immediate) {
+                    try rwDb.run("DELETE FROM Clip WHERE unique_id IN (\(placeholders))", bindings)
+                }
+            }
+            invalidateCountCache()
+        } catch {
+            Log.storage.error("删除冷库大体积条目失败：\(error)")
+        }
+        return freedBytes
+    }
+
+    /// 整理并压缩冷归档库物理磁盘空间（需在维护挂起期间调用）
+    nonisolated static func vacuumArchive() -> (beforeBytes: Int64, afterBytes: Int64) {
+        guard archiveExists() else { return (0, 0) }
+        let fm = FileManager.default
+        let dbPath = archiveDatabasePath
+        let walPath = dbPath + "-wal"
+        let beforeBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
+            + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
+        guard let rwDb = try? Connection(dbPath) else { return (beforeBytes, beforeBytes) }
+        rwDb.busyTimeout = 5.0
+        try? rwDb.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        try? rwDb.execute("VACUUM")
+        try? rwDb.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        let afterBytes = ((try? fm.attributesOfItem(atPath: dbPath)[.size] as? Int64) ?? 0)
+            + ((try? fm.attributesOfItem(atPath: walPath)[.size] as? Int64) ?? 0)
+        return (beforeBytes, afterBytes)
     }
 
     /// 从冷库按 unique_id 点查完整二进制数据（支持外置 `.media/` 与库内 BLOB）
@@ -306,6 +606,7 @@ extension PasteSQLManager {
             try hotConn.transaction(.immediate) {
                 try hotConn.run(table.filter(ids.contains(Col.id)).delete())
             }
+            ColdArchiveManager.invalidateCountCache()
             return batch.count
         } catch {
             log.error("冷热分层归档事务失败：\(error)")

@@ -63,8 +63,7 @@ extension PasteDataStore {
                         length = (w << 32) | (h & 0xFFFF_FFFF)
                     }
                 }
-                let prefix = data.prefix(1024)
-                let uniqueId = "\(prefix.sha256Hex)-\(data.count)"
+                let uniqueId = PasteboardModel.generateUniqueId(for: type, data: data)
                 return (showData, length, uniqueId)
             }.value
 

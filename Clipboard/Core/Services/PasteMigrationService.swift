@@ -223,7 +223,7 @@ actor PasteMigrationService {
                     continue
                 }
 
-                let uniqueId = await PasteboardModel.generateUniqueId(for: extracted.type, data: extracted.data)
+                let uniqueId = PasteboardModel.generateUniqueId(for: extracted.type, data: extracted.data)
 
                 // 去重检查 (基于 unique_id)
                 let existing = try destDb.scalar(
@@ -233,24 +233,31 @@ actor PasteMigrationService {
                 if existing > 0 {
                     duplicateCount += 1
                 } else {
+                    let externalized = PasteSQLManager.externalizeIfImage(
+                        typeRawValue: extracted.type.rawValue,
+                        data: extracted.data
+                    )
                     let insertStmt = """
                     INSERT INTO Clip (
                         unique_id, type, data, show_data, timestamp, sort_order,
-                        app_id, search_text, length, "group", tag, alias, alias_search, hidden
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, -1, ?, NULL, NULL, 0)
+                        app_id, search_text, length, "group", tag, alias, alias_search, hidden,
+                        media_rel_path, media_size
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, -1, ?, NULL, NULL, 0, ?, ?)
                     """
                     try destDb.run(
                         insertStmt,
                         uniqueId,
                         extracted.type.rawValue,
-                        extracted.data.datatypeValue,
+                        externalized.data.datatypeValue,
                         extracted.showData?.datatypeValue,
                         timestamp,
                         0, // 稍后全量基于真实时间线统一重序
                         appId,
                         extracted.searchText,
                         extracted.length,
-                        extracted.tag
+                        extracted.tag,
+                        externalized.relPath,
+                        externalized.size
                     )
                     importedCount += 1
                 }
@@ -293,7 +300,7 @@ actor PasteMigrationService {
                 SELECT id, ROW_NUMBER() OVER (ORDER BY timestamp ASC, id ASC) AS rank
                 FROM Clip
             )
-            UPDATE Clip SET sort_order = (SELECT rank FROM ranks WHERE ranks.id = Clip.id);
+            UPDATE Clip SET sort_order = (SELECT rank * \(Col.orderStep) FROM ranks WHERE ranks.id = Clip.id);
             """)
         }
 
@@ -557,34 +564,13 @@ actor PasteMigrationService {
         // 3. 图片 (PNG / TIFF / JPEG)：无标题时不写入“图片”占位词，保留为空以便后台 OCR 正常扫描
         let imageSearchText = title.map(PasteboardModel.normalizeSearchText) ?? ""
         if let pngData = byteMap["public.png"] {
-            return ExtractedClip(
-                type: .png,
-                data: pngData,
-                showData: nil,
-                searchText: imageSearchText,
-                length: pngData.count,
-                tag: "image"
-            )
+            return Self.makeImageClip(type: .png, data: pngData, searchText: imageSearchText)
         }
         if let tiffData = byteMap["public.tiff"] {
-            return ExtractedClip(
-                type: .tiff,
-                data: tiffData,
-                showData: nil,
-                searchText: imageSearchText,
-                length: tiffData.count,
-                tag: "image"
-            )
+            return Self.makeImageClip(type: .tiff, data: tiffData, searchText: imageSearchText)
         }
         if let jpegData = byteMap["public.jpeg"] {
-            return ExtractedClip(
-                type: .png,
-                data: jpegData,
-                showData: nil,
-                searchText: imageSearchText,
-                length: jpegData.count,
-                tag: "image"
-            )
+            return Self.makeImageClip(type: .png, data: jpegData, searchText: imageSearchText)
         }
 
         // 4. 文件 URL
@@ -615,5 +601,29 @@ actor PasteMigrationService {
         }
 
         return nil
+    }
+
+    private nonisolated static func makeImageClip(
+        type: PasteboardType,
+        data: Data,
+        searchText: String
+    ) -> ExtractedClip {
+        let showData = ImageDownsampler.generateThumbnailData(from: data, maxPixelSize: 300)
+        var packedLength = data.count
+        if let size = PasteboardModel.computeImageSize(from: data) {
+            let w = Int(size.width)
+            let h = Int(size.height)
+            if w > 0 && h > 0 {
+                packedLength = (w << 32) | (h & 0xFFFF_FFFF)
+            }
+        }
+        return ExtractedClip(
+            type: type,
+            data: data,
+            showData: showData,
+            searchText: searchText,
+            length: packedLength,
+            tag: "image"
+        )
     }
 }

@@ -74,8 +74,14 @@ final class StorageAnalysisService: ObservableObject {
     }
 
     func deleteItems(ids: [Int64]) async throws -> Int64 {
-        DeferredOCRCoordinator.shared.remove(ids: ids)
-        let freed = await sqlManager.deleteStorageItems(ids: ids)
+        let selectedSet = Set(ids)
+        let selectedItems = topItems.filter { selectedSet.contains($0.id) }
+        let hotIds = selectedItems.isEmpty
+            ? ids.filter { $0 > 0 }
+            : selectedItems.compactMap { $0.id > 0 ? $0.id : nil }
+        let archiveUniqueIds = selectedItems.compactMap { $0.id < 0 ? $0.uniqueId : nil }
+        DeferredOCRCoordinator.shared.remove(ids: hotIds)
+        let freed = await sqlManager.deleteStorageItems(ids: hotIds, archiveUniqueIds: archiveUniqueIds)
         // 刷新存储统计与主界面列表
         await refreshDiskUsage()
         await PasteDataStore.main.resetDefaultList()

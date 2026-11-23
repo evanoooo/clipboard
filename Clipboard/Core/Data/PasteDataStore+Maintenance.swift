@@ -67,12 +67,13 @@ extension PasteDataStore {
         if deficit > 0, hasMoreData {
             deleteAndBackfill(
                 deletedIds,
+                uniqueIds: uids,
                 deficit: deficit,
                 currentCount: list.count
             )
         } else {
             updateData(with: list, changeType: .delete)
-            deleteStoredItems(deletedIds)
+            deleteStoredItems(deletedIds, uniqueIds: uids)
         }
     }
 
@@ -185,6 +186,7 @@ extension PasteDataStore {
 
     private func deleteAndBackfill(
         _ deletedIds: Set<Int64>,
+        uniqueIds: [String],
         deficit: Int,
         currentCount: Int
     ) {
@@ -199,7 +201,7 @@ extension PasteDataStore {
         enqueueMutation { [weak self, sqlManager] in
             guard let self else { return }
 
-            await sqlManager.delete(filter: deletedIds.contains(Col.id))
+            await sqlManager.delete(ids: Array(deletedIds), uniqueIds: uniqueIds)
             let count = await sqlManager.getTotalCount()
             let filter = inFilter ? activeFilter : nil
             let rows = await PasteReadStore.shared.search(
@@ -248,7 +250,7 @@ extension PasteDataStore {
         }
     }
 
-    private func deleteStoredItems(_ deletedIds: Set<Int64>) {
+    private func deleteStoredItems(_ deletedIds: Set<Int64>, uniqueIds: [String]) {
         for id in deletedIds {
             DeferredOCRCoordinator.shared.remove(id: id)
         }
@@ -256,7 +258,7 @@ extension PasteDataStore {
         let activeFilter = currentFilter
 
         enqueueMutation { [weak self, sqlManager] in
-            await sqlManager.delete(filter: deletedIds.contains(Col.id))
+            await sqlManager.delete(ids: Array(deletedIds), uniqueIds: uniqueIds)
             let count = await sqlManager.getTotalCount()
             let scanned: Int? =
                 if inFilter, let activeFilter {
