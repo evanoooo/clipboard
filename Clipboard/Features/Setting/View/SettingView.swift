@@ -14,7 +14,6 @@ enum SettingPage: CaseIterable, Identifiable {
     case keyboard
     case storage
     case sync
-    case ai
     case about
 
     var id: Self {
@@ -29,12 +28,6 @@ enum SettingPage: CaseIterable, Identifiable {
         case .keyboard: "command"
         case .storage: "externaldrive"
         case .sync: "arrow.triangle.2.circlepath.circle"
-        case .ai:
-            if #available(macOS 15.0, *) {
-                "apple.intelligence"
-            } else {
-                "lasso.badge.sparkles"
-            }
         case .about: "info.circle"
         }
     }
@@ -47,7 +40,6 @@ enum SettingPage: CaseIterable, Identifiable {
         case .keyboard: .pageKeyboard
         case .storage: .pageStorage
         case .sync: .pageSync
-        case .ai: .pageMcp
         case .about: .pageAbout
         }
     }
@@ -74,12 +66,6 @@ struct SettingView: View {
                                 }
 
                                 Spacer(minLength: Const.space8)
-
-                                if page == .ai {
-                                    Text(verbatim: "Beta")
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                }
 
                                 if page == .general,
                                    pasteDirect,
@@ -127,8 +113,6 @@ struct SettingView: View {
                     StorageSettingView()
                 case .sync:
                     SyncSettingView()
-                case .ai:
-                    AISettingsView()
                 case .about:
                     AboutSettingView()
                 }

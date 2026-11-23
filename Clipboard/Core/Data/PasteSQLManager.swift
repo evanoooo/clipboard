@@ -9,7 +9,7 @@ import AppKit
 import Foundation
 import SQLite
 
-// Col is defined in Clipboard/Shared/ClipboardSchema.swift (shared with clipmcp target)
+// Col is defined in Clipboard/Core/Shared/ClipboardSchema.swift
 
 actor PasteSQLManager: ClipboardRepositoryProtocol {
     static let manager = PasteSQLManager()

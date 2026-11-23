@@ -1,10 +1,9 @@
 // ClipboardSchema.swift
-// Shared between App and clipmcp targets.
 
 import Foundation
 import SQLite
 
-// MARK: - Column definitions (source of truth for both targets)
+// MARK: - Column definitions
 
 struct Col {
     nonisolated static let id = Expression<Int64>("id")
@@ -60,61 +59,5 @@ enum ClipboardPaths {
     /// ~/Library/Application Support/com.crown.clipboard/ClipArchive.sqlite3
     static var archiveDatabase: String {
         appSupportDir.appending(path: "ClipArchive.sqlite3").path
-    }
-
-    /// Presence of this file = MCP enabled. App toggle creates/removes it.
-    static var mcpEnableFlag: String {
-        appSupportDir.appending(path: "mcp_enabled").path
-    }
-
-    /// JSON array of disabled tool names.
-    static var mcpDisabledTools: String {
-        appSupportDir.appending(path: "mcp_disabled_tools").path
-    }
-}
-
-// MARK: - MCP tool registry (shared between App and clipmcp targets)
-
-struct MCPToolDefinition {
-    let name: String
-    let description: String
-    let icon: String
-    let colorHex: String
-
-    static let all: [MCPToolDefinition] = [
-        .init(
-            name: "search_clipboard",
-            description: "Search clipboard history by keyword, content type, or user category",
-            icon: "magnifyingglass",
-            colorHex: "#007AFF"
-        ),
-        .init(
-            name: "write_clipboard",
-            description: "Write plain text to the system clipboard",
-            icon: "bolt.fill",
-            colorHex: "#34C759"
-        ),
-        .init(
-            name: "list_tags",
-            description: "List available content types and user-defined tags for clipboard search",
-            icon: "tag.fill",
-            colorHex: "#FF9500"
-        )
-    ]
-}
-
-// MARK: - Per-tool enable flag (shared between App and clipmcp targets)
-
-enum MCPDisabledTools {
-    static func load() -> Set<String> {
-        guard let data = FileManager.default.contents(atPath: ClipboardPaths.mcpDisabledTools),
-              let names = try? JSONDecoder().decode([String].self, from: data)
-        else { return [] }
-        return Set(names)
-    }
-
-    static func save(_ disabled: Set<String>) {
-        guard let data = try? JSONEncoder().encode(Array(disabled)) else { return }
-        FileManager.default.createFile(atPath: ClipboardPaths.mcpDisabledTools, contents: data)
     }
 }
