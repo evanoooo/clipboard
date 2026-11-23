@@ -21,6 +21,7 @@ enum StorageAnalysisTests {
         testBulkDeleteAndReclaimSimulation(runner: runner)
         testSoftQuotaAndAgingPolicy(runner: runner)
         testMmapThresholds(runner: runner)
+        testClipStorageQueries(runner: runner)
         print("✓ Storage Analysis tests passed!")
     }
 
@@ -303,5 +304,117 @@ enum StorageAnalysisTests {
         runner.assertEqual(candidates.count, 1, "Only c-evictable-img should match eviction criteria")
         runner.assertEqual(candidates.first?.uid, "c-evictable-img", "Matched item is c-evictable-img")
         runner.assertEqual(candidates.first?.bytes, Int64(2 * 1024 * 1024), "Candidate freed bytes is 2MB")
+    }
+
+    private static func testClipStorageQueries(runner: TestRunner.Type) {
+        runner.assertTrue(ClipStorageQueries.byteSizeExpr.contains("media_size"), "byteSizeExpr should prefer media_size")
+        runner.assertTrue(ClipStorageQueries.timestampSecondsExpr.contains("10000000000"), "timestampSecondsExpr should normalize millisecond timestamps")
+
+        guard let db = try? MemoryDatabaseHelper.createInMemoryDatabase() else {
+            runner.assertTrue(false, "Failed to create in-memory database for ClipStorageQueries test")
+            return
+        }
+
+        let nowSec: Int64 = 1_700_000_000
+        let oldMsTimestamp = (nowSec - 200 * 86_400) * 1000
+        let recentSecTimestamp = nowSec - 5 * 86_400
+        let largeRichTextBlob = Blob(bytes: [UInt8](repeating: 0x41, count: 1_200_000))
+        let smallImageBlob = Blob(bytes: [0x89, 0x50, 0x4E, 0x47])
+
+        do {
+            try db.run(
+                """
+                INSERT INTO Clip (unique_id, type, data, timestamp, app_id, search_text, length, "group", hidden, media_size)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "uid-old-unstarred-img", "public.png", smallImageBlob, oldMsTimestamp, "com.apple.Preview", "", 0, -1, 0, Int64(6 * 1024 * 1024)
+            )
+            try db.run(
+                """
+                INSERT INTO Clip (unique_id, type, data, timestamp, app_id, search_text, length, "group", hidden, media_size)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "uid-old-starred-img", "public.png", smallImageBlob, nowSec - 200 * 86_400, "com.apple.Preview", "", 0, 1, 0, Int64(6 * 1024 * 1024)
+            )
+            try db.run(
+                """
+                INSERT INTO Clip (unique_id, type, data, timestamp, app_id, search_text, length, "group", hidden, media_size)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "uid-recent-small-img", "public.png", smallImageBlob, recentSecTimestamp, "com.apple.Preview", "", 0, -1, 0, Int64(0)
+            )
+            try db.run(
+                """
+                INSERT INTO Clip (unique_id, type, data, timestamp, app_id, search_text, length, "group", hidden, media_size)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "uid-large-richtext", "public.rtf", largeRichTextBlob, recentSecTimestamp, "com.apple.TextEdit", "rich", 10, -1, 0, Int64(0)
+            )
+
+            // 验证类型占比 SQL 可执行并正确聚合数量与字节
+            var typeCounts: [String: Int64] = [:]
+            for row in try db.prepare(ClipStorageQueries.typeProportionsSQL) {
+                if let type = row[0] as? String, let count = row[1] as? Int64 {
+                    typeCounts[type] = count
+                }
+            }
+            runner.assertEqual(typeCounts["public.png"], 3, "typeProportionsSQL should count 3 image items")
+            runner.assertEqual(typeCounts["public.rtf"], 1, "typeProportionsSQL should count 1 richText item")
+
+            // 验证全部 6 种预设过滤条件均可构造可执行 SQL 且过滤语义正确
+            for filter in StoragePresetFilter.allCases {
+                let whereClause = ClipStorageQueries.topStorageItemsWhereClause(for: filter, nowSec: nowSec)
+                let sql = ClipStorageQueries.topStorageItemsSQL(whereClause: whereClause, limit: 20)
+                let stmt = try db.prepare(sql)
+                let uidCol = stmt.columnNames.firstIndex(of: "unique_id")
+                runner.assertTrue(uidCol != nil, "topStorageItemsSQL should select unique_id for \(filter.rawValue)")
+                var uids = Set<String>()
+                if let uidCol {
+                    for row in stmt {
+                        if let uid = row[uidCol] as? String {
+                            uids.insert(uid)
+                        }
+                    }
+                }
+                switch filter {
+                case .all:
+                    runner.assertEqual(uids.count, 4, ".all filter should return all 4 items")
+                case .oneMonthUnstarredImages, .threeMonthsUnstarredImages, .sixMonthsUnstarredImages:
+                    runner.assertEqual(uids, ["uid-old-unstarred-img"], "\(filter.rawValue) should match only old unstarred image")
+                case .largeImages:
+                    runner.assertEqual(uids, ["uid-old-unstarred-img", "uid-old-starred-img"], ".largeImages should match >5MB images")
+                case .largeRichText:
+                    runner.assertEqual(uids, ["uid-large-richtext"], ".largeRichText should match >1MB richText")
+                }
+            }
+
+            // 验证冷库淘汰候选查询 SQL 可执行且包含尺寸/时间戳规则
+            let cutoffSec = nowSec - 90 * 86_400
+            let countSQL = ClipStorageQueries.evictionCandidatesCountSQL(cutoffSec: cutoffSec)
+            let itemsSQL = ClipStorageQueries.evictionItemsSQL(selectIdColumn: "unique_id", cutoffSec: cutoffSec)
+            runner.assertTrue(countSQL.contains("media_size"), "evictionCandidatesCountSQL should inspect media_size")
+            runner.assertTrue(itemsSQL.contains("10000000000"), "evictionItemsSQL should normalize timestamps")
+
+            var evictCount: Int64 = -1
+            for row in try db.prepare(countSQL) {
+                evictCount = (row[0] as? Int64) ?? -1
+            }
+            runner.assertEqual(evictCount, 1, "evictionCandidatesCountSQL should find 1 candidate")
+
+            let evictStmt = try db.prepare(itemsSQL)
+            let evictUidCol = evictStmt.columnNames.firstIndex(of: "unique_id")
+            runner.assertTrue(evictUidCol != nil, "evictionItemsSQL should select unique_id")
+            var evictUids: [String] = []
+            if let evictUidCol {
+                for row in evictStmt {
+                    if let uid = row[evictUidCol] as? String {
+                        evictUids.append(uid)
+                    }
+                }
+            }
+            runner.assertEqual(evictUids, ["uid-old-unstarred-img"], "evictionItemsSQL should target old unstarred ungrouped image")
+        } catch {
+            runner.assertTrue(false, "ClipStorageQueries execution failed: \(error)")
+        }
     }
 }

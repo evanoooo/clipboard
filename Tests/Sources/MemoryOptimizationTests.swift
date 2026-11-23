@@ -7,9 +7,11 @@
 
 import AppKit
 import Foundation
+import os
 import SQLite
 
 enum MemoryOptimizationTests {
+    @MainActor
     static func runAll() {
         print("\n--- Testing Bounded Memory Caches & Runtime Optimizations ---")
         testThumbnailCache()
@@ -19,6 +21,8 @@ enum MemoryOptimizationTests {
         testImageDownsampler()
         testSearchTextCapping()
         testInlineSmallDataSQL()
+        testClipStoreEventBus()
+        testColorToHexString()
         print("✓ Bounded Memory Caches & Runtime Optimizations tests passed!")
     }
 
@@ -163,5 +167,62 @@ enum MemoryOptimizationTests {
 
         let githubToken = "ghp_1234567890abcdefghijklmnopqrstuvwxyz"
         assert(PasteboardContentFilter.detectSensitiveCredential(in: githubToken) != nil)
+    }
+
+    @MainActor
+    private static func testClipStoreEventBus() {
+        let received = OSAllocatedUnfairLock<[ClipStoreEvent]>(initialState: [])
+        let token = UUID().uuidString
+        let deletedUid = "\(token)-deleted"
+        let updatedUid = "\(token)-updated"
+
+        ClipStoreEventBus.shared.subscribe { event in
+            received.withLock { $0.append(event) }
+        }
+
+        ClipStoreEventBus.shared.publish(.itemsDeleted(uniqueIds: [deletedUid], hotIds: [101, 202]))
+        ClipStoreEventBus.shared.publish(.itemGroupUpdated(uniqueId: updatedUid, groupId: 7))
+
+        let matching = received.withLock { events -> [ClipStoreEvent] in
+            events.filter { event in
+                switch event {
+                case .itemsDeleted(let uniqueIds, _):
+                    return uniqueIds == [deletedUid]
+                case .itemGroupUpdated(let uniqueId, _):
+                    return uniqueId == updatedUid
+                }
+            }
+        }
+
+        TestRunner.assertEqual(matching.count, 2, "ClipStoreEventBus should deliver both published events")
+        if matching.count == 2 {
+            if case .itemsDeleted(let uniqueIds, let hotIds) = matching[0] {
+                TestRunner.assertEqual(uniqueIds, [deletedUid], "First event should preserve deleted uniqueIds")
+                TestRunner.assertEqual(hotIds, [101, 202], "First event should preserve hotIds")
+            } else {
+                TestRunner.assertTrue(false, "First event should be .itemsDeleted")
+            }
+            if case .itemGroupUpdated(let uniqueId, let groupId) = matching[1] {
+                TestRunner.assertEqual(uniqueId, updatedUid, "Second event should preserve uniqueId")
+                TestRunner.assertEqual(groupId, 7, "Second event should preserve groupId")
+            } else {
+                TestRunner.assertTrue(false, "Second event should be .itemGroupUpdated")
+            }
+        }
+    }
+
+    @MainActor
+    private static func testColorToHexString() {
+        let leadingZero = NSColor(srgbRed: 0, green: 15.0 / 255.0, blue: 16.0 / 255.0, alpha: 128.0 / 255.0)
+        TestRunner.assertEqual(leadingZero.toHexString(), "#000F10", "toHexString should zero-pad RGB components")
+        TestRunner.assertEqual(leadingZero.toHexString(includeAlpha: true), "#000F1080", "toHexString(includeAlpha: true) should include rounded alpha byte")
+
+        let white = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+        TestRunner.assertEqual(white.toHexString(), "#FFFFFF", "White color should format to #FFFFFF")
+        TestRunner.assertEqual(white.toHexString(includeAlpha: true), "#FFFFFFFF", "Opaque white should format to #FFFFFFFF")
+
+        let transparentBlack = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0)
+        TestRunner.assertEqual(transparentBlack.toHexString(), "#000000", "Black color should format to #000000")
+        TestRunner.assertEqual(transparentBlack.toHexString(includeAlpha: true), "#00000000", "Transparent black should format to #00000000")
     }
 }
