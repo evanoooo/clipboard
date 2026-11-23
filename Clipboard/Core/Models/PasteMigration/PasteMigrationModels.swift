@@ -17,7 +17,7 @@ nonisolated public struct PasteMigrationScanInfo: Sendable, Equatable {
     public let databaseSizeBytes: Int64
 
     public var formattedSize: String {
-        ByteCountFormatter.string(fromByteCount: databaseSizeBytes, countStyle: .file)
+        databaseSizeBytes.formatted(.byteCount(style: .file))
     }
 
     public var formattedDateRange: String {

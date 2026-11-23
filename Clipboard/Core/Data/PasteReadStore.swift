@@ -129,26 +129,42 @@ actor PasteReadStore {
             }
             var rows = Array(result)
 
-            // 联合检索/冷分页：仅当指定分页且热库结果不足一页时，无缝从只读冷库补齐
-            if let limit, rows.count < limit, let archiveConnection {
-                let remaining = limit - rows.count
-                let archiveOffset: Int
-                if !rows.isEmpty {
-                    archiveOffset = 0
-                } else if let offset, offset > 0 {
-                    let hotTotal = countOn(connection, filter: filter, limit: nil)
-                    archiveOffset = max(0, offset - hotTotal)
+            // 联合检索/冷分页：全量查询（limit == nil）或热库不足一页时，无缝从只读冷库补齐
+            if let archiveConnection {
+                let archiveLimit: Int?
+                let archiveOffset: Int?
+                if let limit {
+                    if rows.count < limit {
+                        archiveLimit = limit - rows.count
+                        if !rows.isEmpty {
+                            archiveOffset = 0
+                        } else if let offset, offset > 0 {
+                            let hotTotal = countOn(connection, filter: filter, limit: nil)
+                            archiveOffset = max(0, offset - hotTotal)
+                        } else {
+                            archiveOffset = 0
+                        }
+                    } else {
+                        archiveLimit = nil
+                        archiveOffset = nil
+                    }
                 } else {
-                    archiveOffset = 0
+                    archiveLimit = nil
+                    archiveOffset = nil
                 }
 
-                var archiveQuery = table.select(sel).order(ord)
-                if let filter {
-                    archiveQuery = archiveQuery.filter(filter)
-                }
-                archiveQuery = archiveQuery.limit(remaining, offset: archiveOffset)
-                if let archiveResult = try? archiveConnection.prepare(archiveQuery) {
-                    rows.append(contentsOf: archiveResult)
+                let shouldQueryArchive = limit == nil || archiveLimit != nil
+                if shouldQueryArchive {
+                    var archiveQuery = table.select(sel).order(ord)
+                    if let filter {
+                        archiveQuery = archiveQuery.filter(filter)
+                    }
+                    if let archiveLimit {
+                        archiveQuery = archiveQuery.limit(archiveLimit, offset: archiveOffset ?? 0)
+                    }
+                    if let archiveResult = try? archiveConnection.prepare(archiveQuery) {
+                        rows.append(contentsOf: archiveResult)
+                    }
                 }
             }
 
@@ -221,7 +237,9 @@ actor PasteReadStore {
 
     func getCountByGroup(groupId: Int) async -> Int {
         do {
-            return try connection?.scalar(table.filter(Col.group == groupId).count) ?? 0
+            let hotCount = try connection?.scalar(table.filter(Col.group == groupId).count) ?? 0
+            let archiveCount = (try? archiveConnection?.scalar(table.filter(Col.group == groupId).count)) ?? 0
+            return hotCount + archiveCount
         } catch {
             log.error("获取分组统计失败：\(error)")
             return 0

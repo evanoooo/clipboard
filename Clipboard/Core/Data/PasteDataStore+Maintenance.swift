@@ -540,20 +540,22 @@ extension PasteDataStore {
     }
 
     func updateItemGroupInDB(id: Int64, groupId: Int) async {
-        await sqlManager.updateItemGroup(id: id, groupId: groupId)
+        let uniqueId = dataList.value.first(where: { $0.id == id })?.uniqueId
+        await sqlManager.updateItemGroup(id: id, groupId: groupId, uniqueId: uniqueId)
         await MainActor.run {
             SyncEngine.shared.markDirtyAndSchedule()
         }
     }
 
     func updateItemHidden(itemId: Int64, hidden: Bool) {
-        if let model = dataList.value.first(where: { $0.id == itemId }),
-           hidden != model.hidden {
+        let model = dataList.value.first(where: { $0.id == itemId })
+        if let model, hidden != model.hidden {
             model.updateHidden(val: hidden)
         }
+        let uniqueId = model?.uniqueId
 
         enqueueMutation { [sqlManager] in
-            await sqlManager.updateItemHidden(id: itemId, hidden: hidden)
+            await sqlManager.updateItemHidden(id: itemId, hidden: hidden, uniqueId: uniqueId)
             await MainActor.run {
                 SyncEngine.shared.markDirtyAndSchedule()
             }
@@ -561,8 +563,9 @@ extension PasteDataStore {
     }
 
     func updateItemGroup(id: Int64, groupId: Int) {
+        let uniqueId = dataList.value.first(where: { $0.id == id })?.uniqueId
         enqueueMutation { [sqlManager] in
-            await sqlManager.updateItemGroup(id: id, groupId: groupId)
+            await sqlManager.updateItemGroup(id: id, groupId: groupId, uniqueId: uniqueId)
             await MainActor.run {
                 SyncEngine.shared.markDirtyAndSchedule()
             }

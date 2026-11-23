@@ -516,6 +516,104 @@ actor ColdArchiveManager {
         }
         return Data(blob.bytes)
     }
+
+    /// 当用户对冷归档记录执行收藏、改别名、隐藏或编辑时，将其原子“回温”迁回热库并返回热库主键 ID
+    nonisolated static func promoteToHotIfNeeded(uniqueId: String, into hotConn: Connection) -> Int64? {
+        guard !uniqueId.isEmpty else { return nil }
+
+        if let hotRow = try? hotConn.prepare(
+            "SELECT id FROM Clip WHERE unique_id = ? LIMIT 1",
+            uniqueId
+        ).makeIterator().next(),
+           let existingHotId = hotRow[0] as? Int64 {
+            removeFromArchiveIfPresent(uniqueId: uniqueId)
+            return existingHotId
+        }
+
+        guard archiveExists(),
+              let archiveConn = try? Connection(archiveDatabasePath) else {
+            return nil
+        }
+        archiveConn.busyTimeout = 2.0
+
+        let selectSQL = """
+            SELECT type, data, show_data, timestamp, app_id,
+                   search_text, length, "group", tag, alias, alias_search, hidden,
+                   sort_order, media_rel_path, media_size
+            FROM Clip
+            WHERE unique_id = ?
+            LIMIT 1
+        """
+        guard let row = try? archiveConn.prepare(selectSQL, uniqueId).makeIterator().next(),
+              let type = row[0] as? String,
+              let data = row[1] as? Blob,
+              let timestamp = row[3] as? Int64 else {
+            return nil
+        }
+
+        let showData = row[2] as? Blob
+        let appID = (row[4] as? Int64) ?? 0
+        let searchText = (row[5] as? String) ?? ""
+        let length = (row[6] as? Int64) ?? 0
+        let group = (row[7] as? Int64) ?? -1
+        let tag = row[8] as? String
+        let alias = row[9] as? String
+        let aliasSearch = row[10] as? String
+        let hidden = (row[11] as? Int64) ?? 0
+        let sortOrder = (row[12] as? Int64) ?? 0
+        let mediaRelPath = row[13] as? String
+        let mediaSize = (row[14] as? Int64) ?? 0
+
+        let appRow: (id: Int64, bundleID: String?, name: String, path: String)?
+        if appID > 0,
+           let stmt = try? archiveConn.prepare(
+               "SELECT id, bundle_id, app_name, app_path FROM App WHERE id = ? LIMIT 1",
+               appID
+           ),
+           let row = stmt.makeIterator().next(),
+           let resolvedAppId = row[0] as? Int64,
+           let appName = row[2] as? String,
+           let appPath = row[3] as? String {
+            appRow = (resolvedAppId, row[1] as? String, appName, appPath)
+        } else {
+            appRow = nil
+        }
+
+        do {
+            var hotId: Int64?
+            try hotConn.transaction(.immediate) {
+                if let appRow {
+                    try hotConn.run(
+                        "INSERT OR IGNORE INTO App (id, bundle_id, app_name, app_path) VALUES (?, ?, ?, ?)",
+                        appRow.id, appRow.bundleID, appRow.name, appRow.path
+                    )
+                }
+                let insertSQL = """
+                    INSERT INTO Clip (
+                        unique_id, type, data, show_data, timestamp, app_id,
+                        search_text, length, "group", tag, alias, alias_search, hidden,
+                        sort_order, media_rel_path, media_size
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                try hotConn.run(
+                    insertSQL,
+                    uniqueId, type, data, showData, timestamp, appID,
+                    searchText, length, group, tag, alias, aliasSearch, hidden,
+                    sortOrder, mediaRelPath, mediaSize
+                )
+                hotId = hotConn.lastInsertRowid
+            }
+
+            if hotId != nil {
+                _ = try? archiveConn.run("DELETE FROM Clip WHERE unique_id = ?", uniqueId)
+                invalidateCountCache()
+            }
+            return hotId
+        } catch {
+            Log.database.error("冷归档条目回温失败：\(error)")
+            return nil
+        }
+    }
 }
 
 extension PasteSQLManager {

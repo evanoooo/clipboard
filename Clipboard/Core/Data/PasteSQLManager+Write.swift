@@ -419,24 +419,48 @@ extension PasteSQLManager {
         }
     }
 
+    private func resolveHotTargetId(id: Int64, uniqueId: String?) async -> Int64? {
+        guard let uniqueId, !uniqueId.isEmpty else {
+            return id
+        }
+        if let hotRow = try? connection?.pluck(table.select(Col.id).filter(Col.uniqueId == uniqueId)) {
+            return hotRow[Col.id]
+        }
+        guard let connection,
+              let promotedId = ColdArchiveManager.promoteToHotIfNeeded(uniqueId: uniqueId, into: connection) else {
+            return id
+        }
+        await PasteReadStore.shared.reopenArchive()
+        await refreshAppCache(debounce: true)
+        return promotedId
+    }
+
     @discardableResult
     func updateItemGroup(id: Int64, groupId: Int) async -> Bool {
-        guard let connection else { return false }
-        let query = table.filter(Col.id == id)
+        await updateItemGroup(id: id, groupId: groupId, uniqueId: nil)
+    }
+
+    @discardableResult
+    func updateItemGroup(id: Int64, groupId: Int, uniqueId: String?) async -> Bool {
+        guard let connection,
+              let targetId = await resolveHotTargetId(id: id, uniqueId: uniqueId) else {
+            return false
+        }
+        let query = table.filter(Col.id == targetId)
         let update = query.update(Col.group <- groupId)
         do {
-            let uniqueId = try connection.pluck(query.select(Col.uniqueId))?[Col.uniqueId]
+            let resolvedUniqueId = try connection.pluck(query.select(Col.uniqueId))?[Col.uniqueId]
             let count = try connection.run(update)
-            if count > 0, let uniqueId {
+            if count > 0, let resolvedUniqueId {
                 let onlySyncPinned = UserDefaults.standard.object(forKey: "sync_only_pinned") == nil
                     ? true
                     : UserDefaults.standard.bool(forKey: "sync_only_pinned")
                 if groupId == -1 {
                     if onlySyncPinned {
-                        SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [uniqueId])
+                        SyncPendingDeletionsStore.shared.recordDeletions(uniqueIds: [resolvedUniqueId])
                     }
                 } else {
-                    SyncPendingDeletionsStore.shared.removeDeletions(uniqueIds: [uniqueId])
+                    SyncPendingDeletionsStore.shared.removeDeletions(uniqueIds: [resolvedUniqueId])
                 }
             }
             Log.database.info("更新条目分组成功，影响行数：\(count)")
@@ -449,7 +473,15 @@ extension PasteSQLManager {
 
     @discardableResult
     func updateItemHidden(id: Int64, hidden: Bool) async -> Bool {
-        let query = table.filter(Col.id == id)
+        await updateItemHidden(id: id, hidden: hidden, uniqueId: nil)
+    }
+
+    @discardableResult
+    func updateItemHidden(id: Int64, hidden: Bool, uniqueId: String?) async -> Bool {
+        guard let targetId = await resolveHotTargetId(id: id, uniqueId: uniqueId) else {
+            return false
+        }
+        let query = table.filter(Col.id == targetId)
         let update = query.update(Col.hidden <- hidden ? 1 : 0)
         do {
             let count = try connection?.run(update)
@@ -463,10 +495,18 @@ extension PasteSQLManager {
 
     /// 只更新别名，不碰触内容、类型与分组。
     func updateItemAlias(id: Int64, alias: String) async -> Bool {
-        guard let database = connection else { return false }
+        await updateItemAlias(id: id, alias: alias, uniqueId: nil)
+    }
+
+    /// 只更新别名，不碰触内容、类型与分组（支持冷库记录回温后精确命中）。
+    func updateItemAlias(id: Int64, alias: String, uniqueId: String?) async -> Bool {
+        guard let database = connection,
+              let targetId = await resolveHotTargetId(id: id, uniqueId: uniqueId) else {
+            return false
+        }
         do {
             let count = try database.run(
-                table.filter(Col.id == id).update(Self.aliasSetters(alias))
+                table.filter(Col.id == targetId).update(Self.aliasSetters(alias))
             )
             return count > 0
         } catch {
@@ -534,9 +574,13 @@ extension PasteSQLManager {
     func updateItemContent(
         id: Int64,
         content: PasteContent,
-        searchText: String
+        searchText: String,
+        uniqueId existingUniqueId: String? = nil
     ) async -> Bool {
-        guard let connection else { return false }
+        guard let connection,
+              let targetId = await resolveHotTargetId(id: id, uniqueId: existingUniqueId) else {
+            return false
+        }
         let uniqueId = await PasteboardModel.generateUniqueId(
             for: content.type,
             data: content.data
@@ -547,16 +591,16 @@ extension PasteSQLManager {
             guard let currentRow = try connection.pluck(
                 table
                     .select(Col.group)
-                    .filter(Col.id == id)
+                    .filter(Col.id == targetId)
             ) else {
-                log.error("更新文本内容失败：记录不存在，id：\(id)")
+                log.error("更新文本内容失败：记录不存在，id：\(targetId)")
                 return false
             }
 
             let duplicateRow = try connection.pluck(
                 table
                     .select(Col.id, Col.group)
-                    .filter(Col.uniqueId == uniqueId && Col.id != id)
+                    .filter(Col.uniqueId == uniqueId && Col.id != targetId)
             )
             let duplicateId = duplicateRow?[Col.id]
             let duplicateGroup = duplicateRow?[Col.group] ?? -1
@@ -568,7 +612,7 @@ extension PasteSQLManager {
             }
 
             let setters = contentSetters(content, searchText: searchText, uniqueId: uniqueId, group: effectiveGroup)
-            let update = table.filter(Col.id == id).update(setters + [Col.timestamp <- timestamp])
+            let update = table.filter(Col.id == targetId).update(setters + [Col.timestamp <- timestamp])
             let count = try connection.run(update)
             guard count == 1 else {
                 throw NSError(
@@ -582,7 +626,7 @@ extension PasteSQLManager {
             }
             try connection.run("COMMIT")
             await refreshAppCache(debounce: true)
-            log.debug("更新文本内容成功：\(id)")
+            log.debug("更新文本内容成功：\(targetId)")
             return true
         } catch {
             _ = try? connection.run("ROLLBACK")

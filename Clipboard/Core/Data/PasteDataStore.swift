@@ -854,17 +854,20 @@ extension PasteDataStore {
         loadPageTask?.cancel()
         isLoadingPage = false
 
+        let existingUniqueId = dataList.value.first(where: { $0.id == id })?.uniqueId
         guard await sqlManager.updateItemContent(
             id: id,
             content: content,
-            searchText: searchText
+            searchText: searchText,
+            uniqueId: existingUniqueId
         ) else {
             return false
         }
 
-        // 增量局部刷新：只单点重查被修改的单行，就地更新内存列表，杜绝全量重载导致模型重建与缓存丢失
+        let updatedUniqueId = PasteboardModel.generateUniqueId(for: content.type, data: content.data)
+        // 增量局部刷新：按最新 uniqueId 单点重查被修改的单行，兼顾热库主键与冷库回温场景
         let singleRow = await PasteReadStore.shared.search(
-            filter: Col.id == id,
+            filter: Col.uniqueId == updatedUniqueId,
             limit: 1
         )
         guard let updatedModel = (await mapRows(singleRow)).first else {
@@ -872,7 +875,11 @@ extension PasteDataStore {
         }
 
         var list = dataList.value
-        list.removeAll { $0.id == id || $0.uniqueId == updatedModel.uniqueId }
+        list.removeAll {
+            $0.id == id
+                || $0.uniqueId == updatedModel.uniqueId
+                || (existingUniqueId != nil && $0.uniqueId == existingUniqueId)
+        }
         list.insert(updatedModel, at: 0)
 
         totalCount = await sqlManager.getTotalCount()
@@ -898,15 +905,15 @@ extension PasteDataStore {
     /// 更新别名。别名不参与类型判定，只影响关键词命中，因此按当前筛选结果刷新。
     @discardableResult
     func updateAlias(id: Int64, alias: String) async -> Bool {
-        guard await sqlManager.updateItemAlias(id: id, alias: alias) else { return false }
+        let existingModel = dataList.value.first(where: { $0.id == id })
+        let uniqueId = existingModel?.uniqueId
+        guard await sqlManager.updateItemAlias(id: id, alias: alias, uniqueId: uniqueId) else { return false }
         await MainActor.run {
             SyncEngine.shared.markDirtyAndSchedule()
         }
 
         let trimmed = alias.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let model = dataList.value.first(where: { $0.id == id }) {
-            model.updateAlias(val: trimmed)
-        }
+        existingModel?.updateAlias(val: trimmed)
 
         guard isInFilterMode, let currentFilter else {
             updateData(with: dataList.value, changeType: .update)

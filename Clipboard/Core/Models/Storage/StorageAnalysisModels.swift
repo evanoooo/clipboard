@@ -20,11 +20,11 @@ nonisolated struct StorageDiskUsage: Sendable, Equatable {
     let totalItemCount: Int
 
     var formattedTotalDisk: String {
-        ByteCountFormatter.string(fromByteCount: totalDiskBytes, countStyle: .file)
+        totalDiskBytes.formatted(.byteCount(style: .file))
     }
 
     var formattedReclaimable: String {
-        ByteCountFormatter.string(fromByteCount: reclaimableFreeBytes, countStyle: .file)
+        reclaimableFreeBytes.formatted(.byteCount(style: .file))
     }
 
     var reclaimableRatio: Double {
@@ -44,7 +44,7 @@ struct StorageTypeProportion: Sendable, Identifiable, Equatable {
     let color: NSColor
 
     var formattedBytes: String {
-        ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+        totalBytes.formatted(.byteCount(style: .file))
     }
 
     var swiftUIColor: Color {
@@ -80,7 +80,7 @@ nonisolated struct StorageItemSummary: Sendable, Identifiable, Equatable {
     }
 
     var formattedSize: String {
-        ByteCountFormatter.string(fromByteCount: byteSize, countStyle: .file)
+        byteSize.formatted(.byteCount(style: .file))
     }
 
     var formattedDate: String {
@@ -212,15 +212,15 @@ nonisolated struct StorageQuotaStatus: Sendable, Equatable {
     }
 
     var formattedCurrent: String {
-        ByteCountFormatter.string(fromByteCount: currentBytes, countStyle: .file)
+        currentBytes.formatted(.byteCount(style: .file))
     }
 
     var formattedQuota: String {
-        quotaBytes > 0 ? ByteCountFormatter.string(fromByteCount: quotaBytes, countStyle: .file) : "不限"
+        quotaBytes > 0 ? quotaBytes.formatted(.byteCount(style: .file)) : "不限"
     }
 
     var formattedCandidateFreed: String {
-        ByteCountFormatter.string(fromByteCount: candidateFreedBytes, countStyle: .file)
+        candidateFreedBytes.formatted(.byteCount(style: .file))
     }
 }
 

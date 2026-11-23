@@ -886,7 +886,7 @@ final class SyncEngine: ObservableObject {
                                     uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId, channel: .bulk)
                                 }
                                 if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId)
+                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId, uniqueId: uploadBlob.uniqueId)
                                 }
                                 guard let rawData = try? JSONEncoder().encode(uploadBlob),
                                       let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {
@@ -955,7 +955,7 @@ final class SyncEngine: ObservableObject {
                                     uploadBlob.payloadData = PasteDataPointReader.loadData(id: rowId, uniqueId: uploadBlob.uniqueId, channel: .bulk)
                                 }
                                 if uploadBlob.showData == nil, let rowId = uploadBlob.localRowId {
-                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId)
+                                    uploadBlob.showData = PasteDataPointReader.loadShowData(id: rowId, uniqueId: uploadBlob.uniqueId)
                                 }
                                 guard let rawData = try? JSONEncoder().encode(uploadBlob),
                                       let encData = try? SyncCryptoEngine.encrypt(data: rawData, using: masterKey) else {

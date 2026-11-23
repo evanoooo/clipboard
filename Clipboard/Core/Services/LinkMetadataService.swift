@@ -211,10 +211,8 @@ final class LinkMetadataService {
 
         let title = metadata.title
         let timestamp = Date().timeIntervalSince1970
-        let previewJpeg: Data? = Self.bitmapRep(from: metadata.previewImage)
-            .flatMap { $0.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) }
-        let iconPng: Data? = Self.bitmapRep(from: metadata.iconImage)
-            .flatMap { $0.representation(using: .png, properties: [:]) }
+        let previewCGImage = metadata.previewImage?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        let iconCGImage = metadata.iconImage?.cgImage(forProposedRect: nil, context: nil, hints: nil)
 
         Task.detached(priority: .utility) {
             var dict: [String: Any] = ["timestamp": timestamp]
@@ -224,27 +222,24 @@ final class LinkMetadataService {
             if let data = try? JSONSerialization.data(withJSONObject: dict) {
                 try? data.write(to: jsonURL, options: .atomic)
             }
-            if let previewJpeg {
+            if let previewCGImage,
+               let previewJpeg = NSBitmapImageRep(cgImage: previewCGImage).representation(
+                   using: .jpeg,
+                   properties: [.compressionFactor: 0.7]
+               ) {
                 try? previewJpeg.write(to: previewURL, options: .atomic)
             }
-            if let iconPng {
+            if let iconCGImage,
+               let iconPng = NSBitmapImageRep(cgImage: iconCGImage).representation(
+                   using: .png,
+                   properties: [:]
+               ) {
                 try? iconPng.write(to: iconURL, options: .atomic)
             }
         }
     }
 
     // MARK: - 图片解析与下采样
-
-    private static func bitmapRep(from image: NSImage?) -> NSBitmapImageRep? {
-        guard let image else { return nil }
-        if let existing = image.representations.first as? NSBitmapImageRep {
-            return existing
-        }
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return nil
-        }
-        return NSBitmapImageRep(cgImage: cgImage)
-    }
 
     private static func loadImage(from provider: NSItemProvider?) async -> NSImage? {
         guard let provider, provider.canLoadObject(ofClass: NSImage.self) else {
