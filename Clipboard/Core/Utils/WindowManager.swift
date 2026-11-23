@@ -54,6 +54,15 @@ final class WindowManager {
         frame: NSRect? = nil,
         _ completionHandler: (@MainActor @Sendable () -> Void)? = nil
     ) {
+        // 抽屉已在其他屏幕/Space 显示时迁移到当前屏幕，而不是先关闭（避免需要连按两次）
+        if displayMode == .drawer, ClipMainWindowController.isInstanceLoaded,
+           drawerController.needsRelocation(to: frame)
+        {
+            drawerController.relocate(to: frame)
+            completionHandler?()
+            return
+        }
+
         let wasVisible = isVisible
         switch displayMode {
         case .drawer:

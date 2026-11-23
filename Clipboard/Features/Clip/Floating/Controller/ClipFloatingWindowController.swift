@@ -104,7 +104,7 @@ final class ClipFloatingWindowController: NSWindowController {
 
         switch windowPositionMode {
         case .center:
-            guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+            guard let screen = NSScreen.active else {
                 return NSPoint(x: 0, y: 0)
             }
             return calculateCenterPosition(
@@ -116,7 +116,7 @@ final class ClipFloatingWindowController: NSWindowController {
             return calculateMousePosition(windowSize: windowSize)
 
         case .lastPosition:
-            guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+            guard let screen = NSScreen.active else {
                 return NSPoint(x: 0, y: 0)
             }
             return calculateLastPosition(
@@ -143,8 +143,7 @@ final class ClipFloatingWindowController: NSWindowController {
         }
 
         guard
-            let screen = screenWithMouse ?? NSScreen.main
-            ?? NSScreen.screens.first
+            let screen = screenWithMouse ?? NSScreen.active
         else {
             return mouseLocation
         }

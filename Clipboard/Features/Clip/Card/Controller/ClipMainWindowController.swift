@@ -57,7 +57,7 @@ final class ClipMainWindowController: NSWindowController {
         win.hasShadow = false
         win.configureCommonSettings()
 
-        win.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        win.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
     }
 
     func resetState() {
@@ -139,7 +139,7 @@ extension ClipMainWindowController {
 
         if initiallyHidden {
             resumeObserving()
-            let screenFrame = frame ?? NSScreen.main?.frame ?? .zero
+            let screenFrame = frame ?? NSScreen.active?.frame ?? .zero
             AppEnvironment.shared.previousApp = NSWorkspace.shared.frontmostApplication
             let visibleFrame = NSRect(
                 x: screenFrame.minX, y: screenFrame.minY,
@@ -158,6 +158,29 @@ extension ClipMainWindowController {
         if #unavailable(macOS 15.0) {
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    /// 窗口已在其他屏幕或 Space 可见时返回 true，此时应迁移到目标屏幕而不是隐藏
+    func needsRelocation(to frame: NSRect?) -> Bool {
+        guard targetVisible, !isDismissing, let window, window.isVisible else { return false }
+        if !window.isOnActiveSpace { return true }
+        guard let target = frame ?? NSScreen.active?.frame else { return false }
+        return window.screen?.frame != target
+    }
+
+    /// 不经过隐藏/暂停观察，直接把可见窗口挪到目标屏幕并重新滑入，避免数据重载闪烁
+    func relocate(to frame: NSRect?) {
+        guard let window else { return }
+        let screenFrame = frame ?? NSScreen.active?.frame ?? .zero
+        window.setFrame(
+            NSRect(x: screenFrame.minX, y: screenFrame.minY, width: screenFrame.width, height: Const.defaultHeight),
+            display: true
+        )
+        window.contentViewController?.view.layoutSubtreeIfNeeded()
+        animateContent(visible: true, initiallyHidden: true) { [weak self] in
+            self?.suppressSearchFocusRing(false)
+        }
+        window.makeKeyAndOrderFront(nil)
     }
 
     private func animateContent(

@@ -57,7 +57,7 @@ extension AppDelegate: NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows _: Bool) -> Bool {
-        WindowManager.shared.toggleWindow(frame: NSScreen.main?.frame)
+        WindowManager.shared.toggleWindow(frame: NSScreen.active?.frame)
         return true
     }
 

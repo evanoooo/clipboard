@@ -113,7 +113,7 @@ final class WelcomeWindowController: NSWindowController {
         destroyWindow()
 
         if showClipboard {
-            WindowManager.shared.toggleWindow(frame: NSScreen.main?.frame)
+            WindowManager.shared.toggleWindow(frame: NSScreen.active?.frame)
         }
     }
 
