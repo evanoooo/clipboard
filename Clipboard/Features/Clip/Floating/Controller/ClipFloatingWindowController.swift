@@ -13,11 +13,25 @@ final class ClipFloatingWindowController: NSWindowController {
     private(set) static var isInstanceLoaded = false
     static let shared = ClipFloatingWindowController()
     var isVisible: Bool {
-        window?.isVisible ?? false
+        (window?.isVisible ?? false) && !isDismissing
     }
 
-    var isPinned = false
+    var isPinned = false {
+        didSet { updateSpaceCollectionBehavior() }
+    }
     private var isDismissing = false
+    private var fadeAnimationGeneration = 0
+    private var lastExplicitShowInstant: ContinuousClock.Instant?
+    private static let resignKeyGracePeriod: Duration = .milliseconds(150)
+
+    private var isWithinShowGracePeriod: Bool {
+        guard let last = lastExplicitShowInstant else { return false }
+        return (ContinuousClock.now - last) < Self.resignKeyGracePeriod
+    }
+
+    var shouldDismissOnSpaceChange: Bool {
+        !isPinned && (isVisible || isDismissing || (window?.isVisible ?? false)) && !isWithinShowGracePeriod
+    }
 
     private let clipVC = ClipFloatingViewController()
     private let db = PasteDataStore.main
@@ -59,9 +73,7 @@ final class ClipFloatingWindowController: NSWindowController {
         win.configureCommonSettings()
 
         win.hasShadow = true
-        win.collectionBehavior = [
-            .canJoinAllSpaces, .fullScreenAuxiliary, .stationary,
-        ]
+        updateSpaceCollectionBehavior()
 
         win.contentView?.wantsLayer = true
         win.contentView?.layer?.cornerRadius = clipVC.floatingContentView.displayMode.windowRadius
@@ -69,6 +81,13 @@ final class ClipFloatingWindowController: NSWindowController {
         win.contentView?.layer?.masksToBounds = true
 
         win.delegate = self
+    }
+
+    private func updateSpaceCollectionBehavior() {
+        guard let win = window else { return }
+        win.collectionBehavior = isPinned
+            ? [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+            : [.moveToActiveSpace, .fullScreenAuxiliary]
     }
 
     func resetState() {
@@ -238,6 +257,18 @@ final class ClipFloatingWindowController: NSWindowController {
     }
 
     func toggleWindow(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
+        if !isPinned, let win = window, win.isVisible, !isDismissing, !win.isOnActiveSpace {
+            lastExplicitShowInstant = .now
+            fadeAnimationGeneration += 1
+            clipVC.env.previousApp = NSWorkspace.shared.frontmostApplication
+            win.orderOut(nil)
+            positionWindow()
+            win.alphaValue = 1
+            win.setIsVisible(true)
+            win.makeKeyAndOrderFront(nil)
+            completionHandler?()
+            return
+        }
         if isVisible {
             dismiss(completionHandler)
         } else {
@@ -247,32 +278,71 @@ final class ClipFloatingWindowController: NSWindowController {
 
     func show(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
         guard let win = window else { return }
+        lastExplicitShowInstant = .now
+        fadeAnimationGeneration += 1
+        let generation = fadeAnimationGeneration
+        let wasDismissing = isDismissing
+        let initiallyHidden = !win.isVisible
         isDismissing = false
-        guard !win.isVisible else {
-            win.makeKey()
+
+        if !initiallyHidden && !wasDismissing {
+            if !win.isOnActiveSpace {
+                win.orderOut(nil)
+                clipVC.env.previousApp = NSWorkspace.shared.frontmostApplication
+                positionWindow()
+                win.makeKeyAndOrderFront(nil)
+            } else {
+                win.makeKey()
+            }
             completionHandler?()
             return
         }
 
         clipVC.env.previousApp = NSWorkspace.shared.frontmostApplication
-        resumeObserving()
+        if initiallyHidden {
+            resumeObserving()
+        }
         positionWindow()
-        win.alphaValue = 0
+        if initiallyHidden {
+            win.alphaValue = 0
+        }
         win.setIsVisible(true)
         win.makeKeyAndOrderFront(nil)
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Const.showDuration
             win.animator().alphaValue = 1
-        }) {
+        }) { [weak self] in
             Task { @MainActor in
+                guard let self, generation == self.fadeAnimationGeneration else { return }
                 completionHandler?()
             }
         }
     }
 
-    func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
-        guard let win = window, win.isVisible else {
+    func dismiss(
+        animated: Bool = true,
+        _ completionHandler: (@MainActor @Sendable () -> Void)? = nil
+    ) {
+        guard let win = window else {
+            isDismissing = false
+            completionHandler?()
+            return
+        }
+
+        if !animated {
+            fadeAnimationGeneration += 1
+            isDismissing = false
+            CategoryCustomColorCoordinator.shared.closePanelIfOpen()
+            ClipUndoStore.shared.removeAll()
+            if win.isVisible {
+                finalizeDismiss()
+            }
+            completionHandler?()
+            return
+        }
+
+        guard win.isVisible else {
             isDismissing = false
             completionHandler?()
             return
@@ -282,6 +352,8 @@ final class ClipFloatingWindowController: NSWindowController {
             return
         }
         isDismissing = true
+        fadeAnimationGeneration += 1
+        let generation = fadeAnimationGeneration
         CategoryCustomColorCoordinator.shared.closePanelIfOpen()
 
         // 窗口一隐藏就丢弃撤销记录：下次唤出不应再能恢复上一次的删除。
@@ -293,15 +365,20 @@ final class ClipFloatingWindowController: NSWindowController {
         }) { [weak self] in
             Task { @MainActor in
                 defer { completionHandler?() }
-                guard let self, let win = self.window else { return }
-                self.isDismissing = false
-                win.setIsVisible(false)
-                win.alphaValue = 1
-                win.orderOut(nil)
-                self.pauseObserving()
-                malloc_zone_pressure_relief(malloc_default_zone(), 0)
+                guard let self, generation == self.fadeAnimationGeneration else { return }
+                self.finalizeDismiss()
             }
         }
+    }
+
+    private func finalizeDismiss() {
+        guard let win = window else { return }
+        isDismissing = false
+        win.setIsVisible(false)
+        win.alphaValue = 1
+        win.orderOut(nil)
+        pauseObserving()
+        malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }
 
     private func saveWindowFrame() {
@@ -317,6 +394,7 @@ final class ClipFloatingWindowController: NSWindowController {
 extension ClipFloatingWindowController: NSWindowDelegate {
     func windowDidResignKey(_: Notification) {
         HotKeyManager.shared.resetPressedKeys()
+        guard !isWithinShowGracePeriod else { return }
         guard let window else { return }
         if NSApplication.shared.modalWindow != nil {
             window.level = .normal

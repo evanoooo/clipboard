@@ -30,6 +30,28 @@ final class WindowManager {
                 self?.handleDisplayModeChange(to: newRaw)
             }
             .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.handleActiveSpaceDidChange()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func handleActiveSpaceDidChange() {
+        guard !AppEnvironment.shared.suppressResignKey else { return }
+        switch displayMode {
+        case .drawer:
+            if ClipMainWindowController.isInstanceLoaded, drawerController.shouldDismissOnSpaceChange {
+                dismiss(animated: false)
+            }
+        case .floating:
+            if ClipFloatingWindowController.isInstanceLoaded, floatingController.shouldDismissOnSpaceChange {
+                dismiss(animated: false)
+            }
+        }
     }
 
     // MARK: - 当前显示模式
@@ -59,11 +81,12 @@ final class WindowManager {
            drawerController.needsRelocation(to: frame)
         {
             drawerController.relocate(to: frame)
+            TimeManager.shared.start()
+            idleTrimTask?.cancel()
             completionHandler?()
             return
         }
 
-        let wasVisible = isVisible
         switch displayMode {
         case .drawer:
             dismissFloatingIfNeeded()
@@ -72,12 +95,12 @@ final class WindowManager {
             dismissDrawerIfNeeded()
             floatingController.toggleWindow(completionHandler)
         }
-        if wasVisible {
-            TimeManager.shared.stop()
-            scheduleIdleMemoryTrim()
-        } else {
+        if isVisible {
             TimeManager.shared.start()
             idleTrimTask?.cancel()
+        } else {
+            TimeManager.shared.stop()
+            scheduleIdleMemoryTrim()
         }
     }
 
@@ -92,20 +115,23 @@ final class WindowManager {
     }
 
     /// 幂等隐藏窗口，用于 Esc 退出、点击外部或操作完成关闭场景（避免 toggleWindow 造成竞态反向打开）
-    func dismiss(_ completionHandler: (@MainActor @Sendable () -> Void)? = nil) {
+    func dismiss(
+        animated: Bool = true,
+        _ completionHandler: (@MainActor @Sendable () -> Void)? = nil
+    ) {
         HotKeyManager.shared.resetPressedKeys()
         TimeManager.shared.stop()
         scheduleIdleMemoryTrim()
         switch displayMode {
         case .drawer:
             if ClipMainWindowController.isInstanceLoaded {
-                drawerController.dismiss(completionHandler)
+                drawerController.dismiss(animated: animated, completionHandler)
             } else {
                 completionHandler?()
             }
         case .floating:
             if ClipFloatingWindowController.isInstanceLoaded {
-                floatingController.dismiss(completionHandler)
+                floatingController.dismiss(animated: animated, completionHandler)
             } else {
                 completionHandler?()
             }

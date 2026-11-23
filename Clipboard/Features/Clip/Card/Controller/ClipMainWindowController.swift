@@ -17,6 +17,17 @@ final class ClipMainWindowController: NSWindowController {
     private var isDismissing = false
 
     private var slideAnimationGeneration = 0
+    private var lastExplicitShowInstant: ContinuousClock.Instant?
+    private static let resignKeyGracePeriod: Duration = .milliseconds(150)
+
+    private var isWithinShowGracePeriod: Bool {
+        guard let last = lastExplicitShowInstant else { return false }
+        return (ContinuousClock.now - last) < Self.resignKeyGracePeriod
+    }
+
+    var shouldDismissOnSpaceChange: Bool {
+        (targetVisible || isDismissing || (window?.isVisible ?? false)) && !isWithinShowGracePeriod
+    }
 
     var isVisible: Bool {
         targetVisible
@@ -57,7 +68,7 @@ final class ClipMainWindowController: NSWindowController {
         win.hasShadow = false
         win.configureCommonSettings()
 
-        win.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        win.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
     }
 
     func resetState() {
@@ -101,8 +112,32 @@ final class ClipMainWindowController: NSWindowController {
 }
 
 extension ClipMainWindowController {
-    func dismiss(_ completionHandler: (@MainActor () -> Void)? = nil) {
-        guard let window, window.isVisible else {
+    func dismiss(
+        animated: Bool = true,
+        _ completionHandler: (@MainActor () -> Void)? = nil
+    ) {
+        guard let window else {
+            targetVisible = false
+            isDismissing = false
+            completionHandler?()
+            return
+        }
+
+        if !animated {
+            targetVisible = false
+            isDismissing = false
+            slideAnimationGeneration += 1
+            window.contentViewController?.view.layer?.removeAnimation(forKey: "drawerSlide")
+            CategoryCustomColorCoordinator.shared.closePanelIfOpen()
+            ClipUndoStore.shared.removeAll()
+            if window.isVisible {
+                finalizeDismiss(activatePreviousApp: false)
+            }
+            completionHandler?()
+            return
+        }
+
+        guard window.isVisible else {
             targetVisible = false
             isDismissing = false
             completionHandler?()
@@ -120,25 +155,35 @@ extension ClipMainWindowController {
         animateContent(visible: false) { [weak self] in
             defer { completionHandler?() }
             guard let self else { return }
-            self.isDismissing = false
-            self.window?.setIsVisible(false)
+            self.finalizeDismiss(activatePreviousApp: true)
+        }
+    }
+
+    private func finalizeDismiss(activatePreviousApp: Bool) {
+        isDismissing = false
+        window?.setIsVisible(false)
+        if activatePreviousApp {
             if #unavailable(macOS 15.0) {
                 AppEnvironment.shared.previousApp?.activate(options: [])
             }
-            self.window?.orderOut(nil)
-            self.pauseObserving()
-            malloc_zone_pressure_relief(malloc_default_zone(), 0)
         }
+        window?.orderOut(nil)
+        pauseObserving()
+        malloc_zone_pressure_relief(malloc_default_zone(), 0)
     }
 
     func show(in frame: NSRect?) {
         guard let window else { return }
+        lastExplicitShowInstant = .now
+        let wasDismissing = isDismissing
         isDismissing = false
         targetVisible = true
         let initiallyHidden = !window.isVisible
 
-        if initiallyHidden {
-            resumeObserving()
+        if initiallyHidden || wasDismissing {
+            if initiallyHidden {
+                resumeObserving()
+            }
             let screenFrame = frame ?? NSScreen.active?.frame ?? .zero
             AppEnvironment.shared.previousApp = NSWorkspace.shared.frontmostApplication
             let visibleFrame = NSRect(
@@ -171,7 +216,12 @@ extension ClipMainWindowController {
     /// 不经过隐藏/暂停观察，直接把可见窗口挪到目标屏幕并重新滑入，避免数据重载闪烁
     func relocate(to frame: NSRect?) {
         guard let window else { return }
+        lastExplicitShowInstant = .now
+        AppEnvironment.shared.previousApp = NSWorkspace.shared.frontmostApplication
         let screenFrame = frame ?? NSScreen.active?.frame ?? .zero
+        if !window.isOnActiveSpace {
+            window.orderOut(nil)
+        }
         window.setFrame(
             NSRect(x: screenFrame.minX, y: screenFrame.minY, width: screenFrame.width, height: Const.defaultHeight),
             display: true
@@ -229,6 +279,7 @@ extension ClipMainWindowController {
 extension ClipMainWindowController: NSWindowDelegate {
     func windowDidResignKey(_: Notification) {
         HotKeyManager.shared.resetPressedKeys()
+        guard !isWithinShowGracePeriod else { return }
         guard !AppEnvironment.shared.suppressResignKey else { return }
         WindowManager.shared.dismiss()
     }
