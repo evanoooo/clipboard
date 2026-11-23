@@ -46,7 +46,7 @@ final class AppColorService {
                 path: appPath
             )
             guard !Task.isCancelled else { return }
-            storeColor(from: icon, name: name)
+            await extractAndStoreColor(from: icon, name: name)
         }
     }
 
@@ -64,7 +64,7 @@ final class AppColorService {
                     path: app.path
                 )
                 guard !Task.isCancelled else { return }
-                storeColor(from: icon, name: app.name)
+                await extractAndStoreColor(from: icon, name: app.name)
                 await Task.yield()
             }
         }
@@ -90,11 +90,14 @@ final class AppColorService {
         } ?? false
     }
 
-    private func storeColor(from icon: NSImage, name: String) {
+    private func extractAndStoreColor(from icon: NSImage, name: String) async {
         guard needsUpdate(for: name) else { return }
         checkedColors.insert(name)
-        guard let hex = AppIconColorExtractor.extract(from: icon) else { return }
-        guard colorDict[name] != hex else { return }
+        guard let cgImage = icon.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        let hex = await Task.detached(priority: .utility) {
+            AppIconColorExtractor.extract(from: cgImage)
+        }.value
+        guard let hex, colorDict[name] != hex else { return }
         colorDict[name] = hex
         parsedColorCache.removeValue(forKey: hex)
         PasteUserDefaults.appColorData = colorDict

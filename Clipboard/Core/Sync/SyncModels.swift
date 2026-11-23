@@ -70,7 +70,7 @@ nonisolated struct SyncSummary: Codable, Equatable, Sendable {
     var lastSyncTime: Int64 { lastUpdated }
 
     var formattedStorageSize: String {
-        ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+        totalBytes.formatted(.byteCount(style: .file))
     }
 
     var formattedTotalSize: String { formattedStorageSize }

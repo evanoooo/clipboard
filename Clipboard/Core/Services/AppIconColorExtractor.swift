@@ -1,14 +1,21 @@
 import AppKit
 
 /// 优先明显主导色，再比较中心位置、局部对比和多处分布，最后应用色系偏好
-enum AppIconColorExtractor {
+nonisolated enum AppIconColorExtractor {
     private static let pixelSize = 32
     private static let mergeDistance: Double = 48
     private static let gridSize = 8
     private static let scoreTolerance = 0.75
 
     static func extract(from image: NSImage) -> String? {
-        let pixels = samples(from: image)
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        return extract(from: cgImage)
+    }
+
+    static func extract(from cgImage: CGImage) -> String? {
+        let pixels = samples(from: cgImage)
         if let neutral = neutralBackground(from: pixels) { return neutral }
         var candidates = clusters(from: pixels.filter { $0.isSuitable })
         if candidates.isEmpty {
@@ -52,9 +59,8 @@ enum AppIconColorExtractor {
         return "#" + String(repeating: "0", count: 6 - hex.count) + hex
     }
 
-    private static func samples(from image: NSImage) -> [ColorArea] {
-        guard let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
-              let space = CGColorSpace(name: CGColorSpace.sRGB),
+    private static func samples(from source: CGImage) -> [ColorArea] {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(
                   data: nil, width: pixelSize, height: pixelSize, bitsPerComponent: 8,
                   bytesPerRow: pixelSize * 4, space: space,
@@ -284,7 +290,7 @@ enum AppIconColorExtractor {
     }
 }
 
-extension AppIconColorExtractor {
+nonisolated extension AppIconColorExtractor {
     private static func neutralBackground(from pixels: [ColorArea]) -> String? {
         let total = pixels.reduce(0) { $0 + $1.area }
         guard total > 0 else { return nil }

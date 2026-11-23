@@ -76,9 +76,43 @@ actor ColdArchiveManager {
                     Log.storage.info("冷热分层归档完成：共将 \(totalArchived) 条 180 天前未收藏记录迁入 ClipArchive.sqlite3")
                     _ = try? await PasteSQLManager.manager.vacuumDatabase()
                 }
+                await runIdleQuotaMaintenanceIfNeeded()
                 malloc_zone_pressure_relief(malloc_default_zone(), 0)
                 return
             }
+        }
+    }
+
+    private func runIdleQuotaMaintenanceIfNeeded() async {
+        guard !Task.isCancelled, !ProcessInfo.processInfo.isLowPowerModeEnabled else {
+            return
+        }
+        let settings = await MainActor.run {
+            (
+                enabled: PasteUserDefaults.enableIdleAutoMaintenance && PasteUserDefaults.enableSoftQuota,
+                quotaBytes: PasteUserDefaults.softQuotaBytes,
+                policyRaw: PasteUserDefaults.softQuotaAgingPolicy,
+                manager: PasteSQLManager.manager
+            )
+        }
+        guard settings.enabled, settings.quotaBytes > 0 else { return }
+
+        let usage = settings.manager.getStorageDiskUsage()
+        guard usage.totalDiskBytes > settings.quotaBytes else { return }
+
+        let overflowBytes = usage.totalDiskBytes - settings.quotaBytes
+        let policy = SoftQuotaAgingPolicy(rawValue: settings.policyRaw) ?? .threeMonths
+        let freedBytes = await settings.manager.performAutoEviction(
+            policy: policy,
+            maxBytesToFree: overflowBytes
+        )
+        if freedBytes > 0 {
+            await PasteReadStore.shared.reopen()
+            let count = await settings.manager.getTotalCount()
+            await MainActor.run {
+                PasteDataStore.main.totalCount = count
+            }
+            Log.storage.info("空闲自动维护完成：超出软配额 \(overflowBytes) 字节，已清理并回收 \(freedBytes) 字节")
         }
     }
 
