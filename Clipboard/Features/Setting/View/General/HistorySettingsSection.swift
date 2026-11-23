@@ -41,7 +41,7 @@ struct HistorySettingsSection: View {
                     }
                     SystemButton(
                         title: .generalClearHistory,
-                        action: PasteDataStore.main.clearAllData
+                        action: ClipMaintenanceCoordinator.clearAllData
                     )
                     .disabled(isClearing || isUpdating)
                 }
@@ -57,7 +57,7 @@ struct HistorySettingsSection: View {
         isUpdating = true
         Task {
             defer { isUpdating = false }
-            if await PasteDataStore.main.confirmHistoryLimit(timeUnit) {
+            if await ClipMaintenanceCoordinator.confirmHistoryLimit(timeUnit) {
                 PasteUserDefaults.historyTime = timeUnit.rawValue
             } else {
                 selectedHistoryTimeUnit = .init(rawValue: PasteUserDefaults.historyTime)

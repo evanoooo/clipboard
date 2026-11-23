@@ -65,11 +65,7 @@ extension PasteSQLManager {
         var bucketByType: [String: (count: Int, totalBytes: Int64)] = [:]
 
         if let readConn = Self.openReadOnlyConnection() {
-            let sql = """
-                SELECT type, COUNT(*) AS count, COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) AS total_bytes
-                FROM Clip
-                GROUP BY type
-            """
+            let sql = ClipStorageQueries.typeProportionsSQL
             do {
                 let stmt = try readConn.prepare(sql)
                 for row in stmt {
@@ -126,49 +122,9 @@ extension PasteSQLManager {
         guard let readConn = Self.openReadOnlyConnection() else { return [] }
         var list: [StorageItemSummary] = []
 
-        var whereClause = "WHERE 1=1"
         let nowSec = Int64(Date().timeIntervalSince1970)
-        let thirtyDaysAgoSec = nowSec - (30 * 24 * 60 * 60)
-        let ninetyDaysAgoSec = nowSec - (90 * 24 * 60 * 60)
-        let sixMonthsAgoSec = nowSec - (180 * 24 * 60 * 60)
-
-        switch filter {
-        case .all:
-            break
-        case .oneMonthUnstarredImages:
-            // 30天前（1 个月前），未加入任何分类标签或加星 (group == -1 或 group IS NULL)
-            whereClause += """
-             AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') \
-            AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(thirtyDaysAgoSec)) \
-            AND (`group` IS NULL OR `group` = -1)
-            """
-        case .threeMonthsUnstarredImages:
-            // 90天前（约3 个月前），未加入任何分类标签或加星 (group == -1 或 group IS NULL)
-            whereClause += """
-             AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') \
-            AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(ninetyDaysAgoSec)) \
-            AND (`group` IS NULL OR `group` = -1)
-            """
-        case .sixMonthsUnstarredImages:
-            // 180天前（约6 个月前），未加入任何分类标签或加星 (group == -1 或 group IS NULL)
-            whereClause += """
-             AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') \
-            AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(sixMonthsAgoSec)) \
-            AND (`group` IS NULL OR `group` = -1)
-            """
-        case .largeImages:
-            whereClause += " AND (tag = 'image' OR type LIKE '%png%' OR type LIKE '%tiff%' OR type LIKE '%jpeg%' OR type LIKE '%image%') AND (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) > 5000000"
-        case .largeRichText:
-            whereClause += " AND (tag = 'rich' OR type LIKE '%rtf%' OR type LIKE '%html%') AND LENGTH(data) > 1000000"
-        }
-
-        let sql = """
-            SELECT id, unique_id, type, timestamp, app_id, tag, `group`, (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) AS byte_size, SUBSTR(search_text, 1, 100)
-            FROM Clip
-            \(whereClause)
-            ORDER BY byte_size DESC
-            LIMIT \(limit)
-        """
+        let whereClause = ClipStorageQueries.topStorageItemsWhereClause(for: filter, nowSec: nowSec)
+        let sql = ClipStorageQueries.topStorageItemsSQL(whereClause: whereClause, limit: limit)
 
         do {
             let appNames = Dictionary(
@@ -321,12 +277,7 @@ extension PasteSQLManager {
             return archiveStats
         }
 
-        let sql = """
-            SELECT COUNT(*), COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) FROM Clip
-            WHERE (`group` IS NULL OR `group` = -1)
-              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
-              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
-        """
+        let sql = ClipStorageQueries.evictionCandidatesCountSQL(cutoffSec: cutoffSec)
 
         do {
             let stmt = try readConn.prepare(sql)
@@ -354,16 +305,7 @@ extension PasteSQLManager {
             let timestampSec: Int64
         }
 
-        let querySql = """
-            SELECT id,
-                   (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END),
-                   (CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) AS ts_sec
-            FROM Clip
-            WHERE (`group` IS NULL OR `group` = -1)
-              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
-              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
-            ORDER BY ts_sec ASC
-        """
+        let querySql = ClipStorageQueries.evictionItemsSQL(selectIdColumn: "id", cutoffSec: cutoffSec)
 
         var candidates: [EvictionCandidate] = []
         do {

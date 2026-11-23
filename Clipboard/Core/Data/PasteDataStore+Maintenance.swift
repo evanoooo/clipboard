@@ -385,35 +385,36 @@ extension PasteDataStore {
         }
     }
 
-    /// 确认并清理超出新期限的记录；设置仅由调用方在成功后保存
-    func confirmHistoryLimit(_ timeUnit: HistoryTimeUnit) async -> Bool {
-        guard let cutoff = timeUnit.cutoffTimestamp() else { return true }
-        do {
-            guard try await sqlManager.hasExpiredHistory(before: cutoff) else { return true }
-            guard SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window else { return false }
-            let alert = NSAlert.appAlert()
-            alert.alertStyle = .warning
-            alert.messageText = String(localized: .generalHistoryLimitConfirmTitle)
-            alert.informativeText = String(localized: .generalHistoryLimitConfirmMessage)
-            alert.addButton(withTitle: String(localized: .commonCancel))
-            let deleteButton = alert.addButton(withTitle: String(localized: .delete))
-            deleteButton.hasDestructiveAction = true
-            guard await alert.beginSheetModal(for: window) == .alertSecondButtonReturn else { return false }
+    func hasExpiredHistory(before cutoff: Int64) async throws -> Bool {
+        try await sqlManager.hasExpiredHistory(before: cutoff)
+    }
 
-            try await sqlManager.deleteExpiredHistory(before: cutoff)
+    func deleteExpiredHistory(before cutoff: Int64) async throws {
+        try await sqlManager.deleteExpiredHistory(before: cutoff)
+        await reloadHistory()
+    }
+
+    func getHistoryStats() async -> (normalCount: Int, pinnedCount: Int) {
+        await sqlManager.getHistoryStats()
+    }
+
+    func performClearHistory(includePinned: Bool) async throws -> Bool {
+        guard !clearingHistory.value else { return false }
+        clearingHistory.send(true)
+        defer { clearingHistory.send(false) }
+
+        let reclaimed = try await sqlManager.clearHistory(includePinnedAndGrouped: includePinned)
+        ClipUndoStore.shared.removeAll()
+        DeferredOCRCoordinator.shared.clear()
+        if includePinned {
+            SourceAppCache.shared.replace([])
+            AppColorService.shared.clearColors()
+            CategoryChipStore.shared.clearUserCategories()
+            resetToDefault()
+        } else {
             await reloadHistory()
-            return true
-        } catch {
-            log.error("应用历史保留期限失败：\(error)")
-            if SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window {
-                let alert = NSAlert.appAlert()
-                alert.alertStyle = .warning
-                alert.messageText = String(localized: .generalHistoryLimitFailed)
-                alert.addButton(withTitle: String(localized: .commonConfirm))
-                await alert.beginSheetModal(for: window)
-            }
-            return false
         }
+        return reclaimed
     }
 
     func loadHistoryPage() async -> [PasteboardModel]? {
@@ -439,85 +440,6 @@ extension PasteDataStore {
             return list
         }
         return nil
-    }
-
-    func clearAllData() {
-        guard !clearingHistory.value else { return }
-        Task { @MainActor in
-            let (normalCount, pinnedCount) = await sqlManager.getHistoryStats()
-            let alert = NSAlert.appAlert()
-            alert.alertStyle = .warning
-            alert.messageText = String(localized: .clearHistoryAlertTitle)
-
-            if pinnedCount > 0 {
-                alert.informativeText = String(localized: .clearHistoryMessageWithPinned(normalCount, pinnedCount))
-            } else {
-                alert.informativeText = String(localized: .clearHistoryMessageNormalOnly(normalCount))
-            }
-
-            alert.addButton(withTitle: String(localized: .commonCancel))
-            let deleteButton = alert.addButton(withTitle: String(localized: .clearHistoryButton))
-            deleteButton.hasDestructiveAction = true
-
-            var checkbox: NSButton?
-            if pinnedCount > 0 {
-                let cb = NSButton(checkboxWithTitle: String(localized: .clearHistoryIncludePinned), target: nil, action: nil)
-                cb.state = .off
-                cb.frame = NSRect(x: 0, y: 0, width: 340, height: 22)
-                alert.accessoryView = cb
-                checkbox = cb
-            }
-
-            let response: NSApplication.ModalResponse
-            if SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window {
-                response = await alert.beginSheetModal(for: window)
-            } else {
-                response = alert.runModal()
-            }
-
-            guard response == .alertSecondButtonReturn else { return }
-
-            let includePinned = checkbox?.state == .on
-            clearingHistory.send(true)
-
-            do {
-                let reclaimed = try await sqlManager.clearHistory(includePinnedAndGrouped: includePinned)
-                ClipUndoStore.shared.removeAll()
-                DeferredOCRCoordinator.shared.clear()
-                if includePinned {
-                    SourceAppCache.shared.replace([])
-                    AppColorService.shared.clearColors()
-                    CategoryChipStore.shared.clearUserCategories()
-                    resetToDefault()
-                } else {
-                    await reloadHistory()
-                }
-                clearingHistory.send(false)
-                if reclaimed {
-                    showClearHistoryResult(String(localized: .clearHistorySuccess), style: .informational)
-                } else {
-                    showClearHistoryResult(String(localized: .clearHistorySpaceFailed))
-                }
-            } catch {
-                clearingHistory.send(false)
-                log.error("清空历史失败：\(error)")
-                showClearHistoryResult(String(localized: .clearHistoryFailed))
-            }
-        }
-    }
-
-    private func showClearHistoryResult(_ message: String, style: NSAlert.Style = .warning) {
-        Task { @MainActor in
-            let alert = NSAlert.appAlert()
-            alert.alertStyle = style
-            alert.messageText = message
-            alert.addButton(withTitle: String(localized: .commonConfirm))
-            if SettingWindowController.isWindowVisible, let window = SettingWindowController.shared.window {
-                _ = await alert.beginSheetModal(for: window)
-            } else {
-                alert.runModal()
-            }
-        }
     }
 
     /// 批量更新条目的时间戳（仅更新 timestamp 列，杜绝反复读写大 BLOB）

@@ -286,11 +286,7 @@ actor ColdArchiveManager {
             return []
         }
         roDb.busyTimeout = 2.0
-        let sql = """
-            SELECT type, COUNT(*) AS count, COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0) AS total_bytes
-            FROM Clip
-            GROUP BY type
-        """
+        let sql = ClipStorageQueries.typeProportionsSQL
         var result: [(String, Int, Int64)] = []
         if let stmt = try? roDb.prepare(sql) {
             for row in stmt {
@@ -310,15 +306,7 @@ actor ColdArchiveManager {
             return []
         }
         roDb.busyTimeout = 2.0
-        let sql = """
-            SELECT id, unique_id, type, timestamp, app_id, tag, `group`,
-                   (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END) AS byte_size,
-                   SUBSTR(search_text, 1, 100)
-            FROM Clip
-            \(whereClause)
-            ORDER BY byte_size DESC
-            LIMIT \(limit)
-        """
+        let sql = ClipStorageQueries.topStorageItemsSQL(whereClause: whereClause, limit: limit)
         var items: [StorageItemSummary] = []
         let appNames = Dictionary(
             uniqueKeysWithValues: ((try? SourceAppSQL.readAll(on: roDb)) ?? []).map { ($0.id, $0.name) }
@@ -359,13 +347,7 @@ actor ColdArchiveManager {
             return (0, 0)
         }
         roDb.busyTimeout = 2.0
-        let sql = """
-            SELECT COUNT(*), COALESCE(SUM(CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END), 0)
-            FROM Clip
-            WHERE (`group` IS NULL OR `group` = -1)
-              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
-              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
-        """
+        let sql = ClipStorageQueries.evictionCandidatesCountSQL(cutoffSec: cutoffSec)
         if let stmt = try? roDb.prepare(sql), let row = stmt.makeIterator().next() {
             let count = Int((row[0] as? Int64) ?? 0)
             let bytes = (row[1] as? Int64) ?? 0
@@ -383,16 +365,7 @@ actor ColdArchiveManager {
             return []
         }
         roDb.busyTimeout = 2.0
-        let sql = """
-            SELECT unique_id,
-                   (CASE WHEN media_size > 0 THEN media_size ELSE LENGTH(data) END),
-                   (CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) AS ts_sec
-            FROM Clip
-            WHERE (`group` IS NULL OR `group` = -1)
-              AND (tag = 'image' OR lower(type) IN ('public.png', 'public.tiff', 'image/png', 'image/jpeg', 'image/tiff'))
-              AND ((CASE WHEN timestamp > 10000000000 THEN timestamp / 1000 ELSE timestamp END) < \(cutoffSec))
-            ORDER BY ts_sec ASC
-        """
+        let sql = ClipStorageQueries.evictionItemsSQL(selectIdColumn: "unique_id", cutoffSec: cutoffSec)
         var items: [(String, Int64, Int64)] = []
         if let stmt = try? roDb.prepare(sql) {
             for row in stmt {
