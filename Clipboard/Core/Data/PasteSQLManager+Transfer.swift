@@ -213,18 +213,32 @@ extension PasteSQLManager {
             literal: "(SELECT COALESCE(MIN(sort_order), 0) - 1 FROM Clip)"
         )
         let externalized = PasteSQLManager.externalizeIfImage(typeRawValue: typeRaw, data: data)
+        var showData = try? row.get(Col.showData)
+        var length = try row.get(Col.length)
+        let isImage = typeRaw == PasteboardType.png.rawValue || typeRaw == PasteboardType.tiff.rawValue
+        if isImage && !data.isEmpty {
+            if showData == nil || showData?.isEmpty == true {
+                showData = ImageDownsampler.generateThumbnailData(from: data, maxPixelSize: 300)
+            }
+            if (length >> 32) <= 0 {
+                let packed = PasteboardModel.packImageLength(for: data)
+                if packed > 0 {
+                    length = packed
+                }
+            }
+        }
 
         // 旧备份可能没有 show_data / alias 列，或 alias_search 已过期，均按缺失处理。
         var setters: [Setter] = [
             Col.uniqueId <- uniqueId,
             Col.type <- typeRaw,
             Col.data <- externalized.data,
-            Col.showData <- (try? row.get(Col.showData)),
+            Col.showData <- showData,
             Col.timestamp <- try row.get(Col.timestamp),
             Col.sortOrder <- importSortOrder,
             Col.appID <- appID,
             Col.searchText <- try row.get(Col.searchText),
-            Col.length <- try row.get(Col.length),
+            Col.length <- length,
             Col.group <- group,
             Col.hidden <- (try? row.get(Col.hidden)) ?? 0,
             Col.tag <- try? row.get(Col.tag),

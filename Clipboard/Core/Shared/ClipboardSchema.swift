@@ -10,9 +10,9 @@ struct Col {
     nonisolated static let uniqueId = Expression<String>("unique_id")
     nonisolated static let type = Expression<String>("type")
     nonisolated static let data = Expression<Data>("data")
-    /// 小数据内联表达式：长度 <= 4KB 时直接在列表查询中返回，零磁盘点查；超过 4KB 返回 NULL
+    /// 小数据内联表达式：长度在 1B..4KB 之间时直接在列表查询中返回，零磁盘点查；空占位（如外置图片）或超过 4KB 返回 NULL
     nonisolated static let inlineData = Expression<Data?>(
-        literal: "CASE WHEN LENGTH(data) <= 4096 THEN data END"
+        literal: "CASE WHEN LENGTH(data) > 0 AND LENGTH(data) <= 4096 THEN data END"
     )
     nonisolated static let showData = Expression<Data?>("show_data")
     nonisolated static let timestamp = Expression<Int64>("timestamp")

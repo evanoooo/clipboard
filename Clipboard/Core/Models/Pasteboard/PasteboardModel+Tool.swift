@@ -36,8 +36,30 @@ extension PasteboardModel {
 
     nonisolated static func computeImageSize(from data: Data) -> CGSize? {
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options) else {
+            return nil
+        }
+        return computeImageSize(from: source, options: options)
+    }
+
+    nonisolated static func computeImageSize(from url: URL) -> CGSize? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, options) else {
+            return nil
+        }
+        return computeImageSize(from: source, options: options)
+    }
+
+    nonisolated static func packImageLength(for data: Data) -> Int {
+        guard let size = computeImageSize(from: data) else { return 0 }
+        let width = Int(size.width)
+        let height = Int(size.height)
+        guard width > 0, height > 0 else { return 0 }
+        return (width << 32) | (height & 0xFFFF_FFFF)
+    }
+
+    nonisolated private static func computeImageSize(from source: CGImageSource, options: CFDictionary) -> CGSize? {
         guard
-            let source = CGImageSourceCreateWithData(data as CFData, options),
             let properties = CGImageSourceCopyPropertiesAtIndex(
                 source,
                 0,

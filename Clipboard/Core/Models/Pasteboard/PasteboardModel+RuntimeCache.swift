@@ -79,6 +79,11 @@ extension PasteboardModel {
                     runtimeCache.imageSize = size
                     return size
                 }
+                // 外置 .media/ 原图仅读取文件头尺寸元数据（零像素解码），优先于 300px 缩略图
+                if let mediaURL = mediaFileURL, let size = Self.computeImageSize(from: mediaURL) {
+                    runtimeCache.imageSize = size
+                    return size
+                }
                 // 历史遗留数据兜底：优先使用已在内存中的 showData（缩略图），未加载时无缓存点查避免长期常驻
                 if let sData = loadedShowDataIfPresent ?? loadShowData(cache: false), !sData.isEmpty, let size = Self.computeImageSize(from: sData) {
                     runtimeCache.imageSize = size

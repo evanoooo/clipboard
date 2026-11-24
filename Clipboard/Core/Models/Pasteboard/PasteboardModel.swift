@@ -23,7 +23,7 @@ final class PasteboardModel: Identifiable, Codable {
     private var _data: Data?
 
     var hasLoadedData: Bool {
-        _data != nil
+        _data?.isEmpty == false
     }
 
     var data: Data {
@@ -37,10 +37,10 @@ final class PasteboardModel: Identifiable, Codable {
 
     /// 获取完整原始二进制数据。若指定 `cache: false`，点查出的数据不会长期缓存在 `_data` 中（适用于预览、上传等一次性场景）
     func loadRawData(cache: Bool = true) -> Data {
-        if let _data {
+        if let _data, !_data.isEmpty {
             return _data
         }
-        if let loaded = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId) {
+        if let loaded = PasteDataPointReader.loadData(id: id, uniqueId: uniqueId), !loaded.isEmpty {
             if cache {
                 _data = loaded
                 if runtimeCache.codeDetectionState == .none, length > 300 {
@@ -202,7 +202,7 @@ final class PasteboardModel: Identifiable, Codable {
         sourceBundleID: String? = nil
     ) {
         self.pasteboardType = pasteboardType
-        self._data = data
+        self._data = (data?.isEmpty == false) ? data : nil
         self._showData = showData
         self.timestamp = timestamp
         self.sourcePath = appPath
@@ -221,7 +221,7 @@ final class PasteboardModel: Identifiable, Codable {
             data: data ?? Data()
         )
 
-        if let data {
+        if let data, !data.isEmpty {
             if pasteboardType == .fileURL {
                 if let urlString = String(data: data, encoding: .utf8) {
                     cachedFilePaths = urlString.components(separatedBy: "\n")
@@ -345,18 +345,21 @@ final class PasteboardModel: Identifiable, Codable {
         let task = Task.detached(priority: .userInitiated) { [weak self] () -> NSImage? in
             guard !Task.isCancelled else { return nil }
             // 性能极致优化：优先复用 300px show_data 或直接通过 .media/ URL 流式下采样，杜绝整张大图读入内存
-            let image: NSImage?
+            var image: NSImage?
             if let sData, !sData.isEmpty {
                 image = Self.downsampledImage(from: sData, maxPixelSize: 400) ?? NSImage(data: sData)
-            } else if let loadedData {
-                image = Self.downsampledImage(from: loadedData, maxPixelSize: 400) ?? NSImage(data: loadedData)
-            } else if let mediaURL = PasteDataPointReader.loadMediaURL(id: modelId, uniqueId: uId) {
-                image = ImageDownsampler.downsampleNSImage(from: mediaURL, maxPixelSize: 400)
-            } else if let diskData = PasteDataPointReader.loadData(id: modelId, uniqueId: uId) {
-                image = Self.downsampledImage(from: diskData, maxPixelSize: 400) ?? NSImage(data: diskData)
-            } else {
-                return nil
             }
+            if image == nil, let loadedData, !loadedData.isEmpty {
+                image = Self.downsampledImage(from: loadedData, maxPixelSize: 400) ?? NSImage(data: loadedData)
+            }
+            if image == nil, let mediaURL = PasteDataPointReader.loadMediaURL(id: modelId, uniqueId: uId) {
+                image = ImageDownsampler.downsampleNSImage(from: mediaURL, maxPixelSize: 400)
+                    ?? (try? Data(contentsOf: mediaURL, options: .mappedIfSafe)).flatMap { NSImage(data: $0) }
+            }
+            if image == nil, let diskData = PasteDataPointReader.loadData(id: modelId, uniqueId: uId), !diskData.isEmpty {
+                image = Self.downsampledImage(from: diskData, maxPixelSize: 400) ?? NSImage(data: diskData)
+            }
+            guard let image else { return nil }
 
             guard !Task.isCancelled else { return nil }
 

@@ -37,17 +37,31 @@ extension SyncItemBlob {
         return ""
     }
 
+    private func resolvedImageMetadata() -> (showData: Data?, length: Int) {
+        let isImage = pasteboardType == PasteboardType.png.rawValue
+            || pasteboardType == PasteboardType.tiff.rawValue
+        guard isImage, let payloadData, !payloadData.isEmpty else {
+            return (showData, payloadData?.count ?? 0)
+        }
+        let resolvedShowData = (showData?.isEmpty == false)
+            ? showData
+            : ImageDownsampler.generateThumbnailData(from: payloadData, maxPixelSize: 300)
+        let packed = PasteboardModel.packImageLength(for: payloadData)
+        return (resolvedShowData, packed > 0 ? packed : payloadData.count)
+    }
+
     func toPasteboardModel() -> PasteboardModel {
         let textSource = resolvedTextSourceForSearch
+        let imageMeta = resolvedImageMetadata()
         return PasteboardModel(
             pasteboardType: PasteboardType(rawValue: pasteboardType),
             data: payloadData,
-            showData: showData,
+            showData: imageMeta.showData,
             timestamp: timestamp,
             appPath: "",
             appName: sourceAppName ?? "",
             searchText: SearchTextNormalizer.normalize(textSource),
-            length: payloadData?.count ?? 0,
+            length: imageMeta.length,
             group: group,
             tag: tag,
             alias: alias,
@@ -60,15 +74,16 @@ extension SyncItemBlob {
 
     func toIngestionRecord(appID: Int64) -> SyncIngestionRecord {
         let textSource = resolvedTextSourceForSearch
+        let imageMeta = resolvedImageMetadata()
         return SyncIngestionRecord(
             uniqueId: uniqueId,
             type: pasteboardType,
             data: payloadData ?? Data(),
-            showData: showData,
+            showData: imageMeta.showData,
             timestamp: timestamp,
             appID: appID,
             searchText: SearchTextNormalizer.normalize(textSource),
-            length: payloadData?.count ?? 0,
+            length: imageMeta.length,
             group: group,
             tag: tag,
             hidden: false,

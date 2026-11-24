@@ -32,8 +32,9 @@ extension PasteDataStore {
                 let alias = try? row.get(Col.alias)
                 let sortOrder = (try? row.get(Col.sortOrder)) ?? 0
                 let hidden = ((try? row.get(Col.hidden)) ?? 0) != 0
-                // 小数据内联（<= 4KB）：文件路径、颜色、短链接、短文本直接带出，主线程零点查；超过 4KB 为 nil
-                let inlineData = try? row.get(Col.inlineData)
+                // 小数据内联（1B..4KB）：文件路径、颜色、短链接、短文本直接带出，主线程零点查；空占位或超过 4KB 为 nil
+                let rawInlineData = try? row.get(Col.inlineData)
+                let inlineData: Data? = (rawInlineData?.isEmpty == false) ? rawInlineData : nil
 
                 let pType = PasteboardType(type)
 

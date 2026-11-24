@@ -92,14 +92,31 @@ enum MemoryOptimizationTests {
                 Col.tag <- "image"
             ))
 
+            try db.run(table.insert(
+                Col.uniqueId <- "externalized_uid",
+                Col.type <- "public.png",
+                Col.data <- Data(),
+                Col.showData <- nil,
+                Col.timestamp <- 300,
+                Col.appID <- 1,
+                Col.searchText <- "",
+                Col.length <- 0,
+                Col.group <- -1,
+                Col.tag <- "image",
+                Col.mediaRelPath <- "ab/abcdef.png",
+                Col.mediaSize <- 123_456
+            ))
+
             let rows = Array(try db.prepare(
                 table.select(Col.uniqueId, Col.inlineData).order(Col.timestamp.asc)
             ))
-            assert(rows.count == 2, "Should retrieve 2 rows")
+            assert(rows.count == 3, "Should retrieve 3 rows")
             let smallInline = try rows[0].get(Col.inlineData)
             let largeInline = try rows[1].get(Col.inlineData)
+            let externalizedInline = try rows[2].get(Col.inlineData)
             assert(smallInline == smallPayload, "Payload <= 4KB must be returned inline without secondary point read")
             assert(largeInline == nil, "Payload > 4KB must return nil in list query to avoid memory bloat")
+            assert(externalizedInline == nil, "Externalized image with 0-byte data must return nil for inlineData")
         } catch {
             assertionFailure("testInlineSmallDataSQL failed: \(error)")
         }
