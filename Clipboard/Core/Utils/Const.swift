@@ -18,7 +18,7 @@ enum Const {
     static let cardSize: CGFloat = 235.0
     static let cntSize: CGFloat = 185.0
     static let hdSize: CGFloat = 50.0
-    static let iconSize: CGFloat = 80.0
+    static let iconSize: CGFloat = 46.0
 
     static let cardSpace: CGFloat = 16.0
     static let cardLeadingSpace: CGFloat = 16.0

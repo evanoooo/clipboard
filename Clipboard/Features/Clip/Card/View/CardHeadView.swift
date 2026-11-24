@@ -64,6 +64,7 @@ final class CardHeadView: NSView {
     private lazy var iconView: NSImageView = {
         let view = NSImageView()
         view.imageScaling = .scaleProportionallyUpOrDown
+        view.contentTintColor = NSColor.white.withAlphaComponent(0.9)
         view.isHidden = false
         return view
     }()
@@ -260,7 +261,7 @@ private extension CardHeadView {
         }
 
         iconView.snp.makeConstraints { make in
-            make.trailing.equalToSuperview().offset(15)
+            make.trailing.equalToSuperview().inset(Const.space4)
             make.centerY.equalToSuperview()
             make.width.height.equalTo(Const.iconSize)
         }
