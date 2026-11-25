@@ -4843,6 +4843,258 @@
         }
       }
     },
+    "quickClear": {
+      "comment": "Menu item: quick clear submenu",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quick Clear"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速清理"
+          }
+        }
+      }
+    },
+    "quickClearMessage": {
+      "comment": "Quick clear confirmation message without skipped items",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld items from %1$@ will be cleared. This cannot be undone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将清理%1$@内的 %2$lld 条记录，此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "quickClearMessageSkipped": {
+      "comment": "Quick clear confirmation message with skipped tagged/pinned items",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld items from %1$@ will be cleared; %3$lld tagged or pinned items will be skipped. This cannot be undone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将清理%1$@内的 %2$lld 条记录，已自动跳过 %3$lld 条带标签或固定的记录。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "quickClearNothing": {
+      "comment": "HUD: nothing to clear in quick clear period",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to clear in this period"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该时间段内没有可清理的记录"
+          }
+        }
+      }
+    },
+    "quickClearOneDay": {
+      "comment": "Menu item: quick clear last 24 hours",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 24 Hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 24 小时"
+          }
+        }
+      }
+    },
+    "quickClearOneHour": {
+      "comment": "Menu item: quick clear last hour",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last Hour"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 1 小时"
+          }
+        }
+      }
+    },
+    "quickClearRangeOneDay": {
+      "comment": "Quick clear range phrase: last 24 hours",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the last 24 hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 24 小时"
+          }
+        }
+      }
+    },
+    "quickClearRangeOneHour": {
+      "comment": "Quick clear range phrase: last hour",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the last hour"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 1 小时"
+          }
+        }
+      }
+    },
+    "quickClearRangeThirtyMinutes": {
+      "comment": "Quick clear range phrase: last 30 minutes",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the last 30 minutes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 30 分钟"
+          }
+        }
+      }
+    },
+    "quickClearRangeThreeHours": {
+      "comment": "Quick clear range phrase: last 3 hours",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the last 3 hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 3 小时"
+          }
+        }
+      }
+    },
+    "quickClearSucceeded": {
+      "comment": "HUD: quick clear succeeded with item count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cleared %lld items"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已清理 %lld 条记录"
+          }
+        }
+      }
+    },
+    "quickClearThirtyMinutes": {
+      "comment": "Menu item: quick clear last 30 minutes",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 30 Minutes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 30 分钟"
+          }
+        }
+      }
+    },
+    "quickClearThreeHours": {
+      "comment": "Menu item: quick clear last 3 hours",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 3 Hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "过去 3 小时"
+          }
+        }
+      }
+    },
+    "quickClearTitle": {
+      "comment": "Quick clear confirmation alert title",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm Clear?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认清理？"
+          }
+        }
+      }
+    },
     "quit": {
       "comment": "Menu item: quit app",
       "extractionState": "manual",

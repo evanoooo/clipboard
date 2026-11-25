@@ -31,6 +31,19 @@ extension PasteSQLManager {
         }
     }
 
+    /// 快速清理预览：热库中范围内可清理条数与被跳过的带标签/固定条数。
+    func quickClearStats(since cutoff: Int64) async -> (clearable: Int, skipped: Int) {
+        do {
+            guard let connection else { return (0, 0) }
+            let clearable = try connection.scalar(table.filter(QuickClearRange.clearable(since: cutoff)).count)
+            let skipped = try connection.scalar(table.filter(QuickClearRange.skipped(since: cutoff)).count)
+            return (clearable, skipped)
+        } catch {
+            log.error("获取快速清理统计失败：\(error)")
+            return (0, 0)
+        }
+    }
+
     /// 写连接上的查询：`insert` 用它按 `unique_id` 查重，需要读到自己刚写入的数据，
     /// 不能替换成 `PasteReadStore`。其余读路径请走只读通道。
     func search(

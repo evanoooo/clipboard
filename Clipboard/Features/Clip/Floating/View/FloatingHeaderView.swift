@@ -463,6 +463,11 @@ extension FloatingHeaderView: TopBarMenuActions {
     func pause8HoursAction() {
         topVM?.pause(for: 480)
     }
+
+    func quickClearAction(_ sender: NSMenuItem) {
+        guard let range = QuickClearRange(rawValue: sender.tag) else { return }
+        ClipQuickClearExecutor.perform(range)
+    }
 }
 
 // MARK: - FloatingDragHandle

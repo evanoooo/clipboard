@@ -67,6 +67,7 @@ final class TestRunner {
         SyncDiffTests.run(runner: TestRunner.self)
         PasteMigrationTests.run(runner: TestRunner.self)
         WebPageURLTests.run(runner: TestRunner.self)
+        QuickClearTests.run(runner: TestRunner.self)
         MemoryOptimizationTests.runAll()
 
         print("\n==================================")

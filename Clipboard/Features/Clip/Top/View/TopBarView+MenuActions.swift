@@ -19,6 +19,7 @@ import AppKit
     func pause1HourAction()
     func pause3HoursAction()
     func pause8HoursAction()
+    func quickClearAction(_ sender: NSMenuItem)
 }
 
 // MARK: - TopBarMenuActions
@@ -71,5 +72,10 @@ extension TopBarView: TopBarMenuActions {
 
     func pause8HoursAction() {
         topVM?.pause(for: 480)
+    }
+
+    func quickClearAction(_ sender: NSMenuItem) {
+        guard let range = QuickClearRange(rawValue: sender.tag) else { return }
+        ClipQuickClearExecutor.perform(range)
     }
 }

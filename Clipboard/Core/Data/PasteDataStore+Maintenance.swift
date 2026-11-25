@@ -398,6 +398,20 @@ extension PasteDataStore {
         await sqlManager.getHistoryStats()
     }
 
+    func quickClearStats(for range: QuickClearRange) async -> (cutoff: Int64, clearable: Int, skipped: Int) {
+        let cutoff = range.cutoff()
+        let stats = await sqlManager.quickClearStats(since: cutoff)
+        return (cutoff, stats.clearable, stats.skipped)
+    }
+
+    /// 删除 cutoff 之后的普通流水并刷新列表；带标签/固定条目不受影响。
+    func quickClear(since cutoff: Int64) async {
+        log.info("快速清理历史记录，起始时间戳：\(cutoff)")
+        deleteItems(filter: QuickClearRange.clearable(since: cutoff))
+        await awaitPendingMutations()
+        await reloadHistory()
+    }
+
     func performClearHistory(includePinned: Bool) async throws -> Bool {
         guard !clearingHistory.value else { return false }
         clearingHistory.send(true)

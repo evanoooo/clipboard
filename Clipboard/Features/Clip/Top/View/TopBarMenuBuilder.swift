@@ -58,6 +58,15 @@ struct TopBarMenuBuilder {
     }
 
     private func addApplicationItems(to menu: NSMenu) {
+        let quickClearItem = NSMenuItem(
+            title: String(localized: .quickClear),
+            action: nil,
+            keyEquivalent: ""
+        )
+        setMenuItemImage(quickClearItem, symbolName: "trash.circle")
+        quickClearItem.submenu = buildQuickClearSubmenu()
+        menu.addItem(quickClearItem)
+
         let pauseItem = NSMenuItem(
             title: topVM?.pauseMenuTitle ?? String(localized: .pause),
             action: nil,
@@ -154,6 +163,49 @@ struct TopBarMenuBuilder {
                 systemSymbolName: symbolName,
                 accessibilityDescription: nil
             )
+        }
+    }
+
+    private func buildQuickClearSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        for range in QuickClearRange.allCases {
+            let item = makeItem(
+                title: range.menuTitle,
+                action: #selector(TopBarMenuActions.quickClearAction(_:)),
+                symbol: range.symbol
+            )
+            item.tag = range.rawValue
+            submenu.addItem(item)
+        }
+        return submenu
+    }
+}
+
+extension QuickClearRange {
+    var menuTitle: String {
+        switch self {
+        case .thirtyMinutes: String(localized: .quickClearThirtyMinutes)
+        case .oneHour: String(localized: .quickClearOneHour)
+        case .threeHours: String(localized: .quickClearThreeHours)
+        case .oneDay: String(localized: .quickClearOneDay)
+        }
+    }
+
+    var rangeTitle: String {
+        switch self {
+        case .thirtyMinutes: String(localized: .quickClearRangeThirtyMinutes)
+        case .oneHour: String(localized: .quickClearRangeOneHour)
+        case .threeHours: String(localized: .quickClearRangeThreeHours)
+        case .oneDay: String(localized: .quickClearRangeOneDay)
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .thirtyMinutes: "30.circle"
+        case .oneHour: "1.circle"
+        case .threeHours: "3.circle"
+        case .oneDay: "24.circle"
         }
     }
 }
