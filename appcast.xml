@@ -5,6 +5,55 @@
         <description>Clipboard 应用更新源</description>
         <language>zh-CN</language>
 
+        <!-- Version 2.5.0 (Apple Silicon) -->
+        <item>
+            <title>Version 2.5.0 (Apple Silicon)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.5.0
+
+- 架构增强与底层数据增量同步优化；
+- Sparkle 2 自动更新与独立 Ed25519 签名体系；
+- 独立提供 Apple Silicon (arm64)、Intel (x86_64) 与 Universal 原生架构安装包；
+- 现代化标准化 DMG 与 ZIP 双格式制品分发。
+]]>
+            </description>
+            <pubDate>Thu, 26 Nov 2026 03:04:55 GMT</pubDate>
+            <sparkle:version>1003</sparkle:version>
+            <sparkle:shortVersionString>2.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.5.0/Clipboard-2.5.0-arm64.zip"
+                sparkle:edSignature="bXozwvB8fVCSh5wQvMQkM3U2ZP8pa1t5acBHKgppUGTfH5/saiOyywJC+2KvSFtv1bk5g+vAxkSl3ETSxNAvCw=="
+                length="4607371"
+                type="application/octet-stream" />
+        </item>
+
+        <!-- Version 2.5.0 (Intel) -->
+        <item>
+            <title>Version 2.5.0 (Intel)</title>
+            <description sparkle:format="markdown">
+                <![CDATA[
+## Version 2.5.0
+
+- 架构增强与底层数据增量同步优化；
+- Sparkle 2 自动更新与独立 Ed25519 签名体系；
+- 独立提供 Apple Silicon (arm64)、Intel (x86_64) 与 Universal 原生架构安装包；
+- 现代化标准化 DMG 与 ZIP 双格式制品分发。
+]]>
+            </description>
+            <pubDate>Thu, 26 Nov 2026 03:04:55 GMT</pubDate>
+            <sparkle:version>1003</sparkle:version>
+            <sparkle:shortVersionString>2.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/evanoooo/clipboard/releases/download/v2.5.0/Clipboard-2.5.0-x86_64.zip"
+                sparkle:edSignature="tieZ8XGG3ryHnLT6Yqe+nY2aF0T5RlrXdE0h//z1JYMNX9jEWe3f6aHgtu3lSlwKZl16z4rdPjHPfB0026q4Ag=="
+                length="4950477"
+                type="application/octet-stream" />
+        </item>
+
         <!-- Version 2.4.9 (Apple Silicon) -->
         <item>
             <title>Version 2.4.9 (Apple Silicon)</title>
