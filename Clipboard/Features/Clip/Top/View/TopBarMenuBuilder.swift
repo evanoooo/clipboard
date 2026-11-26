@@ -166,8 +166,21 @@ struct TopBarMenuBuilder {
         }
     }
 
+    @MainActor
+    func buildQuickClearMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(.sectionHeader(title: String(localized: .quickClear)))
+        populateQuickClearItems(into: menu)
+        return menu
+    }
+
     private func buildQuickClearSubmenu() -> NSMenu {
         let submenu = NSMenu()
+        populateQuickClearItems(into: submenu)
+        return submenu
+    }
+
+    private func populateQuickClearItems(into menu: NSMenu) {
         for range in QuickClearRange.allCases {
             let item = makeItem(
                 title: range.menuTitle,
@@ -175,9 +188,8 @@ struct TopBarMenuBuilder {
                 symbol: range.symbol
             )
             item.tag = range.rawValue
-            submenu.addItem(item)
+            menu.addItem(item)
         }
-        return submenu
     }
 }
 

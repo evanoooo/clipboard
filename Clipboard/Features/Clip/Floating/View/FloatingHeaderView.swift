@@ -407,6 +407,15 @@ final class FloatingHeaderView: NSView {
         }
     }
 
+    func showQuickClearMenu() {
+        let builder = TopBarMenuBuilder(target: self, topVM: topVM)
+        let menu = builder.buildQuickClearMenu()
+        let y = settingsBtn.isFlipped
+            ? settingsBtn.bounds.maxY + Const.space4
+            : settingsBtn.bounds.minY - Const.space4
+        menu.popUp(positioning: nil, at: NSPoint(x: settingsBtn.bounds.minX, y: y), in: settingsBtn)
+    }
+
     // MARK: - Actions
 
     @objc private func clearSearchField() {

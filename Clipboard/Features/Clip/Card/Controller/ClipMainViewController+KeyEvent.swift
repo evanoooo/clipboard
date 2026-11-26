@@ -265,6 +265,13 @@ extension ClipMainViewController {
 
         guard focusRegion == .collection else { return event }
 
+        // 支持 ⌘ + ⇧ + ⌫ 弹出快速清理时间范围菜单
+        if ClipQuickClearExecutor.matchesShortcut(event) {
+            guard !ClipQuickClearExecutor.isRunning else { return nil }
+            topBarView.showQuickClearMenu()
+            return nil
+        }
+
         // 支持 ⌘ + ⇧ + C 一键合并复制多项
         if event.modifierFlags.contains(.command),
            event.modifierFlags.contains(.shift),

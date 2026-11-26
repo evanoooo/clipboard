@@ -5,6 +5,8 @@
 //  Unit tests for QuickClearRange and tagged/pinned exclusion predicates.
 //
 
+import AppKit
+import Carbon
 import Foundation
 import SQLite
 
@@ -12,6 +14,8 @@ import SQLite
 enum QuickClearTests {
     static func run(runner: TestRunner.Type) {
         print("\n--- Testing Quick Clear Predicates ---")
+
+        testShortcutMatching(runner: runner)
 
         let fixedDate = Date(timeIntervalSince1970: 1_700_000_000)
         runner.assertEqual(
@@ -86,5 +90,47 @@ enum QuickClearTests {
         } catch {
             runner.assertTrue(false, "QuickClearTests failed with error: \(error)")
         }
+    }
+
+    private static func matchesQuickClearShortcut(_ event: NSEvent) -> Bool {
+        let deleteKey = UInt16(kVK_Delete)
+        let forwardDeleteKey = UInt16(kVK_ForwardDelete)
+        guard event.keyCode == deleteKey || event.keyCode == forwardDeleteKey else {
+            return false
+        }
+        let relevant: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+        return event.modifierFlags.intersection(relevant) == [.command, .shift]
+    }
+
+    private static func makeKeyEvent(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags
+    ) -> NSEvent? {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: keyCode
+        )
+    }
+
+    private static func testShortcutMatching(runner: TestRunner.Type) {
+        let cmdShiftDelete = makeKeyEvent(keyCode: UInt16(kVK_Delete), modifiers: [.command, .shift])!
+        let cmdShiftForwardDelete = makeKeyEvent(keyCode: UInt16(kVK_ForwardDelete), modifiers: [.command, .shift])!
+        let cmdDelete = makeKeyEvent(keyCode: UInt16(kVK_Delete), modifiers: [.command])!
+        let cmdOptShiftDelete = makeKeyEvent(keyCode: UInt16(kVK_Delete), modifiers: [.command, .option, .shift])!
+        let cmdShiftC = makeKeyEvent(keyCode: UInt16(kVK_ANSI_C), modifiers: [.command, .shift])!
+
+        runner.assertTrue(matchesQuickClearShortcut(cmdShiftDelete), "⌘⇧Delete should match quick clear shortcut")
+        runner.assertTrue(matchesQuickClearShortcut(cmdShiftForwardDelete), "⌘⇧ForwardDelete should match quick clear shortcut")
+        runner.assertFalse(matchesQuickClearShortcut(cmdDelete), "⌘Delete alone must not match quick clear shortcut")
+        runner.assertFalse(matchesQuickClearShortcut(cmdOptShiftDelete), "⌘⌥⇧Delete must not match quick clear shortcut")
+        runner.assertFalse(matchesQuickClearShortcut(cmdShiftC), "⌘⇧C must not match quick clear shortcut")
     }
 }

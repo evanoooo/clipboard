@@ -244,6 +244,13 @@ extension ClipFloatingViewController {
     }
 
     private func commandKeyDown(_ event: NSEvent) -> NSEvent? {
+        // 支持 ⌘ + ⇧ + ⌫ 弹出快速清理时间范围菜单
+        if focusRegion == .collection, ClipQuickClearExecutor.matchesShortcut(event) {
+            guard !ClipQuickClearExecutor.isRunning else { return nil }
+            floatingContentView.headerView.showQuickClearMenu()
+            return nil
+        }
+
         // 支持 ⌘ + ⇧ + C 一键合并复制多选条目
         if event.modifierFlags.contains(.command),
            event.modifierFlags.contains(.shift),
